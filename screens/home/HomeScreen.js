@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { colors, fonts } from '../../lib/theme';
 
 export default function HomeScreen() {
   return (
@@ -13,11 +13,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: colors.light, // or colors.background if defined
+    padding: 16, // replace with spacing if you define it in theme.js
   },
-  title: {
+  heading: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
+    color: colors.dark,
   },
 });
