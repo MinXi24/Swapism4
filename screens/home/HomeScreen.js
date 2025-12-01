@@ -1,12 +1,11 @@
-// screens/HomeScreen.js
-import { StyleSheet, Text, View } from 'react-native';
-import theme from '../../lib/theme'; // Use centralized styles
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 
 export default function HomeScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Home Feature</Text>
-      {/* Paste Figma-generated code HERE */}
+      <Text style={styles.title}>Home</Text>
+      {/* Add home content or navigation buttons here */}
     </View>
   );
 }
@@ -14,12 +13,11 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
-    padding: theme.spacing.md
+    padding: 16,
+    backgroundColor: '#fff',
   },
-  heading: {
+  title: {
     fontSize: 24,
-    fontFamily: theme.fonts.heading,
-    color: theme.colors.text
-  }
+    fontWeight: 'bold',
+  },
 });
