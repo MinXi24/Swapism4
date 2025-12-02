@@ -93,7 +93,7 @@ export default function HomeScreen({ navigation }) {
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.logo}>Waredrobe plug</Text>
+        <Text style={styles.logo}>Swapism</Text>
         <Icon name="person-outline" size={24} color={colors.dark} />
       </View>
 
