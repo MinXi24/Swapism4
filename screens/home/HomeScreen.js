@@ -1,12 +1,14 @@
+// screens/HomeScreen.js
 import { useState } from 'react';
 import {
   FlatList,
+  Modal,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import Card from '../../components/Card';
@@ -18,23 +20,26 @@ const sampleItems = [
   {
     id: 1,
     title: 'Jeans cool and baggy (fit)',
-    image: { uri: 'https://via.placeholder.com/200x150' }, // Replace with your images
+    image: { uri: 'https://via.placeholder.com/200x150' },
     rating: 4.3,
     reviews: 12,
+    datePosted: '2024-01-15',
   },
   {
     id: 2,
     title: 'kirthi dress',
     image: { uri: 'https://via.placeholder.com/200x150' },
-    rating: 4.3,
+    rating: 4.2,
     reviews: 19,
+    datePosted: '2024-01-20',
   },
   {
     id: 3,
     title: 'Jeans cool and baggy (fit)',
     image: { uri: 'https://via.placeholder.com/200x150' },
-    rating: 4.3,
+    rating: 3.1,
     reviews: 8,
+    datePosted: '2024-01-10',
   },
   {
     id: 4,
@@ -42,27 +47,76 @@ const sampleItems = [
     image: { uri: 'https://via.placeholder.com/200x150' },
     rating: 4.3,
     reviews: 15,
+    datePosted: '2024-01-25',
+  },
+  {
+    id: 5,
+    title: 'Felicia cute pants',
+    image: { uri: 'https://via.placeholder.com/200x150' },
+    rating: 4.5,
+    reviews: 15,
+    datePosted: '2024-01-18',
+  },
+  {
+    id: 6,
+    title: 'mini skirt floral',
+    image: { uri: 'https://via.placeholder.com/200x150' },
+    rating: 4.0,
+    reviews: 15,
+    datePosted: '2024-01-22',
   },
 ];
 
 export default function HomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredItems, setFilteredItems] = useState(sampleItems);
+  const [showSortModal, setShowSortModal] = useState(false);
+  const [selectedSort, setSelectedSort] = useState('Newest to Oldest');
+  const [activeTab, setActiveTab] = useState('home');
+
+  const sortOptions = [
+    'Newest to Oldest',
+    'Oldest to Newest',
+    'Highest to Lowest Rating',
+    'Lowest to Highest Rating',
+  ];
 
   const handleSearch = (query) => {
     setSearchQuery(query);
-    const filtered = sampleItems.filter(item =>
+    let filtered = sampleItems.filter(item =>
       item.title.toLowerCase().includes(query.toLowerCase())
     );
+    filtered = applySorting(filtered, selectedSort);
     setFilteredItems(filtered);
+  };
+
+  const applySorting = (items, sortType) => {
+    const sorted = [...items];
+    
+    switch (sortType) {
+      case 'Newest to Oldest':
+        return sorted.sort((a, b) => new Date(b.datePosted) - new Date(a.datePosted));
+      case 'Oldest to Newest':
+        return sorted.sort((a, b) => new Date(a.datePosted) - new Date(b.datePosted));
+      case 'Highest to Lowest Rating':
+        return sorted.sort((a, b) => b.rating - a.rating);
+      case 'Lowest to Highest Rating':
+        return sorted.sort((a, b) => a.rating - b.rating);
+      default:
+        return sorted;
+    }
+  };
+
+  const handleSort = (sortType) => {
+    setSelectedSort(sortType);
+    const sorted = applySorting(filteredItems, sortType);
+    setFilteredItems(sorted);
+    setShowSortModal(false);
   };
 
   const handleFilter = () => {
     console.log('Filter pressed');
-  };
-
-  const handleSort = () => {
-    console.log('Sort pressed');
+    // Add filter modal logic here
   };
 
   const handleFavorite = (item) => {
@@ -77,6 +131,28 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('ItemDetails', { item });
   };
 
+  const handleNavigation = (tab) => {
+    setActiveTab(tab);
+    // Add navigation logic based on tab
+    switch(tab) {
+      case 'home':
+        // Already on home
+        break;
+      case 'swap':
+        navigation.navigate('Swap');
+        break;
+      case 'chat':
+        navigation.navigate('Chat');
+        break;
+      case 'favorites':
+        navigation.navigate('Favorites');
+        break;
+      case 'profile':
+        navigation.navigate('Profile');
+        break;
+    }
+  };
+
   const renderItem = ({ item, index }) => (
     <Card
       item={item}
@@ -86,6 +162,24 @@ export default function HomeScreen({ navigation }) {
       style={{ marginRight: index % 2 === 0 ? spacing.sm : 0 }}
     />
   );
+
+  const renderSortOption = (option) => {
+    const isSelected = option === selectedSort;
+    return (
+      <TouchableOpacity
+        key={option}
+        style={[styles.sortOption, isSelected && styles.sortOptionSelected]}
+        onPress={() => handleSort(option)}
+      >
+        <Text style={[styles.sortOptionText, isSelected && styles.sortOptionTextSelected]}>
+          {option}
+        </Text>
+        {isSelected && (
+          <Icon name="checkmark-outline" size={20} color={colors.accent} />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -118,7 +212,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.filterText}>Filter</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.sortButton} onPress={handleSort}>
+        <TouchableOpacity style={styles.sortButton} onPress={() => setShowSortModal(true)}>
           <Icon name="swap-vertical-outline" size={20} color={colors.dark} />
           <Text style={styles.sortText}>Sort By</Text>
         </TouchableOpacity>
@@ -133,6 +227,102 @@ export default function HomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
       />
+
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('home')}
+        >
+          <Icon 
+            name={activeTab === 'home' ? 'home' : 'home-outline'} 
+            size={24} 
+            color={activeTab === 'home' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'home' && styles.navTextActive]}>
+            Home
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('swap')}
+        >
+          <Icon 
+            name={activeTab === 'swap' ? 'swap-horizontal' : 'swap-horizontal-outline'} 
+            size={24} 
+            color={activeTab === 'swap' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'swap' && styles.navTextActive]}>
+            Swap
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('chat')}
+        >
+          <Icon 
+            name={activeTab === 'chat' ? 'chatbubble' : 'chatbubble-outline'} 
+            size={24} 
+            color={activeTab === 'chat' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'chat' && styles.navTextActive]}>
+            Chat
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('favorites')}
+        >
+          <Icon 
+            name={activeTab === 'favorites' ? 'heart' : 'heart-outline'} 
+            size={24} 
+            color={activeTab === 'favorites' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'favorites' && styles.navTextActive]}>
+            Favorites
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('profile')}
+        >
+          <Icon 
+            name={activeTab === 'profile' ? 'person' : 'person-outline'} 
+            size={24} 
+            color={activeTab === 'profile' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'profile' && styles.navTextActive]}>
+            Profile
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Sort Modal */}
+      <Modal
+        visible={showSortModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSortModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Sort By</Text>
+              <TouchableOpacity onPress={() => setShowSortModal(false)}>
+                <Icon name="close-outline" size={24} color={colors.dark} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.sortOptionsContainer}>
+              {sortOptions.map(option => renderSortOption(option))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -210,6 +400,90 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: spacing.sm,
-    paddingBottom: 20,
+    paddingBottom: 100, // Space for bottom nav
+  },
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.primary,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  navItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  navText: {
+    fontFamily: fonts.body,
+    fontSize: 10,
+    color: colors.dark,
+    marginTop: 2,
+  },
+  navTextActive: {
+    color: colors.accent,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.secondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 30,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.primary,
+  },
+  modalTitle: {
+    fontFamily: fonts.header,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+  sortOptionsContainer: {
+    padding: spacing.md,
+  },
+  sortOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.secondary,
+  },
+  sortOptionSelected: {
+    backgroundColor: colors.primary,
+  },
+  sortOptionText: {
+    fontFamily: fonts.body,
+    fontSize: 16,
+    color: colors.dark,
+  },
+  sortOptionTextSelected: {
+    fontWeight: 'bold',
+    color: colors.accent,
   },
 });
