@@ -14,13 +14,24 @@ import Button from '../../components/Button';
 import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
 
+// --- FIREBASE IMPORTS ADDED HERE ---
+// Make sure this path points to your actual firebaseConfig file
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { ref, set } from 'firebase/database';
+import { auth, db } from '../../firebaseConfig';
+
 export default function SignUpScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
+  
+  // Added loading state to prevent double-clicks
+  const [loading, setLoading] = useState(false);
 
-  const handleSignUp = () => {
+  // --- UPDATED LOGIC HERE ---
+  const handleSignUp = async () => {
+    // 1. Basic Validation
     if (!username || !email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -31,8 +42,42 @@ export default function SignUpScreen({ navigation }) {
       return;
     }
 
-    // Navigate to Home screen after successful signup
-    navigation.navigate('Home');
+    setLoading(true);
+
+    try {
+      // 2. Create User in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // 3. Save Username to Realtime Database
+      // Using the user.uid ensures the DB entry matches the Auth ID
+      await set(ref(db, 'users/' + user.uid), {
+        username: username,
+        email: email,
+        createdAt: new Date().toISOString()
+      });
+
+      // 4. Success & Navigation
+      Alert.alert('Success', 'Account created successfully!');
+      navigation.navigate('Home');
+
+    } catch (error) {
+      // 5. Error Handling
+      let errorMessage = error.message;
+      
+      // Customize common Firebase errors
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "That email address is already in use!";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "Password should be at least 6 characters.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "Please enter a valid email address.";
+      }
+
+      Alert.alert('Registration Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSocialLogin = (provider) => {
@@ -41,7 +86,7 @@ export default function SignUpScreen({ navigation }) {
   };
 
   const handleLoginRedirect = () => {
-    navigation.navigate('Login'); // Assuming you have a Login screen
+    navigation.navigate('Login'); 
   };
 
   return (
