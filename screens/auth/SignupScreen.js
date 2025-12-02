@@ -14,8 +14,7 @@ import Button from '../../components/Button';
 import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
 
-// --- FIREBASE IMPORTS ADDED HERE ---
-// Make sure this path points to your actual firebaseConfig file
+//firebase imports
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { ref, set } from 'firebase/database';
 import { auth, db } from '../../firebaseConfig';
@@ -29,9 +28,9 @@ export default function SignUpScreen({ navigation }) {
   // Added loading state to prevent double-clicks
   const [loading, setLoading] = useState(false);
 
-  // --- UPDATED LOGIC HERE ---
+  // logic for signing up user
   const handleSignUp = async () => {
-    // 1. Basic Validation
+    // basic validation
     if (!username || !email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -45,11 +44,11 @@ export default function SignUpScreen({ navigation }) {
     setLoading(true);
 
     try {
-      // 2. Create User in Firebase Auth
+      // create user in firebase auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // 3. Save Username to Realtime Database
+      //save user info in realtime database
       // Using the user.uid ensures the DB entry matches the Auth ID
       await set(ref(db, 'users/' + user.uid), {
         username: username,
@@ -57,12 +56,11 @@ export default function SignUpScreen({ navigation }) {
         createdAt: new Date().toISOString()
       });
 
-      // 4. Success & Navigation
       Alert.alert('Success', 'Account created successfully!');
       navigation.navigate('Home');
 
     } catch (error) {
-      // 5. Error Handling
+      // handling errors
       let errorMessage = error.message;
       
       // Customize common Firebase errors
