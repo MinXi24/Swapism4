@@ -24,7 +24,7 @@ const sampleItems = [
   },
   {
     id: 2,
-    title: 'Jeans cool and baggy (fit)',
+    title: 'kirthi dress',
     image: { uri: 'https://via.placeholder.com/200x150' },
     rating: 4.3,
     reviews: 19,
