@@ -1,15 +1,15 @@
 // screens/HomeScreen.js
 import { useState } from 'react';
 import {
-    FlatList,
-    Image,
-    Modal,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Image,
+  Modal,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -130,6 +130,28 @@ export default function HomeScreen({ navigation }) {
 
   const handleItemPress = (item) => {
     navigation.navigate('ItemDetails', { item });
+  };
+
+  const handleNavigation = (tab) => {
+    setActiveTab(tab);
+    // Add navigation logic based on tab
+    switch(tab) {
+      case 'home':
+        // Already on home
+        break;
+      case 'swap':
+        navigation.navigate('Swap');
+        break;
+      case 'chat':
+        navigation.navigate('Messages');
+        break;
+      case 'favorites':
+        navigation.navigate('Favorites');
+        break;
+      case 'profile':
+        navigation.navigate('Profile');
+        break;
+    }
   };
 
   const renderItem = ({ item, index }) => (

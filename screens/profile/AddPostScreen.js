@@ -26,6 +26,7 @@ export default function AddPostScreen({ navigation }) {
   const [description, setDescription] = useState('');
   const [taggedUsers, setTaggedUsers] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [postType, setPostType] = useState('forFun'); // 'forFun' or 'forSwap'
 
   const db = getFirestore();
   const auth = getAuth();
@@ -149,6 +150,8 @@ export default function AddPostScreen({ navigation }) {
         title: title.trim(),
         description: description.trim(),
         taggedUsers: taggedUsers,
+        postType: postType, // 'forFun' or 'forSwap'
+        swapStatus: postType === 'forSwap' ? 'available' : null, // Default to 'available' for swap posts
         uploadedAt: new Date(),
       });
 
@@ -165,6 +168,7 @@ export default function AddPostScreen({ navigation }) {
       setTitle('');
       setDescription('');
       setTaggedUsers([]);
+      setPostType('forFun');
     } catch (error) {
       console.error('Upload error:', error);
       Alert.alert('Error', `Failed to upload post: ${error.message}`);
@@ -223,6 +227,51 @@ export default function AddPostScreen({ navigation }) {
               numberOfLines={4}
               maxLength={500}
             />
+          </View>
+          {/* Post Type Selection */}
+          <View style={styles.postTypeSection}>
+            <Text style={styles.sectionLabel}>Post Type</Text>
+            <View style={styles.postTypeButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.postTypeButton,
+                  postType === 'forFun' && styles.postTypeButtonActive
+                ]}
+                onPress={() => setPostType('forFun')}
+              >
+                <Icon 
+                  name={postType === 'forFun' ? 'happy' : 'happy-outline'} 
+                  size={24} 
+                  color={postType === 'forFun' ? '#fff' : colors.dark} 
+                />
+                <Text style={[
+                  styles.postTypeButtonText,
+                  postType === 'forFun' && styles.postTypeButtonTextActive
+                ]}>
+                  For Fun
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.postTypeButton,
+                  postType === 'forSwap' && styles.postTypeButtonActive
+                ]}
+                onPress={() => setPostType('forSwap')}
+              >
+                <Icon 
+                  name={postType === 'forSwap' ? 'swap-horizontal' : 'swap-horizontal-outline'} 
+                  size={24} 
+                  color={postType === 'forSwap' ? '#fff' : colors.dark} 
+                />
+                <Text style={[
+                  styles.postTypeButtonText,
+                  postType === 'forSwap' && styles.postTypeButtonTextActive
+                ]}>
+                  For Swap
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Tag People Button */}
@@ -332,6 +381,72 @@ const styles = StyleSheet.create({
   descriptionInput: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  postTypeSection: {
+    marginBottom: spacing.md,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  postTypeButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  postTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: spacing.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  postTypeButtonActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  postTypeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  postTypeButtonTextActive: {
+    color: '#fff',
+  },
+  swapStatusSection: {
+    marginBottom: spacing.md,
+  },
+  swapStatusButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  swapStatusButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: spacing.sm,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  swapStatusButtonActive: {
+    backgroundColor: colors.highlight,
+    borderColor: colors.highlight,
+  },
+  swapStatusButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  swapStatusButtonTextActive: {
+    color: '#fff',
   },
   tagButton: {
     flexDirection: 'row',
