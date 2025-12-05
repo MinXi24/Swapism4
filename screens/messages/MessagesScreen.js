@@ -97,6 +97,7 @@ export default function MessagesScreen({ navigation }) {
       </View>
       {/* Bottom Navigation Bar */}
       {/* Bottom Navigation */}
+
       <BottomNavBar navigation={navigation} activeRoute="Messages" />
     </SafeAreaView>
   );
@@ -144,6 +145,7 @@ const styles = StyleSheet.create({
   searchBar: {
     marginHorizontal: spacing.md,
     marginVertical: spacing.sm,
+    marginVertical: 0,
   },
   messagesContainer: {
     flex: 1,
@@ -153,6 +155,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
     paddingBottom: 80,
+    paddingBottom: 100,
   },
   messageItem: {
     flexDirection: 'row',

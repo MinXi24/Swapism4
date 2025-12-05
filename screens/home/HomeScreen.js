@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import Card from '../../components/Card';
@@ -153,7 +154,6 @@ export default function HomeScreen({ navigation }) {
         break;
     }
   };
-
   const renderItem = ({ item, index }) => (
     <Card
       item={item}

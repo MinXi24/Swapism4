@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import {
   FlatList,
@@ -250,20 +249,75 @@ import React from 'react';
 
 export default function SwapScreen({ navigation }) {
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor={colors.accent} barStyle="dark-content" />
+      
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>SWAP</Text>
+        <Text style={styles.logo}>Swap</Text>
+        <TouchableOpacity onPress={handleHistory}>
+          <Icon name="time-outline" size={24} color={colors.dark} />
+        </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      <View style={styles.content}>
-        <Text style={styles.placeholderText}>Swap Screen</Text>
-        <Text style={styles.placeholderSubtext}>Coming Soon</Text>
+      {/* Search Bar */}
+      <Input
+        placeholder="search products..."
+        value={searchQuery}
+        onChangeText={handleSearch}
+        leftIcon="search-outline"
+        style={styles.searchBar}
+      />
+
+      {/* Filter and Sort */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity style={styles.filterButton} onPress={handleFilter}>
+          <Icon name="filter-outline" size={20} color={colors.dark} />
+          <Text style={styles.filterText}>Filter</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.sortButton} onPress={() => setShowSortModal(true)}>
+          <Icon name="swap-vertical-outline" size={20} color={colors.dark} />
+          <Text style={styles.sortText}>Sort By</Text>
+        </TouchableOpacity>
       </View>
 
+      {/* Items Grid */}
+      <FlatList
+        data={filteredItems}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={2}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContainer}
+      />
+
+      {/* Bottom Navigation Bar */}
       <BottomNavBar navigation={navigation} activeRoute="Swap" />
-    </View>
+
+      {/* Sort Modal */}
+      <Modal
+        visible={showSortModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSortModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Sort By</Text>
+              <TouchableOpacity onPress={() => setShowSortModal(false)}>
+                <Icon name="close-outline" size={24} color={colors.dark} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.sortOptionsContainer}>
+              {sortOptions.map(option => renderSortOption(option))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -426,32 +480,153 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    backgroundColor: colors.accent,
+  },
+  logo: {
+    fontFamily: fonts.header,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+  searchBar: {
+    marginHorizontal: spacing.md,
+    marginVertical: spacing.sm,
+  },
+  illustrationContainer: {
+    marginHorizontal: spacing.md,
+    marginVertical: spacing.sm,
+    borderRadius: 12,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  illustration: {
+    width: '100%',
+    height: 180,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 20,
+  },
+  filterText: {
+    fontFamily: fonts.header,
+    fontSize: 14,
+    color: colors.dark,
+    marginLeft: 4,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 20,
+  },
+  sortText: {
+    fontFamily: fonts.header,
+    fontSize: 14,
+    color: colors.dark,
+    marginLeft: 4,
+  },
+  listContainer: {
+    paddingHorizontal: spacing.sm,
+    paddingBottom: 100, // Space for bottom nav
+  },
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.primary,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  navItem: {
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  navText: {
+    fontFamily: fonts.body,
+    fontSize: 10,
+    color: colors.dark,
+    marginTop: 2,
+  },
+  navTextActive: {
+    color: colors.accent,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.secondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 30,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     padding: spacing.md,
-    paddingTop: 50,
-    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.primary,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
+  modalTitle: {
     fontFamily: fonts.header,
-    color: colors.dark,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-  },
-  placeholderText: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.dark,
-    marginBottom: spacing.sm,
   },
-  placeholderSubtext: {
+  sortOptionsContainer: {
+    padding: spacing.md,
+  },
+  sortOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.secondary,
+  },
+  sortOptionSelected: {
+    backgroundColor: colors.primary,
+  },
+  sortOptionText: {
+    fontFamily: fonts.body,
     fontSize: 16,
-    color: colors.gray,
+    color: colors.dark,
+  },
+  sortOptionTextSelected: {
+    fontWeight: 'bold',
+    color: colors.accent,
   },
 });
