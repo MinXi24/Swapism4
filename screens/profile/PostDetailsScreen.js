@@ -1,16 +1,17 @@
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
@@ -22,6 +23,7 @@ export default function PostDetailsScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeId, setLikeId] = useState(null);
+  const [currentSwapStatus, setCurrentSwapStatus] = useState(post.swapStatus);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -190,6 +192,52 @@ export default function PostDetailsScreen({ route, navigation }) {
     }
   };
 
+  const handleSwapNow = () => {
+    Alert.alert(
+      'Request Swap',
+      `Do you want to request a swap for "${post.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request Swap',
+          onPress: () => {
+            Alert.alert('Swap Request Sent', 'The owner will be notified of your swap request.');
+            // TODO: Implement actual swap request logic
+          }
+        }
+      ]
+    );
+  };
+
+  const handleChangeSwapStatus = async () => {
+    const newStatus = currentSwapStatus === 'available' ? 'swappedOut' : 'available';
+    
+    Alert.alert(
+      'Change Swap Status',
+      `Mark this item as ${newStatus === 'available' ? 'Available for Swap' : 'Swapped Out'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            try {
+              const postRef = doc(db, 'wardrobe-plug-fyp/user/images', post.id);
+              await updateDoc(postRef, {
+                swapStatus: newStatus
+              });
+              setCurrentSwapStatus(newStatus);
+              post.swapStatus = newStatus; // Update the post object
+              Alert.alert('Success', `Status changed to ${newStatus === 'available' ? 'Available' : 'Swapped Out'}`);
+            } catch (error) {
+              console.error('Error updating swap status:', error);
+              Alert.alert('Error', 'Failed to update swap status');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -223,6 +271,45 @@ export default function PostDetailsScreen({ route, navigation }) {
           {post.title && <Text style={styles.postTitle}>{post.title}</Text>}
           {post.description && (
             <Text style={styles.postDescription}>{post.description}</Text>
+          )}
+
+          {/* Swap Info Badge (if forSwap) */}
+          {post.postType === 'forSwap' && (
+            <View style={styles.swapInfoBadge}>
+              <Icon name="swap-horizontal" size={20} color={colors.accent} />
+              <Text style={styles.swapInfoText}>
+                Available for Swap • Status: {currentSwapStatus === 'available' ? 'Available' : 'Swapped Out'}
+              </Text>
+            </View>
+          )}
+
+          {/* Swap Action Buttons */}
+          {post.postType === 'forSwap' && (
+            <View style={styles.swapActionsContainer}>
+              {post.ownerUid !== auth.currentUser.uid ? (
+                // Show "Swap Now" button for non-owners if available
+                currentSwapStatus === 'available' && (
+                  <TouchableOpacity 
+                    style={styles.swapNowButton}
+                    onPress={handleSwapNow}
+                  >
+                    <Icon name="swap-horizontal" size={20} color="#fff" />
+                    <Text style={styles.swapNowButtonText}>Swap Now</Text>
+                  </TouchableOpacity>
+                )
+              ) : (
+                // Show status change button for owners
+                <TouchableOpacity 
+                  style={styles.changeStatusButton}
+                  onPress={handleChangeSwapStatus}
+                >
+                  <Icon name="settings-outline" size={20} color={colors.dark} />
+                  <Text style={styles.changeStatusButtonText}>
+                    Change to {currentSwapStatus === 'available' ? 'Swapped Out' : 'Available'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
 
           {/* Actions */}
@@ -353,6 +440,54 @@ const styles = StyleSheet.create({
     color: colors.dark,
     lineHeight: 20,
     marginBottom: spacing.md,
+  },
+  swapInfoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    marginBottom: spacing.md,
+  },
+  swapInfoText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  swapActionsContainer: {
+    marginBottom: spacing.md,
+  },
+  swapNowButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+  },
+  swapNowButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  changeStatusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#f0f0f0',
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.dark,
+  },
+  changeStatusButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
   },
   actions: {
     flexDirection: 'row',
