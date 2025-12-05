@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import {
   FlatList,
+  Image,
   Modal,
   SafeAreaView,
   StatusBar,
@@ -142,7 +143,7 @@ export default function HomeScreen({ navigation }) {
         navigation.navigate('Swap');
         break;
       case 'chat':
-        navigation.navigate('Chat');
+        navigation.navigate('Messages');
         break;
       case 'favorites':
         navigation.navigate('Favorites');
@@ -201,9 +202,13 @@ export default function HomeScreen({ navigation }) {
       />
 
       {/* Illustration */}
-      <View style={styles.illustrationContainer}>
-        <Text style={styles.illustrationText}>🌿 Sustainable Fashion Community 🌿</Text>
-      </View>
+              <View style={styles.illustrationContainer}>
+                <Image 
+                  source={require('../../assets/images/home illustartion.png')} 
+                  style={styles.illustration}
+                  resizeMode="contain"
+                />
+              </View>
 
       {/* Filter and Sort */}
       <View style={styles.filterContainer}>
@@ -330,7 +335,7 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.accent,
+    backgroundColor: '#ffffff',
   },
   header: {
     flexDirection: 'row',
@@ -351,18 +356,15 @@ const styles = StyleSheet.create({
     marginVertical: spacing.sm,
   },
   illustrationContainer: {
-    backgroundColor: colors.primary,
     marginHorizontal: spacing.md,
     marginVertical: spacing.sm,
-    padding: 20,
     borderRadius: 12,
     alignItems: 'center',
+    overflow: 'hidden',
   },
-  illustrationText: {
-    fontFamily: fonts.header,
-    fontSize: 16,
-    color: colors.dark,
-    textAlign: 'center',
+  illustration: {
+    width: '100%',
+    height: 180,
   },
   filterContainer: {
     flexDirection: 'row',
