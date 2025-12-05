@@ -10,8 +10,8 @@ import {
   View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
-import Input from '../../components/Input';
 import BottomNavBar from '../../components/BottomNavBar';
+import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 // Sample message data - replace with your actual data
@@ -97,32 +97,31 @@ export default function MessagesScreen({ navigation }) {
       </View>
 
       {/* Bottom Navigation Bar */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => handleNavigation('home')}
-        >
-          <Icon 
-            name={activeTab === 'home' ? 'home' : 'home-outline'} 
-            size={24} 
-            color={activeTab === 'home' ? colors.accent : colors.gray} 
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => handleNavigation('swap')}
-        >
-          <Icon 
-            name={activeTab === 'swap' ? 'swap-horizontal' : 'swap-horizontal-outline'} 
-            size={24} 
-      </View>
-
-      {/* Bottom Navigation Bar */}
       <BottomNavBar navigation={navigation} activeRoute="Messages" />
     </SafeAreaView>
   );
-}   fontWeight: 'bold',
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.light,
+  },
+  header: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  logoContainer: {
+    flex: 1,
+  },
+  logo: {
+    fontFamily: fonts.header,
+    fontSize: 16,
+    fontWeight: 'bold',
     color: colors.dark,
   },
   pageTitle: {
@@ -142,9 +141,8 @@ export default function MessagesScreen({ navigation }) {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
   },
-   searchBar: {
-    marginHorizontal: spacing.md,
-    marginVertical: spacing.sm,
+  searchBar: {
+    marginVertical: 0,
   },
   messagesContainer: {
     flex: 1,
@@ -153,6 +151,7 @@ export default function MessagesScreen({ navigation }) {
   listContent: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
+    paddingBottom: 100,
   },
   messageItem: {
     flexDirection: 'row',
@@ -180,11 +179,11 @@ export default function MessagesScreen({ navigation }) {
     fontWeight: 'bold',
     color: colors.dark,
   },
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.light,
-  messageText: {
+  time: {
+    fontFamily: fonts.sub,
+    fontSize: 12,
+    color: colors.gray,
+  },
   messageText: {
     fontFamily: fonts.sub,
     fontSize: 14,

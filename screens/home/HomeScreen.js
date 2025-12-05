@@ -1,15 +1,15 @@
 // screens/HomeScreen.js
 import { useState } from 'react';
 import {
-  FlatList,
-  Image,
-  Modal,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    FlatList,
+    Image,
+    Modal,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -167,7 +167,6 @@ export default function HomeScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>Swapism</Text>
-        <Icon name="person-outline" size={24} color={colors.dark} />
       </View>
 
       {/* Search Bar */}
