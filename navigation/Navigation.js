@@ -1,4 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import AdminHomeScreen from '../screens/admin/AdminHomeScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
@@ -33,6 +34,7 @@ export default function Navigation() {
       <Stack.Screen name="AddPost" component={AddPostScreen} />
       <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
       <Stack.Screen name="Activity" component={ActivityScreen} />
+      <Stack.Screen name="AdminHome" component={AdminHomeScreen} />
     </Stack.Navigator>
   );
 }
