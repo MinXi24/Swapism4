@@ -1,15 +1,13 @@
-// screens/HomeScreen.js
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    FlatList,
-    Image,
-    Modal,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Modal,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -17,8 +15,8 @@ import Card from '../../components/Card';
 import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
 
-// Sample data - replace with your actual data
-const sampleItems = [
+export default function SwapScreen({ navigation }) {
+  const sampleItems = [
   {
     id: 1,
     title: 'Jeans cool and baggy (fit)',
@@ -69,7 +67,6 @@ const sampleItems = [
   },
 ];
 
-export default function HomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredItems, setFilteredItems] = useState(sampleItems);
   const [showSortModal, setShowSortModal] = useState(false);
@@ -82,13 +79,24 @@ export default function HomeScreen({ navigation }) {
     'Lowest to Highest Rating',
   ];
 
+  useEffect(() => {
+    const sorted = applySorting(sampleItems, selectedSort);
+    setFilteredItems(sorted);
+  }, []);
+
   const handleSearch = (query) => {
     setSearchQuery(query);
-    let filtered = sampleItems.filter(item =>
-      item.title.toLowerCase().includes(query.toLowerCase())
-    );
-    filtered = applySorting(filtered, selectedSort);
-    setFilteredItems(filtered);
+    
+    if (query.trim() === '') {
+      const sorted = applySorting(sampleItems, selectedSort);
+      setFilteredItems(sorted);
+    } else {
+      const filtered = sampleItems.filter(item =>
+        item.title.toLowerCase().includes(query.toLowerCase())
+      );
+      const sorted = applySorting(filtered, selectedSort);
+      setFilteredItems(sorted);
+    }
   };
 
   const applySorting = (items, sortType) => {
@@ -118,6 +126,10 @@ export default function HomeScreen({ navigation }) {
   const handleFilter = () => {
     console.log('Filter pressed');
     // Add filter modal logic here
+  };
+
+  const handleHistory = () => {
+    navigation.navigate('SwapHistory');
   };
 
   const handleFavorite = (item) => {
@@ -166,7 +178,10 @@ export default function HomeScreen({ navigation }) {
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.logo}>Swapism</Text>
+        <Text style={styles.logo}>Swap</Text>
+        <TouchableOpacity onPress={handleHistory}>
+          <Icon name="time-outline" size={24} color={colors.dark} />
+        </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
@@ -177,15 +192,6 @@ export default function HomeScreen({ navigation }) {
         leftIcon="search-outline"
         style={styles.searchBar}
       />
-
-      {/* Illustration */}
-              <View style={styles.illustrationContainer}>
-                <Image 
-                  source={require('../../assets/images/home illustartion.png')} 
-                  style={styles.illustration}
-                  resizeMode="contain"
-                />
-              </View>
 
       {/* Filter and Sort */}
       <View style={styles.filterContainer}>
@@ -211,7 +217,7 @@ export default function HomeScreen({ navigation }) {
       />
 
       {/* Bottom Navigation Bar */}
-      <BottomNavBar navigation={navigation} activeRoute="Home" />
+      <BottomNavBar navigation={navigation} activeRoute="Swap" />
 
       {/* Sort Modal */}
       <Modal
