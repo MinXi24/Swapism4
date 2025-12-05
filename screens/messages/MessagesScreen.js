@@ -95,9 +95,8 @@ export default function MessagesScreen({ navigation }) {
           contentContainerStyle={styles.listContent}
         />
       </View>
-      {/* Bottom Navigation Bar */}
-      {/* Bottom Navigation */}
 
+      {/* Bottom Navigation */}
       <BottomNavBar navigation={navigation} activeRoute="Messages" />
     </SafeAreaView>
   );
@@ -145,7 +144,6 @@ const styles = StyleSheet.create({
   searchBar: {
     marginHorizontal: spacing.md,
     marginVertical: spacing.sm,
-    marginVertical: 0,
   },
   messagesContainer: {
     flex: 1,
@@ -155,72 +153,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
     paddingBottom: 80,
-    paddingBottom: 100,
-  },
-  messageItem: {
-    flexDirection: 'row',
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: spacing.md,
-  },
-  messageContent: {
-    flex: 1,
-  },
-  messageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  userName: {
-    fontFamily: fonts.header,
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.dark,
-  },
-  time: {
-    fontFamily: fonts.sub,
-    fontSize: 12,
-    color: colors.gray,
-  },
-  messageText: {
-    fontFamily: fonts.sub,
-    fontSize: 14,
-    color: colors.gray,
-  },
-  pageTitle: {
-    fontFamily: fonts.header,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.dark,
-    flex: 2,
-    textAlign: 'center',
-  },
-  menuButton: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  searchContainer: {
-    backgroundColor: colors.light,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-  },
-  searchBar: {
-    marginVertical: 0,
-  },
-  messagesContainer: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  listContent: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: 100,
   },
   messageItem: {
     flexDirection: 'row',

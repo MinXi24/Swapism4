@@ -1,3 +1,4 @@
+
 // screens/HomeScreen.js
 import { useState } from 'react';
 import {
@@ -9,11 +10,9 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
-
 import Icon from '../../assets/icons/icons';
-import BottomNavBar from '../../components/BottomNavBar';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
@@ -75,6 +74,7 @@ export default function HomeScreen({ navigation }) {
   const [filteredItems, setFilteredItems] = useState(sampleItems);
   const [showSortModal, setShowSortModal] = useState(false);
   const [selectedSort, setSelectedSort] = useState('Newest to Oldest');
+  const [activeTab, setActiveTab] = useState('home');
 
   const sortOptions = [
     'Newest to Oldest',
@@ -154,6 +154,7 @@ export default function HomeScreen({ navigation }) {
         break;
     }
   };
+
   const renderItem = ({ item, index }) => (
     <Card
       item={item}
@@ -189,6 +190,7 @@ export default function HomeScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>Swapism</Text>
+        <Icon name="person-outline" size={24} color={colors.dark} />
       </View>
 
       {/* Search Bar */}
@@ -233,7 +235,77 @@ export default function HomeScreen({ navigation }) {
       />
 
       {/* Bottom Navigation Bar */}
-      <BottomNavBar navigation={navigation} activeRoute="Home" />
+      <View style={styles.bottomNav}>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('home')}
+        >
+          <Icon 
+            name={activeTab === 'home' ? 'home' : 'home-outline'} 
+            size={24} 
+            color={activeTab === 'home' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'home' && styles.navTextActive]}>
+            Home
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('swap')}
+        >
+          <Icon 
+            name={activeTab === 'swap' ? 'swap-horizontal' : 'swap-horizontal-outline'} 
+            size={24} 
+            color={activeTab === 'swap' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'swap' && styles.navTextActive]}>
+            Swap
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('chat')}
+        >
+          <Icon 
+            name={activeTab === 'chat' ? 'chatbubble' : 'chatbubble-outline'} 
+            size={24} 
+            color={activeTab === 'chat' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'chat' && styles.navTextActive]}>
+            Chat
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('favorites')}
+        >
+          <Icon 
+            name={activeTab === 'favorites' ? 'heart' : 'heart-outline'} 
+            size={24} 
+            color={activeTab === 'favorites' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'favorites' && styles.navTextActive]}>
+            Favorites
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('profile')}
+        >
+          <Icon 
+            name={activeTab === 'profile' ? 'person' : 'person-outline'} 
+            size={24} 
+            color={activeTab === 'profile' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'profile' && styles.navTextActive]}>
+            Profile
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Sort Modal */}
       <Modal

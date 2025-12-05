@@ -228,6 +228,7 @@ export default function AddPostScreen({ navigation }) {
               maxLength={500}
             />
           </View>
+
           {/* Post Type Selection */}
           <View style={styles.postTypeSection}>
             <Text style={styles.sectionLabel}>Post Type</Text>
