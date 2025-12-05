@@ -3,21 +3,21 @@ import { StyleSheet, Text, View } from 'react-native';
 import BottomNavBar from '../../components/BottomNavBar';
 import { colors, fonts, spacing } from '../../lib/theme';
 
-export default function FavouritesScreen({ navigation }) {
+export default function SwapScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>FAVOURITES</Text>
+        <Text style={styles.headerTitle}>SWAP</Text>
       </View>
 
       {/* Content */}
       <View style={styles.content}>
-        <Text style={styles.placeholderText}>Favourites Screen</Text>
+        <Text style={styles.placeholderText}>Swap Screen</Text>
         <Text style={styles.placeholderSubtext}>Coming Soon</Text>
       </View>
 
-      <BottomNavBar navigation={navigation} activeRoute="Favorites" />
+      <BottomNavBar navigation={navigation} activeRoute="Swap" />
     </View>
   );
 }

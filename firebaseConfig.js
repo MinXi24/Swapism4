@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth"; // Import Auth
 import { getDatabase } from "firebase/database"; // Import Database
+import { getFirestore } from "firebase/firestore"; // Import Firestore
 
 const firebaseConfig = {
   apiKey: "AIzaSyB1oByjPNmy7KLqrveFLf19R0lv4CE6Zuc",
@@ -20,8 +21,9 @@ const app = initializeApp(firebaseConfig);
 // Initialize Services
 const db = getDatabase(app); // Realtime Database
 const auth = getAuth(app);   // Authentication
+const firestore = getFirestore(app); // Firestore
 
 // Export them to use in other files
-export { app, auth, db };
+export { app, auth, db, firestore };
 
 console.log("🔥 Firebase has been initialized successfully!");

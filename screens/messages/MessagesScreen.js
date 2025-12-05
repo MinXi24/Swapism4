@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import Input from '../../components/Input';
+import BottomNavBar from '../../components/BottomNavBar';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 // Sample message data - replace with your actual data
@@ -35,28 +36,6 @@ const sampleMessages = [
 
 export default function MessagesScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('messages');
-
-  const handleNavigation = (tab) => {
-    setActiveTab(tab);
-    switch(tab) {
-      case 'home':
-        navigation.navigate('Home');
-        break;
-      case 'swap':
-        navigation.navigate('Swap');
-        break;
-      case 'chat':
-        // Already on messages
-        break;
-      case 'favorites':
-        navigation.navigate('Favorites');
-        break;
-      case 'profile':
-        navigation.navigate('Profile');
-        break;
-    }
-  };
 
   const handleMessagePress = (message) => {
     console.log('Open chat with:', message.name);
@@ -137,67 +116,13 @@ export default function MessagesScreen({ navigation }) {
           <Icon 
             name={activeTab === 'swap' ? 'swap-horizontal' : 'swap-horizontal-outline'} 
             size={24} 
-            color={activeTab === 'swap' ? colors.accent : colors.gray} 
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => handleNavigation('chat')}
-        >
-          <Icon 
-            name={activeTab === 'messages' ? 'chatbubble' : 'chatbubble-outline'} 
-            size={24} 
-            color={colors.accent} 
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => handleNavigation('favorites')}
-        >
-          <Icon 
-            name={activeTab === 'favorites' ? 'heart' : 'heart-outline'} 
-            size={24} 
-            color={activeTab === 'favorites' ? colors.accent : colors.gray} 
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => handleNavigation('profile')}
-        >
-          <Icon 
-            name={activeTab === 'profile' ? 'person' : 'person-outline'} 
-            size={24} 
-            color={activeTab === 'profile' ? colors.accent : colors.gray} 
-          />
-        </TouchableOpacity>
       </View>
+
+      {/* Bottom Navigation Bar */}
+      <BottomNavBar navigation={navigation} activeRoute="Messages" />
     </SafeAreaView>
   );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.light,
-  },
-  header: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  logoContainer: {
-    flex: 1,
-  },
-  logo: {
-    fontFamily: fonts.header,
-    fontSize: 16,
-    fontWeight: 'bold',
+}   fontWeight: 'bold',
     color: colors.dark,
   },
   pageTitle: {
@@ -255,46 +180,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.dark,
   },
-  time: {
-    fontFamily: fonts.sub,
-    fontSize: 12,
-    color: colors.gray,
-  },
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.light,
+  messageText: {
   messageText: {
     fontFamily: fonts.sub,
     fontSize: 14,
     color: colors.gray,
-  },
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: colors.secondary,
-    paddingVertical: 8,
-    paddingHorizontal: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.primary,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  navItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  addButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.highlight,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
