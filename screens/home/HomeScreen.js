@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import {
   FlatList,
+  Image,
   Modal,
   SafeAreaView,
   StatusBar,
@@ -11,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
-import BottomNavBar from '../../components/BottomNavBar';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
@@ -73,6 +73,7 @@ export default function HomeScreen({ navigation }) {
   const [filteredItems, setFilteredItems] = useState(sampleItems);
   const [showSortModal, setShowSortModal] = useState(false);
   const [selectedSort, setSelectedSort] = useState('Newest to Oldest');
+  const [activeTab, setActiveTab] = useState('home');
 
   const sortOptions = [
     'Newest to Oldest',
@@ -131,6 +132,28 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('ItemDetails', { item });
   };
 
+  const handleNavigation = (tab) => {
+    setActiveTab(tab);
+    // Add navigation logic based on tab
+    switch(tab) {
+      case 'home':
+        // Already on home
+        break;
+      case 'swap':
+        navigation.navigate('Swap');
+        break;
+      case 'chat':
+        navigation.navigate('Messages');
+        break;
+      case 'favorites':
+        navigation.navigate('Favorites');
+        break;
+      case 'profile':
+        navigation.navigate('Profile');
+        break;
+    }
+  };
+
   const renderItem = ({ item, index }) => (
     <Card
       item={item}
@@ -179,9 +202,13 @@ export default function HomeScreen({ navigation }) {
       />
 
       {/* Illustration */}
-      <View style={styles.illustrationContainer}>
-        <Text style={styles.illustrationText}>🌿 Sustainable Fashion Community 🌿</Text>
-      </View>
+              <View style={styles.illustrationContainer}>
+                <Image 
+                  source={require('../../assets/images/home illustartion.png')} 
+                  style={styles.illustration}
+                  resizeMode="contain"
+                />
+              </View>
 
       {/* Filter and Sort */}
       <View style={styles.filterContainer}>
@@ -207,7 +234,77 @@ export default function HomeScreen({ navigation }) {
       />
 
       {/* Bottom Navigation Bar */}
-      <BottomNavBar navigation={navigation} activeRoute="Home" />
+      <View style={styles.bottomNav}>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('home')}
+        >
+          <Icon 
+            name={activeTab === 'home' ? 'home' : 'home-outline'} 
+            size={24} 
+            color={activeTab === 'home' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'home' && styles.navTextActive]}>
+            Home
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('swap')}
+        >
+          <Icon 
+            name={activeTab === 'swap' ? 'swap-horizontal' : 'swap-horizontal-outline'} 
+            size={24} 
+            color={activeTab === 'swap' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'swap' && styles.navTextActive]}>
+            Swap
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('chat')}
+        >
+          <Icon 
+            name={activeTab === 'chat' ? 'chatbubble' : 'chatbubble-outline'} 
+            size={24} 
+            color={activeTab === 'chat' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'chat' && styles.navTextActive]}>
+            Chat
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('favorites')}
+        >
+          <Icon 
+            name={activeTab === 'favorites' ? 'heart' : 'heart-outline'} 
+            size={24} 
+            color={activeTab === 'favorites' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'favorites' && styles.navTextActive]}>
+            Favorites
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('profile')}
+        >
+          <Icon 
+            name={activeTab === 'profile' ? 'person' : 'person-outline'} 
+            size={24} 
+            color={activeTab === 'profile' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'profile' && styles.navTextActive]}>
+            Profile
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Sort Modal */}
       <Modal
@@ -238,7 +335,7 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.accent,
+    backgroundColor: '#ffffff',
   },
   header: {
     flexDirection: 'row',
@@ -259,18 +356,15 @@ const styles = StyleSheet.create({
     marginVertical: spacing.sm,
   },
   illustrationContainer: {
-    backgroundColor: colors.primary,
     marginHorizontal: spacing.md,
     marginVertical: spacing.sm,
-    padding: 20,
     borderRadius: 12,
     alignItems: 'center',
+    overflow: 'hidden',
   },
-  illustrationText: {
-    fontFamily: fonts.header,
-    fontSize: 16,
-    color: colors.dark,
-    textAlign: 'center',
+  illustration: {
+    width: '100%',
+    height: 180,
   },
   filterContainer: {
     flexDirection: 'row',
