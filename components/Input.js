@@ -26,7 +26,7 @@ export default function Input({
         placeholder={placeholder}
         value={value}
         onChangeText={onChangeText}
-        placeholderTextColor={colors.accent}
+        placeholderTextColor={colors.gray}
         {...props}
       />
       {rightIcon && (
@@ -47,6 +47,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.secondary,
     borderRadius: 25,
+    borderWidth: 1,
+    borderColor: colors.accent,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     marginVertical: spacing.sm,
