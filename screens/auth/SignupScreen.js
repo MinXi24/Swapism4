@@ -89,7 +89,7 @@ export default function SignUpScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton}>
@@ -99,9 +99,10 @@ export default function SignUpScreen({ navigation }) {
 
         {/* Logo and Branding */}
         <View style={styles.logoContainer}>
-          <View style={styles.logoBackground}>
-            <Text style={styles.logoText}>SWAPISM</Text>
-          </View>
+          <Image 
+            source={require('../../assets/images/logo.png')} 
+            style={styles.logo}
+          />
         </View>
 
         {/* Title and Subtitle */}
@@ -217,19 +218,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.secondary,
   },
   scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.md,
+    flex: 1,
+    paddingHorizontal: spacing.sm,
+    paddingTop: 0,
   },
   header: {
     paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    paddingBottom: 4,
   },
   backButton: {
     padding: spacing.sm,
+    marginBottom: 0,
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: 0,
   },
   logoBackground: {
     backgroundColor: colors.accent,
@@ -246,11 +249,11 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 8,
   },
   title: {
     fontFamily: fonts.header,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.dark,
     marginBottom: 4,
@@ -262,22 +265,26 @@ const styles = StyleSheet.create({
   },
   illustrationContainer: {
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 0,
+  },
+  logo: {
+    width: 250,
+    height: 150,
   },
   illustration: {
-    width: 200,
-    height: 150,
+    width: 300,
+    height: 200,
   },
   formContainer: {
     flex: 1,
   },
   input: {
-    marginBottom: spacing.md,
+    marginBottom: 8,  
   },
   termsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 12,
     paddingHorizontal: spacing.sm,
   },
   checkbox: {
@@ -303,14 +310,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   createButton: {
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.md,
+    marginBottom: 12,
+    paddingVertical: 12,
   },
   loginContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 12,
   },
   loginText: {
     fontFamily: fonts.sub,
@@ -326,7 +333,7 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 12,
   },
   dividerLine: {
     flex: 1,

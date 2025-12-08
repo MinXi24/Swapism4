@@ -1,12 +1,12 @@
 import React from 'react';
 import {
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { colors, fonts, spacing } from '../../lib/theme';
 
@@ -37,9 +37,10 @@ export default function WelcomeScreen({ navigation }) {
         
         {/* Logo overlaid on illustration */}
         <View style={styles.logoContainer}>
-          <View style={styles.logoBackground}>
-            <Text style={styles.logoText}>SWAPISM</Text>
-          </View>
+          <Image 
+            source={require('../../assets/images/logo.png')} 
+            style={styles.logo}
+          />
         </View>
       </View>
 
@@ -81,19 +82,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.accent,
+    paddingTop: 0,
   },
   illustrationContainer: {
-    flex: 1,
+    height: '67%',
     position: 'relative',
   },
   illustration: {
     width: '100%',
     height: '100%',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
   logoContainer: {
     position: 'absolute',
-    top: 20,
-    left: 20,
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  logo: {
+    width: 350,
+    height: 250,
+    resizeMode: 'contain',
   },
   logoBackground: {
     backgroundColor: 'rgba(255,255,255,0.4)',
@@ -114,14 +125,14 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.lg,
   },
   descriptionText: {
     fontFamily: fonts.sub,
     fontSize: 13,
     color: colors.dark,
     textAlign: 'center',
-    marginBottom: spacing.md,
+    marginBottom: 8,
   },
   title: {
     fontFamily: fonts.header,
@@ -129,10 +140,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.dark,
     textAlign: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   buttonContainer: {
-    marginBottom: spacing.md,
+    marginBottom: 12,
   },
   loginButton: {
     backgroundColor: colors.dark,
