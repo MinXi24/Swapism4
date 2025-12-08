@@ -1,16 +1,17 @@
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
@@ -22,6 +23,9 @@ export default function PostDetailsScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeId, setLikeId] = useState(null);
+  const [currentSwapStatus, setCurrentSwapStatus] = useState(post.swapStatus);
+  const [likes, setLikes] = useState([]);
+  const [showLikes, setShowLikes] = useState(false);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -29,6 +33,7 @@ export default function PostDetailsScreen({ route, navigation }) {
   useEffect(() => {
     loadComments();
     checkIfLiked();
+    loadLikes();
     logViewActivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -94,6 +99,23 @@ export default function PostDetailsScreen({ route, navigation }) {
     }
   };
 
+  const loadLikes = async () => {
+    try {
+      const q = query(
+        collection(db, 'likes'),
+        where('postId', '==', post.id)
+      );
+      const querySnapshot = await getDocs(q);
+      const likesData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setLikes(likesData);
+    } catch (error) {
+      console.error('Error loading likes:', error);
+    }
+  };
+
   const logViewActivity = async () => {
     try {
       // Check if already viewed recently (within last hour)
@@ -145,9 +167,22 @@ export default function PostDetailsScreen({ route, navigation }) {
         setLiked(false);
         setLikeId(null);
       } else {
+        // Get username from Firestore
+        let userName = auth.currentUser.displayName || auth.currentUser.email;
+        try {
+          const userDocRef = doc(db, 'users', auth.currentUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            userName = userDoc.data().username || userName;
+          }
+        } catch (err) {
+          console.error('Error fetching username:', err);
+        }
+
         // Like
         const likeDoc = await addDoc(collection(db, 'likes'), {
           userId: auth.currentUser.uid,
+          userName: userName,
           postId: post.id,
           createdAt: new Date(),
         });
@@ -162,6 +197,8 @@ export default function PostDetailsScreen({ route, navigation }) {
         setLiked(true);
         setLikeId(likeDoc.id);
       }
+      // Reload likes to update the list
+      loadLikes();
     } catch (error) {
       console.error('Error toggling like:', error);
       alert('Failed to update like status');
@@ -173,13 +210,38 @@ export default function PostDetailsScreen({ route, navigation }) {
 
     setLoading(true);
     try {
+      // Get username from Firestore
+      let userName = auth.currentUser.displayName || 'Anonymous';
+      try {
+        const userDocRef = doc(db, 'users', auth.currentUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          userName = userDoc.data().username || userName;
+        }
+      } catch (err) {
+        console.error('Error fetching username:', err);
+      }
+
       await addDoc(collection(db, 'comments'), {
         postId: post.id,
         userId: auth.currentUser.uid,
-        userName: auth.currentUser.displayName || 'Anonymous',
+        userName: userName,
         text: newComment.trim(),
         createdAt: new Date(),
       });
+
+      // Send notification to post owner
+      if (post.ownerUid !== auth.currentUser.uid) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: post.ownerUid,
+          type: 'comment',
+          message: `${userName} commented on your post`,
+          postId: post.id,
+          read: false,
+          createdAt: new Date(),
+        });
+      }
+
       setNewComment('');
       loadComments();
     } catch (error) {
@@ -188,6 +250,52 @@ export default function PostDetailsScreen({ route, navigation }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSwapNow = () => {
+    Alert.alert(
+      'Request Swap',
+      `Do you want to request a swap for "${post.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request Swap',
+          onPress: () => {
+            Alert.alert('Swap Request Sent', 'The owner will be notified of your swap request.');
+            // TODO: Implement actual swap request logic
+          }
+        }
+      ]
+    );
+  };
+
+  const handleChangeSwapStatus = async () => {
+    const newStatus = currentSwapStatus === 'available' ? 'swappedOut' : 'available';
+    
+    Alert.alert(
+      'Change Swap Status',
+      `Mark this item as ${newStatus === 'available' ? 'Available for Swap' : 'Swapped Out'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            try {
+              const postRef = doc(db, 'wardrobe-plug-fyp/user/images', post.id);
+              await updateDoc(postRef, {
+                swapStatus: newStatus
+              });
+              setCurrentSwapStatus(newStatus);
+              post.swapStatus = newStatus; // Update the post object
+              Alert.alert('Success', `Status changed to ${newStatus === 'available' ? 'Available' : 'Swapped Out'}`);
+            } catch (error) {
+              console.error('Error updating swap status:', error);
+              Alert.alert('Error', 'Failed to update swap status');
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -211,7 +319,13 @@ export default function PostDetailsScreen({ route, navigation }) {
         {/* Post Info */}
         <View style={styles.postInfo}>
           <View style={styles.userInfo}>
-            <Icon name="person-circle" size={40} color={colors.accent} />
+            <View style={styles.userAvatar}>
+              {post.userPhotoURL ? (
+                <Image source={{ uri: post.userPhotoURL }} style={styles.userAvatarImage} />
+              ) : (
+                <Icon name="person-circle" size={40} color={colors.accent} />
+              )}
+            </View>
             <View style={styles.userDetails}>
               <Text style={styles.userName}>{post.userName || 'User'}</Text>
               <Text style={styles.postDate}>
@@ -223,6 +337,45 @@ export default function PostDetailsScreen({ route, navigation }) {
           {post.title && <Text style={styles.postTitle}>{post.title}</Text>}
           {post.description && (
             <Text style={styles.postDescription}>{post.description}</Text>
+          )}
+
+          {/* Swap Info Badge (if forSwap) */}
+          {post.postType === 'forSwap' && (
+            <View style={styles.swapInfoBadge}>
+              <Icon name="swap-horizontal" size={20} color={colors.accent} />
+              <Text style={styles.swapInfoText}>
+                Available for Swap • Status: {currentSwapStatus === 'available' ? 'Available' : 'Swapped Out'}
+              </Text>
+            </View>
+          )}
+
+          {/* Swap Action Buttons */}
+          {post.postType === 'forSwap' && (
+            <View style={styles.swapActionsContainer}>
+              {post.ownerUid !== auth.currentUser.uid ? (
+                // Show "Swap Now" button for non-owners if available
+                currentSwapStatus === 'available' && (
+                  <TouchableOpacity 
+                    style={styles.swapNowButton}
+                    onPress={handleSwapNow}
+                  >
+                    <Icon name="swap-horizontal" size={20} color="#fff" />
+                    <Text style={styles.swapNowButtonText}>Swap Now</Text>
+                  </TouchableOpacity>
+                )
+              ) : (
+                // Show status change button for owners
+                <TouchableOpacity 
+                  style={styles.changeStatusButton}
+                  onPress={handleChangeSwapStatus}
+                >
+                  <Icon name="settings-outline" size={20} color={colors.dark} />
+                  <Text style={styles.changeStatusButtonText}>
+                    Change to {currentSwapStatus === 'available' ? 'Swapped Out' : 'Available'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
 
           {/* Actions */}
@@ -246,6 +399,37 @@ export default function PostDetailsScreen({ route, navigation }) {
               <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Likes Section */}
+          {likes.length > 0 && (
+            <View style={styles.likesSection}>
+              <TouchableOpacity 
+                style={styles.likesHeader}
+                onPress={() => setShowLikes(!showLikes)}
+              >
+                <Icon name="heart" size={20} color="#ff4444" />
+                <Text style={styles.likesCount}>
+                  {likes.length} {likes.length === 1 ? 'like' : 'likes'}
+                </Text>
+                <Icon 
+                  name={showLikes ? "chevron-up" : "chevron-down"} 
+                  size={20} 
+                  color={colors.gray} 
+                />
+              </TouchableOpacity>
+              
+              {showLikes && (
+                <View style={styles.likesList}>
+                  {likes.map(like => (
+                    <View key={like.id} style={styles.likeItem}>
+                      <Icon name="person-circle" size={32} color={colors.accent} />
+                      <Text style={styles.likeUserName}>{like.userName || 'User'}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Comments Section */}
@@ -329,6 +513,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.md,
   },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginRight: spacing.sm,
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userAvatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
   userDetails: {
     marginLeft: spacing.sm,
   },
@@ -354,6 +553,54 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: spacing.md,
   },
+  swapInfoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    marginBottom: spacing.md,
+  },
+  swapInfoText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  swapActionsContainer: {
+    marginBottom: spacing.md,
+  },
+  swapNowButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+  },
+  swapNowButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  changeStatusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#f0f0f0',
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.dark,
+  },
+  changeStatusButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -373,6 +620,40 @@ const styles = StyleSheet.create({
   },
   likedText: {
     color: '#ff4444',
+  },
+  likesSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  likesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  likesCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    flex: 1,
+  },
+  likesList: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  likeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  likeUserName: {
+    fontSize: 14,
+    color: colors.dark,
   },
   commentsSection: {
     padding: spacing.md,

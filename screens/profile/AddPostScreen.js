@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, getFirestore } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getFirestore } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -26,6 +26,7 @@ export default function AddPostScreen({ navigation }) {
   const [description, setDescription] = useState('');
   const [taggedUsers, setTaggedUsers] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [postType, setPostType] = useState('forFun'); // 'forFun', 'forSwap', or 'both'
 
   const db = getFirestore();
   const auth = getAuth();
@@ -139,18 +140,60 @@ export default function AddPostScreen({ navigation }) {
       console.log('Image uploaded, URL:', imageUrl);
 
       const uid = auth.currentUser.uid;
-      const userName = auth.currentUser.displayName || auth.currentUser.email;
+      
+      // Get username from Firestore
+      let userName = auth.currentUser.displayName || auth.currentUser.email;
+      try {
+        const userDocRef = doc(db, 'users', uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          userName = userDoc.data().username || userName;
+        }
+      } catch (err) {
+        console.error('Error fetching username:', err);
+      }
 
       console.log('Saving to Firestore...');
-      await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
-        ownerUid: uid,
-        userName: userName,
-        url: imageUrl,
-        title: title.trim(),
-        description: description.trim(),
-        taggedUsers: taggedUsers,
-        uploadedAt: new Date(),
-      });
+      
+      if (postType === 'both') {
+        // Create two posts - one for fun and one for swap
+        await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
+          ownerUid: uid,
+          userName: userName,
+          url: imageUrl,
+          title: title.trim(),
+          description: description.trim(),
+          taggedUsers: taggedUsers,
+          postType: 'forFun',
+          swapStatus: null,
+          uploadedAt: new Date(),
+        });
+        
+        await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
+          ownerUid: uid,
+          userName: userName,
+          url: imageUrl,
+          title: title.trim(),
+          description: description.trim(),
+          taggedUsers: taggedUsers,
+          postType: 'forSwap',
+          swapStatus: 'available',
+          uploadedAt: new Date(),
+        });
+      } else {
+        // Create single post
+        await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
+          ownerUid: uid,
+          userName: userName,
+          url: imageUrl,
+          title: title.trim(),
+          description: description.trim(),
+          taggedUsers: taggedUsers,
+          postType: postType, // 'forFun' or 'forSwap'
+          swapStatus: postType === 'forSwap' ? 'available' : null,
+          uploadedAt: new Date(),
+        });
+      }
 
       console.log('Post saved successfully!');
       
@@ -165,6 +208,7 @@ export default function AddPostScreen({ navigation }) {
       setTitle('');
       setDescription('');
       setTaggedUsers([]);
+      setPostType('forFun');
     } catch (error) {
       console.error('Upload error:', error);
       Alert.alert('Error', `Failed to upload post: ${error.message}`);
@@ -223,6 +267,72 @@ export default function AddPostScreen({ navigation }) {
               numberOfLines={4}
               maxLength={500}
             />
+          </View>
+
+          {/* Post Type Selection */}
+          <View style={styles.postTypeSection}>
+            <Text style={styles.sectionLabel}>Post Type</Text>
+            <View style={styles.postTypeButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.postTypeButton,
+                  postType === 'forFun' && styles.postTypeButtonActive
+                ]}
+                onPress={() => setPostType('forFun')}
+              >
+                <Icon 
+                  name={postType === 'forFun' ? 'happy' : 'happy-outline'} 
+                  size={20} 
+                  color={postType === 'forFun' ? '#fff' : colors.dark} 
+                />
+                <Text style={[
+                  styles.postTypeButtonText,
+                  postType === 'forFun' && styles.postTypeButtonTextActive
+                ]}>
+                  For Fun
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.postTypeButton,
+                  postType === 'forSwap' && styles.postTypeButtonActive
+                ]}
+                onPress={() => setPostType('forSwap')}
+              >
+                <Icon 
+                  name={postType === 'forSwap' ? 'swap-horizontal' : 'swap-horizontal-outline'} 
+                  size={20} 
+                  color={postType === 'forSwap' ? '#fff' : colors.dark} 
+                />
+                <Text style={[
+                  styles.postTypeButtonText,
+                  postType === 'forSwap' && styles.postTypeButtonTextActive
+                ]}>
+                  For Swap
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.postTypeButton,
+                  postType === 'both' && styles.postTypeButtonActive
+                ]}
+                onPress={() => setPostType('both')}
+              >
+                <Icon 
+                  name={postType === 'both' ? 'apps' : 'apps-outline'} 
+                  size={20} 
+                  color={postType === 'both' ? '#fff' : colors.dark} 
+                />
+                <Text style={[
+                  styles.postTypeButtonText,
+                  postType === 'both' && styles.postTypeButtonTextActive
+                ]}>
+                  Both
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Tag People Button */}
@@ -332,6 +442,72 @@ const styles = StyleSheet.create({
   descriptionInput: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  postTypeSection: {
+    marginBottom: spacing.md,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  postTypeButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  postTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: spacing.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  postTypeButtonActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  postTypeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  postTypeButtonTextActive: {
+    color: '#fff',
+  },
+  swapStatusSection: {
+    marginBottom: spacing.md,
+  },
+  swapStatusButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  swapStatusButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: spacing.sm,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  swapStatusButtonActive: {
+    backgroundColor: colors.highlight,
+    borderColor: colors.highlight,
+  },
+  swapStatusButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  swapStatusButtonTextActive: {
+    color: '#fff',
   },
   tagButton: {
     flexDirection: 'row',

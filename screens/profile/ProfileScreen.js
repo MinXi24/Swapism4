@@ -1,17 +1,19 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
-import React, { useCallback, useState } from 'react';
+import { collection, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -20,7 +22,7 @@ import { colors, fonts, spacing } from '../../lib/theme';
 export default function ProfileScreen({ navigation }) {
   const [userPosts, setUserPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('posts');
+  const [activeTab, setActiveTab] = useState('forFun');
   const [stats, setStats] = useState({
     swaps: 0,
     followers: 0,
@@ -30,15 +32,59 @@ export default function ProfileScreen({ navigation }) {
     bio: 'i overestimated how much i can achieve when i reached how old i am now',
     location: 'Singapore',
     area: '',
-    rating: 4.8,
-    reviewCount: 2,
+    rating: 0,
+    reviewCount: 0,
+    reviews: [],
   });
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [postalCode, setPostalCode] = useState('');
+  const [discoverPosts, setDiscoverPosts] = useState([]);
 
   const auth = getAuth();
   const db = getFirestore();
   const user = auth.currentUser;
+
+  useEffect(() => {
+    loadUserProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadUserProfile = async () => {
+    try {
+      const uid = user?.uid;
+      if (!uid) return;
+
+      const userDocRef = doc(db, 'users', uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        // Load followers and following counts
+        const followers = userData.followers || [];
+        const following = userData.following || [];
+        
+        setUserInfo(prev => ({
+          ...prev,
+          username: userData.username || user?.displayName || 'User',
+          location: userData.location || 'Singapore',
+          area: userData.area || '',
+          bio: userData.bio || prev.bio,
+          rating: userData.rating || 0,
+          reviewCount: userData.reviewCount || 0,
+          reviews: userData.reviews || [],
+        }));
+        
+        setStats(prev => ({
+          ...prev,
+          followers: followers.length,
+          following: following.length,
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
 
   const loadUserPosts = async () => {
     try {
@@ -68,6 +114,9 @@ export default function ProfileScreen({ navigation }) {
       console.log('Loaded posts:', posts.length);
       setUserPosts(posts);
       setStats(prev => ({ ...prev, swaps: posts.length }));
+      
+      // Load discover posts (other users' swap posts)
+      await loadDiscoverPosts();
     } catch (error) {
       console.error('Error loading posts:', error);
     } finally {
@@ -75,8 +124,34 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
+  const loadDiscoverPosts = async () => {
+    try {
+      const uid = user?.uid;
+      if (!uid) return;
+
+      // Fetch all forSwap posts, then filter in JavaScript to avoid composite index
+      const q = query(
+        collection(db, 'wardrobe-plug-fyp/user/images'),
+        where('postType', '==', 'forSwap')
+      );
+      const querySnapshot = await getDocs(q);
+      const posts = querySnapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .filter(post => post.ownerUid !== uid) // Filter out current user's posts
+        .slice(0, 10); // Show only first 10 posts
+      
+      setDiscoverPosts(posts);
+    } catch (error) {
+      console.error('Error loading discover posts:', error);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
+      loadUserProfile();
       loadUserPosts();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -91,8 +166,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleEditProfile = () => {
-    // Navigate to edit profile screen
-    console.log('Edit profile');
+    navigation.navigate('EditProfile');
   };
 
   const handleShareProfile = () => {
@@ -105,7 +179,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleSaveLocation = async () => {
-    // Singapore postal code districts mapping (simplified)
+    // Singapore postal code districts mapping
     const postalDistricts = {
       '01': 'Raffles Place, Cecil, Marina',
       '02': 'Anson, Tanjong Pagar',
@@ -135,21 +209,91 @@ export default function ProfileScreen({ navigation }) {
       '26': 'Upper Thomson, Springleaf',
       '27': 'Yishun, Sembawang',
       '28': 'Seletar',
+      '29': 'Seletar',
+      '30': 'Mandai',
+      '31': 'Woodlands',
+      '32': 'Woodlands',
+      '33': 'Woodlands',
+      '34': 'Sembawang',
+      '35': 'Sembawang',
+      '36': 'Sembawang',
+      '37': 'Yishun',
+      '38': 'Yishun',
+      '39': 'Yishun',
+      '40': 'Yishun',
+      '41': 'Punggol',
+      '42': 'Sengkang',
+      '43': 'Sengkang',
+      '44': 'Sengkang',
+      '45': 'Hougang',
+      '46': 'Hougang',
+      '47': 'Hougang',
+      '48': 'Serangoon',
+      '49': 'Serangoon',
+      '50': 'Serangoon',
+      '51': 'Pasir Ris',
+      '52': 'Toa Payoh',
+      '53': 'Hougang',
+      '54': 'Ang Mo Kio',
+      '55': 'Serangoon North',
+      '56': 'Bishan',
+      '57': 'Bishan',
+      '58': 'Thomson',
+      '59': 'Thomson',
+      '60': 'Bishan',
+      '61': 'Clementi',
+      '62': 'Jurong West',
+      '63': 'Jurong West',
+      '64': 'Jurong West',
+      '65': 'Jurong West',
+      '66': 'Jurong West',
+      '67': 'Jurong West',
+      '68': 'Jurong East',
+      '69': 'Jurong East',
+      '70': 'Jurong East',
+      '71': 'Jurong East',
+      '72': 'Boon Lay',
+      '73': 'Pioneer',
+      '74': 'Bukit Batok',
+      '75': 'Bukit Batok',
+      '76': 'Bukit Batok',
+      '77': 'Choa Chu Kang',
+      '78': 'Choa Chu Kang',
+      '79': 'Choa Chu Kang',
+      '80': 'Queenstown',
+      '81': 'Buona Vista',
     };
 
-    if (postalCode.length === 6) {
+    if (postalCode.length === 6 && /^\d{6}$/.test(postalCode)) {
       const district = postalCode.substring(0, 2);
-      const area = postalDistricts[district] || 'Unknown Area';
+      const area = postalDistricts[district];
       
-      setUserInfo(prev => ({
-        ...prev,
-        location: 'Singapore',
-        area: area,
-      }));
-      
-      // TODO: Save to Firestore user profile
-      setShowLocationModal(false);
-      setPostalCode('');
+      if (area) {
+        setUserInfo(prev => ({
+          ...prev,
+          location: 'Singapore',
+          area: area,
+        }));
+        
+        // Save to Firestore user profile
+        try {
+          const uid = user?.uid;
+          if (uid) {
+            const userDocRef = doc(db, 'users', uid);
+            await setDoc(userDocRef, {
+              location: 'Singapore',
+              area: area,
+            }, { merge: true });
+          }
+        } catch (error) {
+          console.error('Error saving location:', error);
+        }
+        
+        setShowLocationModal(false);
+        setPostalCode('');
+      } else {
+        alert('Postal code not recognized. Please check and try again.');
+      }
     } else {
       alert('Please enter a valid 6-digit Singapore postal code');
     }
@@ -164,29 +308,57 @@ export default function ProfileScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>PROFILE</Text>
-          <TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.logo}>Profile</Text>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Icon name="add-outline" size={28} color={colors.dark} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIcon}>
             <Icon name="menu-outline" size={28} color={colors.dark} />
           </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Profile Info */}
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Profile Info - Instagram Style */}
         <View style={styles.profileSection}>
-          <View style={styles.profileImageContainer}>
-            {user?.photoURL ? (
-              <Image source={{ uri: user.photoURL }} style={styles.profileImage} />
-            ) : (
-              <View style={styles.profileImagePlaceholder}>
-                <Icon name="person" size={60} color={colors.gray} />
+          {/* Top Row: Profile Picture + Stats */}
+          <View style={styles.profileTopRow}>
+            {/* Profile Picture */}
+            <View style={styles.profileImageContainer}>
+              {user?.photoURL ? (
+                <Image source={{ uri: user.photoURL }} style={styles.profileImage} />
+              ) : (
+                <View style={styles.profileImagePlaceholder}>
+                  <Icon name="person" size={40} color={colors.gray} />
+                </View>
+              )}
+            </View>
+
+            {/* Stats */}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{stats.swaps}</Text>
+                <Text style={styles.statLabel}>posts</Text>
               </View>
-            )}
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{stats.followers}</Text>
+                <Text style={styles.statLabel}>followers</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{stats.following}</Text>
+                <Text style={styles.statLabel}>following</Text>
+              </View>
+            </View>
           </View>
 
-          <Text style={styles.userName}>{user?.displayName || 'Ben'}</Text>
+          {/* Username */}
+          <Text style={styles.userName}>{userInfo.username || user?.displayName || 'User'}</Text>
           
           {/* Bio */}
           <Text style={styles.userBio}>{userInfo.bio}</Text>
@@ -199,90 +371,52 @@ export default function ProfileScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
 
-          {/* Stats */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.swaps}</Text>
-              <Text style={styles.statLabel}>posts</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.followers}</Text>
-              <Text style={styles.statLabel}>followers</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.following}</Text>
-              <Text style={styles.statLabel}>following</Text>
-            </View>
-          </View>
-
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={handleEditProfile}
             >
-              <Text style={styles.actionButtonText}>Follow</Text>
+              <Text style={styles.actionButtonText}>Edit profile</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={handleShareProfile}
             >
-              <Text style={styles.actionButtonText}>Message</Text>
+              <Text style={styles.actionButtonText}>Share profile</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Discover Closets Section */}
+        {/* Discover Closets Section - Other Users' Swap Posts */}
         <View style={styles.discoverSection}>
-          <Text style={styles.sectionTitle}>Discover closets</Text>
+          <Text style={styles.sectionTitle}>Discover Swap Closets</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.discoverScroll}
           >
-            <View style={styles.discoverCard}>
-              <Text style={styles.discoverEmoji}>👕</Text>
-              <Text style={styles.discoverText}>casual</Text>
-            </View>
-            <View style={styles.discoverCard}>
-              <Text style={styles.discoverEmoji}>🔄</Text>
-              <Text style={styles.discoverText}>swap</Text>
-            </View>
-            <View style={styles.discoverCard}>
-              <Text style={styles.discoverEmoji}>🛍️</Text>
-              <Text style={styles.discoverText}>don&apos;t shop</Text>
-            </View>
+            {discoverPosts.map((post) => (
+              <TouchableOpacity
+                key={post.id}
+                style={styles.discoverCard}
+                onPress={() => navigation.navigate('UserProfile', { 
+                  userId: post.ownerUid, 
+                  username: post.userName,
+                  initialTab: 'forSwap'
+                })}
+              >
+                <Image source={{ uri: post.url }} style={styles.discoverImage} />
+                <Text style={styles.discoverUsername} numberOfLines={1}>{post.userName}</Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
-        </View>
-
-        {/* Tabs */}
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'posts' && styles.activeTab]}
-            onPress={() => setActiveTab('posts')}
-          >
-            <Icon name="grid" size={24} color={colors.dark} />
-            <Text style={styles.tabText}>POSTS</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'mirror' && styles.activeTab]}
-            onPress={() => setActiveTab('mirror')}
-          >
-            <Icon name="contrast-outline" size={24} color={colors.dark} />
-            <Text style={styles.tabText}>MIRROR</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Rating Section */}
         <View style={styles.ratingSection}>
           <View style={styles.ratingHeader}>
-            <Text style={styles.ratingScore}>{userInfo.rating}</Text>
-            <Text style={styles.ratingName}>{user?.displayName || 'Ben'}</Text>
-            <TouchableOpacity style={styles.rateButton}>
-              <Text style={styles.rateButtonText}>Rate</Text>
-            </TouchableOpacity>
+            <Text style={styles.ratingScore}>{userInfo.rating.toFixed(1)}</Text>
           </View>
           <View style={styles.starsContainer}>
             {[1, 2, 3, 4, 5].map(star => (
@@ -294,44 +428,123 @@ export default function ProfileScreen({ navigation }) {
               />
             ))}
           </View>
-          <Text style={styles.reviewsTitle}>Reviews</Text>
-          
-          {/* Sample Reviews */}
-          <View style={styles.reviewItem}>
-            <Icon name="person-circle" size={40} color={colors.gray} />
-            <View style={styles.reviewContent}>
-              <Text style={styles.reviewText}>Wow wow oww amazing</Text>
+          <Text style={styles.reviewsTitle}>Reviews ({userInfo.reviewCount})</Text>
+          {userInfo.reviewCount === 0 ? (
+            <View style={styles.noReviewsContainer}>
+              <Text style={styles.noReviewsText}>No reviews yet</Text>
             </View>
-          </View>
-          <View style={styles.reviewItem}>
-            <Icon name="person-circle" size={40} color={colors.gray} />
-            <View style={styles.reviewContent}>
-              <Text style={styles.reviewText}>Wow wow oww amazing</Text>
-              <Text style={styles.reviewText}>Wow wow oww amazing Wow wow oww amazing</Text>
-              <Text style={styles.reviewText}>Wow wow oww amazing</Text>
-            </View>
-          </View>
+          ) : (
+            (userInfo.reviews || []).map((review, index) => (
+              <View key={index} style={styles.reviewItem}>
+                <Icon name="person-circle" size={40} color={colors.gray} />
+                <View style={styles.reviewContent}>
+                  <Text style={styles.reviewAuthor}>{review.userName}</Text>
+                  <Text style={styles.reviewText}>{review.text}</Text>
+                  <View style={styles.reviewStars}>
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <Icon 
+                        key={star}
+                        name={star <= review.rating ? 'star' : 'star-outline'}
+                        size={14}
+                        color={colors.highlight}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'forFun' && styles.activeTab]}
+            onPress={() => setActiveTab('forFun')}
+          >
+            <Icon name="happy-outline" size={24} color={colors.dark} />
+            <Text style={styles.tabText}>FOR FUN</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'forSwap' && styles.activeTab]}
+            onPress={() => setActiveTab('forSwap')}
+          >
+            <Icon name="swap-horizontal-outline" size={24} color={colors.dark} />
+            <Text style={styles.tabText}>FOR SWAP</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'mirror' && styles.activeTab]}
+            onPress={() => setActiveTab('mirror')}
+          >
+            <Icon name="accessibility-outline" size={24} color={colors.dark} />
+            <Text style={styles.tabText}>MIRROR</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Posts Grid */}
         <View style={styles.postsContainer}>
-          {userPosts.length === 0 ? (
+          {activeTab === 'forFun' && (
+            userPosts.filter(p => p.postType === 'forFun' || !p.postType).length === 0 ? (
+              <View style={styles.emptyState}>
+                <Icon name="happy-outline" size={64} color={colors.gray} />
+                <Text style={styles.emptyStateText}>No fun posts yet</Text>
+                <Text style={styles.emptyStateSubtext}>Share your style with the world!</Text>
+              </View>
+            ) : (
+              <View style={styles.postsGrid}>
+                {userPosts
+                  .filter(post => post.postType === 'forFun' || !post.postType)
+                  .map(post => (
+                    <TouchableOpacity
+                      key={post.id}
+                      style={styles.postItem}
+                      onPress={() => handlePostPress(post)}
+                    >
+                      <Image source={{ uri: post.url }} style={styles.postImage} />
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            )
+          )}
+
+          {activeTab === 'forSwap' && (
+            userPosts.filter(p => p.postType === 'forSwap').length === 0 ? (
+              <View style={styles.emptyState}>
+                <Icon name="swap-horizontal-outline" size={64} color={colors.gray} />
+                <Text style={styles.emptyStateText}>No swap posts yet</Text>
+                <Text style={styles.emptyStateSubtext}>Post items you want to swap!</Text>
+              </View>
+            ) : (
+              <View style={styles.postsGrid}>
+                {userPosts
+                  .filter(post => post.postType === 'forSwap')
+                  .map(post => (
+                    <TouchableOpacity
+                      key={post.id}
+                      style={styles.postItem}
+                      onPress={() => handlePostPress(post)}
+                    >
+                      <Image source={{ uri: post.url }} style={styles.postImage} />
+                      {/* Swap Status Badge */}
+                      <View style={[
+                        styles.swapStatusBadge,
+                        post.swapStatus === 'swappedOut' && styles.swapStatusBadgeInactive
+                      ]}>
+                        <Text style={styles.swapStatusBadgeText}>
+                          {post.swapStatus === 'available' ? 'Available' : 'Swapped Out'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            )
+          )}
+
+          {activeTab === 'mirror' && (
             <View style={styles.emptyState}>
-              <Icon name="images-outline" size={64} color={colors.gray} />
-              <Text style={styles.emptyStateText}>No posts yet</Text>
-              <Text style={styles.emptyStateSubtext}>Start sharing your wardrobe!</Text>
-            </View>
-          ) : (
-            <View style={styles.postsGrid}>
-              {userPosts.map(post => (
-                <TouchableOpacity
-                  key={post.id}
-                  style={styles.postItem}
-                  onPress={() => handlePostPress(post)}
-                >
-                  <Image source={{ uri: post.url }} style={styles.postImage} />
-                </TouchableOpacity>
-              ))}
+              <Icon name="accessibility-outline" size={64} color={colors.gray} />
+              <Text style={styles.emptyStateText}>Mirror coming soon</Text>
+              <Text style={styles.emptyStateSubtext}>Check your full outfit mirror here!</Text>
             </View>
           )}
         </View>
@@ -389,7 +602,7 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Bottom Navigation */}
       <BottomNavBar navigation={navigation} activeRoute="Profile" />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -406,50 +619,81 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.md,
-    paddingTop: 50,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbdbdb',
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
+  logo: {
     fontFamily: fonts.header,
-    color: colors.dark,
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#9abeaa',
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  headerIcon: {
+    padding: 4,
   },
   profileSection: {
     backgroundColor: '#fff',
-    alignItems: 'center',
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.md,
   },
-  profileImageContainer: {
+  profileTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: spacing.md,
   },
+  profileImageContainer: {
+    marginRight: spacing.lg,
+  },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   profileImagePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  userName: {
-    fontSize: 24,
+  statsRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.dark,
-    marginBottom: spacing.sm,
+  },
+  statLabel: {
+    fontSize: 13,
+    color: colors.gray,
+    marginTop: 2,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: spacing.xs,
+    alignSelf: 'flex-start',
   },
   userBio: {
     fontSize: 14,
     color: colors.dark,
     textAlign: 'left',
     alignSelf: 'flex-start',
-    paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
     lineHeight: 18,
   },
@@ -457,36 +701,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    alignSelf: 'flex-start',
     marginBottom: spacing.md,
   },
   locationText: {
     fontSize: 14,
     color: colors.dark,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    paddingVertical: spacing.md,
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.dark,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: colors.gray,
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: '#e0e0e0',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -524,21 +744,24 @@ const styles = StyleSheet.create({
   },
   discoverCard: {
     width: 120,
-    height: 120,
-    backgroundColor: colors.primary,
+    height: 150,
+    backgroundColor: colors.secondary,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
     marginRight: spacing.sm,
   },
-  discoverEmoji: {
-    fontSize: 40,
-    marginBottom: spacing.sm,
+  discoverImage: {
+    width: '100%',
+    height: 120,
+    resizeMode: 'cover',
   },
-  discoverText: {
-    fontSize: 14,
+  discoverUsername: {
+    fontSize: 12,
     fontWeight: '600',
     color: colors.dark,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+    textAlign: 'center',
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -565,7 +788,7 @@ const styles = StyleSheet.create({
     color: colors.dark,
   },
   ratingSection: {
-    backgroundColor: colors.light,
+    backgroundColor: '#9abeaa',
     padding: spacing.md,
     marginTop: spacing.sm,
   },
@@ -578,7 +801,7 @@ const styles = StyleSheet.create({
   ratingScore: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: colors.dark,
+    color: '#ffd75c',
   },
   ratingName: {
     flex: 1,
@@ -619,15 +842,52 @@ const styles = StyleSheet.create({
   reviewContent: {
     flex: 1,
   },
+  reviewAuthor: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: 4,
+  },
   reviewText: {
     fontSize: 14,
     color: colors.dark,
     marginBottom: 4,
   },
+  reviewStars: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  noReviewsContainer: {
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  noReviewsText: {
+    fontSize: 14,
+    color: colors.gray,
+    fontStyle: 'italic',
+  },
   postsContainer: {
     backgroundColor: '#fff',
     minHeight: 300,
     paddingTop: spacing.md,
+  },
+  postTypeSection: {
+    marginBottom: spacing.lg,
+  },
+  postTypeSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: '#f8f8f8',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  postTypeSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.dark,
   },
   emptyState: {
     alignItems: 'center',
@@ -653,11 +913,29 @@ const styles = StyleSheet.create({
     width: '33.33%',
     aspectRatio: 1,
     padding: 2,
+    position: 'relative',
   },
   postImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  swapStatusBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: '#9abeaa',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  swapStatusBadgeInactive: {
+    backgroundColor: colors.gray,
+  },
+  swapStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   addButton: {
     position: 'absolute',

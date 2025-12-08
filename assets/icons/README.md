@@ -15,6 +15,9 @@ notification --> <ion-icon name="notifications-outline"></ion-icon>
 google --> <ion-icon name="logo-google"></ion-icon>
 facebook --> <ion-icon name="logo-facebook"></ion-icon>
 apple --> <ion-icon name="logo-apple"></ion-icon>
+mirror --> <ion-icon name="accessibility-outline"></ion-icon>
+history --> <ion-icon name="time-outline"></ion-icon>
+star --> <ion-icon name="star-outline"></ion-icon>
 
 import { colors, fonts, spacing } from '../../lib/theme';
 

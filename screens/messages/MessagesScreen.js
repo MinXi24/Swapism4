@@ -96,7 +96,7 @@ export default function MessagesScreen({ navigation }) {
         />
       </View>
 
-      {/* Bottom Navigation Bar */}
+      {/* Bottom Navigation */}
       <BottomNavBar navigation={navigation} activeRoute="Messages" />
     </SafeAreaView>
   );
@@ -141,8 +141,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
   },
-  searchBar: {
-    marginVertical: 0,
+   searchBar: {
+    marginHorizontal: spacing.md,
+    marginVertical: spacing.sm,
   },
   messagesContainer: {
     flex: 1,
@@ -151,7 +152,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
-    paddingBottom: 100,
   },
   messageItem: {
     flexDirection: 'row',
@@ -188,5 +188,29 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sub,
     fontSize: 14,
     color: colors.gray,
+  },
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.primary,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  navItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
   },
 });
