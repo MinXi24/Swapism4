@@ -3,28 +3,27 @@ import { getAuth } from 'firebase/auth';
 import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function ActivityScreen({ navigation }) {
-  const [activities, setActivities] = useState([]);
+  const [likesOnMyPosts, setLikesOnMyPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('liked'); // 'liked' or 'viewed'
 
   const auth = getAuth();
   const db = getFirestore();
   const user = auth.currentUser;
 
-  const loadActivities = async () => {
+  const loadLikesOnMyPosts = async () => {
     try {
       const uid = user?.uid;
       if (!uid) {
@@ -32,28 +31,58 @@ export default function ActivityScreen({ navigation }) {
         return;
       }
 
-      console.log('Loading activities...');
-      const q = query(
-        collection(db, 'activity'),
-        where('userId', '==', uid),
-        where('type', '==', activeTab)
-      );
-      const querySnapshot = await getDocs(q);
-      const activitiesData = querySnapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        .sort((a, b) => {
-          const dateA = a.timestamp?.toDate?.() || new Date(0);
-          const dateB = b.timestamp?.toDate?.() || new Date(0);
-          return dateB - dateA;
-        });
+      console.log('Loading likes on my posts...');
       
-      console.log('Loaded activities:', activitiesData.length);
-      setActivities(activitiesData);
+      // First, get all user's posts
+      const postsQuery = query(
+        collection(db, 'wardrobe-plug-fyp/user/images'),
+        where('ownerUid', '==', uid)
+      );
+      const postsSnapshot = await getDocs(postsQuery);
+      const userPostIds = postsSnapshot.docs.map(doc => doc.id);
+      
+      if (userPostIds.length === 0) {
+        setLikesOnMyPosts([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get all likes on these posts
+      const likesQuery = query(
+        collection(db, 'likes'),
+        where('postId', 'in', userPostIds.slice(0, 10)) // Firestore limit
+      );
+      const likesSnapshot = await getDocs(likesQuery);
+      
+      // Enrich likes with post data
+      const likesData = await Promise.all(
+        likesSnapshot.docs.map(async (likeDoc) => {
+          const likeData = likeDoc.data();
+          const postDoc = postsSnapshot.docs.find(doc => doc.id === likeData.postId);
+          const postData = postDoc ? postDoc.data() : null;
+          
+          return {
+            id: likeDoc.id,
+            ...likeData,
+            post: postData ? {
+              id: postDoc.id,
+              ...postData
+            } : null,
+          };
+        })
+      );
+
+      // Sort by created date
+      likesData.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
+      
+      console.log('Loaded likes:', likesData.length);
+      setLikesOnMyPosts(likesData);
     } catch (error) {
-      console.error('Error loading activities:', error);
+      console.error('Error loading likes:', error);
     } finally {
       setLoading(false);
     }
@@ -61,14 +90,14 @@ export default function ActivityScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      loadActivities();
+      loadLikesOnMyPosts();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab])
+    }, [])
   );
 
-  const handlePostPress = (activity) => {
-    if (activity.post) {
-      navigation.navigate('PostDetails', { post: activity.post });
+  const handlePostPress = (post) => {
+    if (post) {
+      navigation.navigate('PostDetails', { post });
     }
   };
 
@@ -95,38 +124,8 @@ export default function ActivityScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={24} color={colors.dark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Activity</Text>
+        <Text style={styles.headerTitle}>Likes on My Posts</Text>
         <View style={{ width: 24 }} />
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'liked' && styles.activeTab]}
-          onPress={() => setActiveTab('liked')}
-        >
-          <Icon 
-            name={activeTab === 'liked' ? 'heart' : 'heart-outline'} 
-            size={20} 
-            color={activeTab === 'liked' ? colors.highlight : colors.dark} 
-          />
-          <Text style={[styles.tabText, activeTab === 'liked' && styles.activeTabText]}>
-            Liked Posts
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'viewed' && styles.activeTab]}
-          onPress={() => setActiveTab('viewed')}
-        >
-          <Icon 
-            name={activeTab === 'viewed' ? 'eye' : 'eye-outline'} 
-            size={20} 
-            color={activeTab === 'viewed' ? colors.highlight : colors.dark} 
-          />
-          <Text style={[styles.tabText, activeTab === 'viewed' && styles.activeTabText]}>
-            Recently Viewed
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -135,54 +134,41 @@ export default function ActivityScreen({ navigation }) {
         </View>
       ) : (
         <ScrollView style={styles.content}>
-          {activities.length === 0 ? (
+          {likesOnMyPosts.length === 0 ? (
             <View style={styles.emptyState}>
-              <Icon 
-                name={activeTab === 'liked' ? 'heart-outline' : 'eye-outline'} 
-                size={64} 
-                color={colors.gray} 
-              />
-              <Text style={styles.emptyText}>
-                {activeTab === 'liked' 
-                  ? 'No liked posts yet' 
-                  : 'No recently viewed posts'}
-              </Text>
+              <Icon name="heart-outline" size={64} color={colors.gray} />
+              <Text style={styles.emptyText}>No likes yet</Text>
               <Text style={styles.emptySubtext}>
-                {activeTab === 'liked'
-                  ? 'Posts you like will appear here'
-                  : 'Posts you view will appear here'}
+                When someone likes your posts, you&apos;ll see them here
               </Text>
             </View>
           ) : (
-            activities.map(activity => (
+            likesOnMyPosts.map(like => (
               <TouchableOpacity 
-                key={activity.id} 
+                key={like.id} 
                 style={styles.activityItem}
-                onPress={() => handlePostPress(activity)}
+                onPress={() => handlePostPress(like.post)}
               >
-                {activity.post?.url && (
+                {like.post?.url && (
                   <Image 
-                    source={{ uri: activity.post.url }} 
+                    source={{ uri: like.post.url }} 
                     style={styles.activityImage} 
                   />
                 )}
                 <View style={styles.activityInfo}>
-                  <Text style={styles.activityTitle} numberOfLines={2}>
-                    {activity.post?.title || 'Post'}
+                  <Text style={styles.activityTitle}>
+                    <Text style={styles.userName}>{like.userName || 'Someone'}</Text>
+                    {' liked your post'}
                   </Text>
-                  {activity.post?.description && (
+                  {like.post?.title && (
                     <Text style={styles.activityDescription} numberOfLines={1}>
-                      {activity.post.description}
+                      {like.post.title}
                     </Text>
                   )}
                   <View style={styles.activityMeta}>
-                    <Icon 
-                      name={activeTab === 'liked' ? 'heart' : 'eye'} 
-                      size={14} 
-                      color={activeTab === 'liked' ? '#ff4444' : colors.gray} 
-                    />
+                    <Icon name="heart" size={14} color="#ff4444" />
                     <Text style={styles.activityTime}>
-                      {formatDate(activity.timestamp)}
+                      {formatDate(like.createdAt)}
                     </Text>
                   </View>
                 </View>
@@ -293,6 +279,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.dark,
     marginBottom: 4,
+  },
+  userName: {
+    fontWeight: '700',
+    color: colors.dark,
   },
   activityDescription: {
     fontSize: 14,

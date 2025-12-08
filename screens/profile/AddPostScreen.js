@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, getFirestore } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getFirestore } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -26,7 +26,7 @@ export default function AddPostScreen({ navigation }) {
   const [description, setDescription] = useState('');
   const [taggedUsers, setTaggedUsers] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [postType, setPostType] = useState('forFun'); // 'forFun' or 'forSwap'
+  const [postType, setPostType] = useState('forFun'); // 'forFun', 'forSwap', or 'both'
 
   const db = getFirestore();
   const auth = getAuth();
@@ -140,20 +140,60 @@ export default function AddPostScreen({ navigation }) {
       console.log('Image uploaded, URL:', imageUrl);
 
       const uid = auth.currentUser.uid;
-      const userName = auth.currentUser.displayName || auth.currentUser.email;
+      
+      // Get username from Firestore
+      let userName = auth.currentUser.displayName || auth.currentUser.email;
+      try {
+        const userDocRef = doc(db, 'users', uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          userName = userDoc.data().username || userName;
+        }
+      } catch (err) {
+        console.error('Error fetching username:', err);
+      }
 
       console.log('Saving to Firestore...');
-      await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
-        ownerUid: uid,
-        userName: userName,
-        url: imageUrl,
-        title: title.trim(),
-        description: description.trim(),
-        taggedUsers: taggedUsers,
-        postType: postType, // 'forFun' or 'forSwap'
-        swapStatus: postType === 'forSwap' ? 'available' : null, // Default to 'available' for swap posts
-        uploadedAt: new Date(),
-      });
+      
+      if (postType === 'both') {
+        // Create two posts - one for fun and one for swap
+        await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
+          ownerUid: uid,
+          userName: userName,
+          url: imageUrl,
+          title: title.trim(),
+          description: description.trim(),
+          taggedUsers: taggedUsers,
+          postType: 'forFun',
+          swapStatus: null,
+          uploadedAt: new Date(),
+        });
+        
+        await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
+          ownerUid: uid,
+          userName: userName,
+          url: imageUrl,
+          title: title.trim(),
+          description: description.trim(),
+          taggedUsers: taggedUsers,
+          postType: 'forSwap',
+          swapStatus: 'available',
+          uploadedAt: new Date(),
+        });
+      } else {
+        // Create single post
+        await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
+          ownerUid: uid,
+          userName: userName,
+          url: imageUrl,
+          title: title.trim(),
+          description: description.trim(),
+          taggedUsers: taggedUsers,
+          postType: postType, // 'forFun' or 'forSwap'
+          swapStatus: postType === 'forSwap' ? 'available' : null,
+          uploadedAt: new Date(),
+        });
+      }
 
       console.log('Post saved successfully!');
       
@@ -242,7 +282,7 @@ export default function AddPostScreen({ navigation }) {
               >
                 <Icon 
                   name={postType === 'forFun' ? 'happy' : 'happy-outline'} 
-                  size={24} 
+                  size={20} 
                   color={postType === 'forFun' ? '#fff' : colors.dark} 
                 />
                 <Text style={[
@@ -262,7 +302,7 @@ export default function AddPostScreen({ navigation }) {
               >
                 <Icon 
                   name={postType === 'forSwap' ? 'swap-horizontal' : 'swap-horizontal-outline'} 
-                  size={24} 
+                  size={20} 
                   color={postType === 'forSwap' ? '#fff' : colors.dark} 
                 />
                 <Text style={[
@@ -270,6 +310,26 @@ export default function AddPostScreen({ navigation }) {
                   postType === 'forSwap' && styles.postTypeButtonTextActive
                 ]}>
                   For Swap
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.postTypeButton,
+                  postType === 'both' && styles.postTypeButtonActive
+                ]}
+                onPress={() => setPostType('both')}
+              >
+                <Icon 
+                  name={postType === 'both' ? 'apps' : 'apps-outline'} 
+                  size={20} 
+                  color={postType === 'both' ? '#fff' : colors.dark} 
+                />
+                <Text style={[
+                  styles.postTypeButtonText,
+                  postType === 'both' && styles.postTypeButtonTextActive
+                ]}>
+                  Both
                 </Text>
               </TouchableOpacity>
             </View>

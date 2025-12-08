@@ -49,7 +49,7 @@ export default function BottomNavBar({ navigation, activeRoute }) {
         onPress={() => navigateTo('Favorites')}
       >
         <Icon 
-          name={activeRoute === 'Favorites' ? 'heart' : 'heart-outline'} 
+          name={activeRoute === 'Favorites' ? 'star' : 'star-outline'} 
           size={24} 
           color={activeRoute === 'Favorites' ? colors.highlight : colors.dark} 
         />
