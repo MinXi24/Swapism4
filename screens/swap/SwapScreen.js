@@ -175,14 +175,22 @@ export default function SwapScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={colors.accent} barStyle="dark-content" />
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.logo}>Swap</Text>
-        <TouchableOpacity onPress={handleHistory}>
-          <Icon name="time-outline" size={24} color={colors.dark} />
-        </TouchableOpacity>
+        <Text style={styles.logo}>Swapism</Text>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity style={styles.headerIcon} onPress={handleHistory}>
+            <Icon name="time-outline" size={28} color={colors.dark} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Icon name="heart-outline" size={28} color={colors.dark} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Icon name="paper-plane-outline" size={28} color={colors.dark} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search Bar */}
@@ -257,13 +265,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
-    backgroundColor: colors.accent,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbdbdb',
   },
   logo: {
     fontFamily: fonts.header,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 28,
+    fontWeight: '700',
     color: colors.dark,
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  headerIcon: {
+    padding: 4,
   },
   searchBar: {
     marginHorizontal: spacing.md,

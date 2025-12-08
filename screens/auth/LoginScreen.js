@@ -82,9 +82,10 @@ export default function LoginScreen({ navigation }) {
 
         {/* Logo and Branding */}
         <View style={styles.logoContainer}>
-          <View style={styles.logoBackground}>
-            <Text style={styles.logoText}>SWAPISM</Text>
-          </View>
+          <Image 
+            source={require('../../assets/images/logo.png')} 
+            style={styles.logo}
+          />
         </View>
 
         {/* Title */}
@@ -181,15 +182,16 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.sm,
   },
   backButton: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: 0,
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: 0,
   },
   logoBackground: {
     backgroundColor: colors.accent,
@@ -216,7 +218,11 @@ const styles = StyleSheet.create({
   },
   illustrationContainer: {
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 0,
+  },
+  logo: {
+    width: 250,
+    height: 150,
   },
   illustration: {
     width: 280,
@@ -234,11 +240,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   linksContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.lg,
     paddingHorizontal: spacing.sm,
+    gap: 4,
   },
   forgotPassword: {
     fontFamily: fonts.sub,
