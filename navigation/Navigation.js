@@ -1,5 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AdminHomeScreen from '../screens/admin/AdminHomeScreen';
+import ManageAccountScreen from '../screens/admin/manageAccountScreen';
+import ManageCommentsScreen from '../screens/admin/manageCommentsScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
@@ -18,7 +20,7 @@ const Stack = createNativeStackNavigator();
 export default function Navigation() {
   return (
     <Stack.Navigator
-      initialRouteName="Welcome"
+      initialRouteName="AdminHome"
       screenOptions={{
         headerShown: false,
       }}
@@ -35,6 +37,8 @@ export default function Navigation() {
       <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
       <Stack.Screen name="Activity" component={ActivityScreen} />
       <Stack.Screen name="AdminHome" component={AdminHomeScreen} />
+      <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
+      <Stack.Screen name="ManageComments" component={ManageCommentsScreen} />
     </Stack.Navigator>
   );
 }

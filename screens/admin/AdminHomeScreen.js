@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Dimensions,
   Image,
   SafeAreaView,
   ScrollView,
@@ -16,9 +15,7 @@ import {
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
 
-const { width } = Dimensions.get('window');
-
-// --- COLORS FROM SCREENSHOT ---
+// --- COLORS ---
 const HEADER_BG = '#98C1A9'; 
 const SEARCH_BG = '#FAF9F4'; 
 
@@ -27,9 +24,10 @@ const reportsData = [
   { 
     id: '1', 
     name: 'Andy', 
-    detail: 'Rating: 1/5 (Sus Account)', 
+    detail: '(Sus Account)', 
     type: 'ACCOUNT_FLAG', 
-    priority: 'high'
+    priority: 'high',
+    rating: 1
   },
   { 
     id: '2', 
@@ -58,14 +56,54 @@ const statsData = [
 
 export default function AdminHomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Active tab defaults to 'home' here
   const [activeTab, setActiveTab] = useState('home');
 
+  // --- NAVIGATION LOGIC ---
   const handleViewItem = (item) => {
-    console.log("View Item:", item.id);
+    if (item.name === 'Andy') {
+        navigation.navigate('ManageAccount');
+    } else if (item.name === 'Zen') {
+        navigation.navigate('ManageComments'); 
+    } else {
+        console.log("View Item:", item.id);
+    }
   };
 
+  // --- NAVBAR HANDLER ---
   const handleNavigation = (tab) => {
     setActiveTab(tab);
+    switch(tab) {
+      case 'home':
+        // Already on Admin Home
+        break;
+      case 'profiles':
+        // Navigate to the Manage Profiles screen
+        navigation.navigate('ManageAccount');
+        break;
+      case 'comments':
+        // Navigate to the Manage Comments screen
+        navigation.navigate('ManageComments');
+        break;
+    }
+  };
+
+  // --- HELPER: RENDER STARS ---
+  const renderStars = (count) => {
+    return (
+        <View style={styles.starRow}>
+            {[1, 2, 3, 4, 5].map((star, index) => (
+                <Icon 
+                    key={index} 
+                    name={index < count ? "star" : "star-outline"} 
+                    size={14} 
+                    color="#FFD700" 
+                    style={{ marginRight: 2 }}
+                />
+            ))}
+        </View>
+    );
   };
 
   return (
@@ -74,9 +112,7 @@ export default function AdminHomeScreen({ navigation }) {
       
       {/* --- HEADER --- */}
       <View style={styles.headerContainer}>
-         {/* Top Row using Flex layout for precise alignment */}
          <View style={styles.headerTopRow}>
-            {/* Left Side: Logo */}
             <View style={styles.headerLeft}>
                 <Image 
                     source={require('../../assets/images/swapism logo.png')} 
@@ -84,11 +120,7 @@ export default function AdminHomeScreen({ navigation }) {
                     resizeMode="contain"
                 />
             </View>
-            
-            {/* Center: Title */}
             <Text style={styles.headerTitle}>Welcome Back</Text>
-            
-            {/* Right Side: Menu */}
             <View style={styles.headerRight}>
                 <TouchableOpacity>
                     <Icon name="menu-outline" size={30} color="#fff" />
@@ -96,7 +128,6 @@ export default function AdminHomeScreen({ navigation }) {
             </View>
          </View>
 
-         {/* Search Bar */}
          <View style={styles.searchBarContainer}>
              <Icon name="search-outline" size={20} color="#999" style={styles.searchIcon}/>
              <TextInput
@@ -126,7 +157,7 @@ export default function AdminHomeScreen({ navigation }) {
           />
         </View>
 
-        {/* --- DASHBOARD STATS GRID --- */}
+        {/* --- STATS GRID --- */}
         <View style={styles.statsGrid}>
             {statsData.map((stat, index) => (
                 <View key={index} style={styles.statCard}>
@@ -160,7 +191,16 @@ export default function AdminHomeScreen({ navigation }) {
                     </View>
                     <View style={styles.textContainer}>
                         <Text style={styles.nameText}>{item.name}</Text>
-                        <Text style={styles.detailText}>{item.detail}</Text>
+                        
+                        {item.type === 'ACCOUNT_FLAG' ? (
+                            <View style={styles.ratingDetailContainer}>
+                                {renderStars(item.rating)} 
+                                <Text style={styles.detailText}>{item.detail}</Text>
+                            </View>
+                        ) : (
+                            <Text style={styles.detailText}>{item.detail}</Text>
+                        )}
+
                     </View>
                 </View>
                 <TouchableOpacity 
@@ -206,22 +246,54 @@ export default function AdminHomeScreen({ navigation }) {
 
       </ScrollView>
 
-      {/* --- BOTTOM NAV --- */}
+      {/* --- REUSABLE NAVBAR COMPONENT (Updated Tabs) --- */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('home')}>
-          <Icon name={activeTab === 'home' ? 'home' : 'home-outline'} size={24} color={activeTab === 'home' ? colors.accent : colors.dark} />
-          <Text style={[styles.navText, activeTab === 'home' && styles.navTextActive]}>Home</Text>
+        
+        {/* Tab 1: Admin Home */}
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('home')}
+        >
+          <Icon 
+            name={activeTab === 'home' ? 'home' : 'home-outline'} 
+            size={24} 
+            color={activeTab === 'home' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'home' && styles.navTextActive]}>
+            Admin Home
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('analytics')}>
-          <Icon name={activeTab === 'analytics' ? 'bar-chart' : 'bar-chart-outline'} size={24} color={activeTab === 'analytics' ? colors.accent : colors.dark} />
-          <Text style={[styles.navText, activeTab === 'analytics' && styles.navTextActive]}>Data</Text>
+        {/* Tab 2: Manage Profiles */}
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('profiles')}
+        >
+          <Icon 
+            name={activeTab === 'profiles' ? 'people' : 'people-outline'} 
+            size={24} 
+            color={activeTab === 'profiles' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'profiles' && styles.navTextActive]}>
+            Manage Profiles
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('settings')}>
-          <Icon name={activeTab === 'settings' ? 'settings' : 'settings-outline'} size={24} color={activeTab === 'settings' ? colors.accent : colors.dark} />
-          <Text style={[styles.navText, activeTab === 'settings' && styles.navTextActive]}>Settings</Text>
+        {/* Tab 3: Manage Comments */}
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('comments')}
+        >
+          <Icon 
+            name={activeTab === 'comments' ? 'chatbubbles' : 'chatbubbles-outline'} 
+            size={24} 
+            color={activeTab === 'comments' ? colors.accent : colors.dark} 
+          />
+          <Text style={[styles.navText, activeTab === 'comments' && styles.navTextActive]}>
+            Manage Comments
+          </Text>
         </TouchableOpacity>
+
       </View>
 
     </SafeAreaView>
@@ -234,7 +306,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   
-  // --- HEADER ---
+  // --- HEADER & SEARCH ---
   headerContainer: {
     backgroundColor: HEADER_BG,
     paddingHorizontal: spacing.md,
@@ -254,24 +326,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 15,
   },
-  // Flex containers to ensure centered title regardless of logo size
-  headerLeft: {
-      flex: 1,
-      alignItems: 'flex-start',
-  },
-  headerRight: {
-      flex: 1,
-      alignItems: 'flex-end',
-  },
-  logoImage: {
-    // Much larger dimensions
-    width: 160, 
-    height: 70, 
-    marginLeft: -10, // Offset to align the visual part of the logo to the edge
-  },
+  headerLeft: { flex: 1, alignItems: 'flex-start' },
+  headerRight: { flex: 1, alignItems: 'flex-end' },
+  logoImage: { width: 160, height: 70, marginLeft: -10 },
   headerTitle: {
-    flex: 2, // Give title more space in the center
-    fontFamily: 'serif', // Matching the reference image font style
+    flex: 2, 
+    fontFamily: 'serif', 
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
@@ -285,15 +345,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     height: 40,
   },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: colors.dark,
-    height: '100%',
-  },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 16, color: colors.dark, height: '100%' },
 
   // --- HERO ---
   heroContainer: {
@@ -307,28 +360,12 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 12,
   },
-  heroTextContainer: {
-    flex: 1,
-  },
-  greetingText: {
-    fontFamily: fonts.header,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.dark,
-  },
-  subGreetingText: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.dark,
-    opacity: 0.8,
-    marginTop: 4,
-  },
-  heroImage: {
-    width: 80,
-    height: 60, 
-  },
+  heroTextContainer: { flex: 1 },
+  greetingText: { fontFamily: fonts.header, fontSize: 18, fontWeight: 'bold', color: colors.dark },
+  subGreetingText: { fontFamily: fonts.body, fontSize: 14, color: colors.dark, opacity: 0.8, marginTop: 4 },
+  heroImage: { width: 80, height: 60 },
 
-  // --- STATS GRID ---
+  // --- STATS ---
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -353,23 +390,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 10,
   },
-  statValue: {
-    fontFamily: fonts.header,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.dark,
-  },
-  statLabel: {
-    fontFamily: fonts.body,
-    fontSize: 11,
-    color: colors.dark,
-    opacity: 0.7,
-  },
+  statValue: { fontFamily: fonts.header, fontSize: 18, fontWeight: 'bold', color: colors.dark },
+  statLabel: { fontFamily: fonts.body, fontSize: 11, color: colors.dark, opacity: 0.7 },
 
   // --- SECTIONS ---
-  scrollContent: {
-    paddingBottom: 100,
-  },
+  scrollContent: { paddingBottom: 100 },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -378,12 +403,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     marginTop: spacing.sm,
   },
-  sectionTitle: {
-      fontFamily: fonts.header,
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: colors.dark,
-  },
+  sectionTitle: { fontFamily: fonts.header, fontSize: 16, fontWeight: 'bold', color: colors.dark },
   viewAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -392,18 +412,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
   },
-  viewAllText: {
-    fontFamily: fonts.header,
-    fontSize: 12,
-    color: colors.dark,
-    marginRight: 4,
-  },
+  viewAllText: { fontFamily: fonts.header, fontSize: 12, color: colors.dark, marginRight: 4 },
 
-  // --- ADMIN CARDS ---
-  cardListContainer: {
-      paddingHorizontal: spacing.md,
-      marginBottom: spacing.sm,
-  },
+  // --- CARDS ---
+  cardListContainer: { paddingHorizontal: spacing.md, marginBottom: spacing.sm },
   adminCard: {
       backgroundColor: colors.secondary, 
       borderRadius: 12,
@@ -413,18 +425,8 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       marginBottom: spacing.sm,
   },
-  cardLeft: {
-      flexDirection: 'row',
-      flex: 1,
-      alignItems: 'center',
-      marginRight: 10,
-  },
-  statusLine: {
-      width: 4,
-      height: 30,
-      borderRadius: 2,
-      marginRight: 12,
-  },
+  cardLeft: { flexDirection: 'row', flex: 1, alignItems: 'center', marginRight: 10 },
+  statusLine: { width: 4, height: 30, borderRadius: 2, marginRight: 12 },
   avatar: {
       width: 40,
       height: 40,
@@ -434,42 +436,23 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       marginRight: 12,
   },
-  avatarImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  textContainer: {
-      flex: 1,
-  },
-  nameText: {
-      fontFamily: fonts.body,
-      fontWeight: 'bold',
-      fontSize: 14,
-      color: colors.dark,
-      marginBottom: 2,
-  },
-  detailText: {
-      fontFamily: fonts.body,
-      fontSize: 12,
-      color: colors.dark,
-      opacity: 0.7,
-  },
+  avatarImage: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+  textContainer: { flex: 1 },
+  nameText: { fontFamily: fonts.body, fontWeight: 'bold', fontSize: 14, color: colors.dark, marginBottom: 2 },
+  
+  ratingDetailContainer: { flexDirection: 'row', alignItems: 'center' },
+  starRow: { flexDirection: 'row', marginRight: 6 },
+  detailText: { fontFamily: fonts.body, fontSize: 12, color: colors.dark, opacity: 0.7 },
+  
   actionButton: {
       backgroundColor: colors.primary,
       paddingVertical: 6,
       paddingHorizontal: 16,
       borderRadius: 20,
   },
-  actionButtonText: {
-      fontFamily: fonts.body,
-      fontSize: 12,
-      fontWeight: 'bold',
-      color: colors.dark,
-  },
+  actionButtonText: { fontFamily: fonts.body, fontSize: 12, fontWeight: 'bold', color: colors.dark },
 
-  // --- BOTTOM NAV ---
+  // --- NAVBAR ---
   bottomNav: {
     position: 'absolute',
     bottom: 0,
