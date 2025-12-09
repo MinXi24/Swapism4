@@ -1,22 +1,33 @@
-// App.js - Copy this to start
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import LoginScreen from './screens/auth/LoginScreen';
-import SignupScreen from './screens/auth/SignupScreen';
-import HomeScreen from './screens/home/HomeScreen';
-// ... import other member screens
-
-const Stack = createNativeStackNavigator();
+// App.js
+import * as Font from 'expo-font';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import Navigation from './navigation/Navigation';
 
 export default function App() {
+  const [fontsLoaded, setFontsLoaded] = useState(false);
+
+  useEffect(() => {
+    async function loadFonts() {
+      await Font.loadAsync({
+        'Georgia': require('./assets/fonts/Georgia-Bold.ttf'),
+        'TimesNewRoman': require('./assets/fonts/TimesNewRoman-Regular.ttf'),
+      });
+      setFontsLoaded(true);
+    }
+
+    loadFonts();
+  }, []);
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#9abeaa" />
+      </View>
+    );
+  }
+
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Signup" component={SignupScreen} />
-        {/* Add other screens here */}
-      </Stack.Navigator>
-    </NavigationContainer>
+      <Navigation />
   );
 }
