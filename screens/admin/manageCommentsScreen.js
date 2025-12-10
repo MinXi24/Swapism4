@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,18 +12,18 @@ import {
 } from 'react-native';
 
 // --- IMPORTS ---
-import Icon from '../../assets/icons/icons'; // Ensure this path matches your project
+import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
 
-// --- COLORS ---
-const HEADER_BG = '#98C1A9';
-const FLAG_BG = '#FFE59E'; // Yellow highlight for flagged comment
+// --- THEME COLORS ---
+const THEME_GREEN = '#9abeaa';
+const THEME_CREAM = '#f5f3e4';
+const ACTIVE_YELLOW = '#FDD835'; 
+const FLAG_BG = '#FFF9C4'; // Softer yellow for flagged background
+const ALERT_RED = '#FF6B6B';
 
 export default function ManageCommentsScreen({ navigation }) {
-  // State to track if the bad comment exists
   const [showFlaggedComment, setShowFlaggedComment] = useState(true);
-  
-  // --- NAVIGATION STATE ---
   const [activeTab, setActiveTab] = useState('comments');
 
   const handleDeleteComment = () => {
@@ -49,53 +49,43 @@ export default function ManageCommentsScreen({ navigation }) {
   const handleNavigation = (tab) => {
     setActiveTab(tab);
     switch(tab) {
-      case 'home':
-        // Navigate back to Admin Home
-        navigation.navigate('AdminHome'); // Ensure this matches your Route Name in App.js
-        break;
-      case 'profiles':
-        // Navigate to Manage Profiles
-        navigation.navigate('ManageAccount');
-        break;
-      case 'comments':
-        // Already here
-        break;
+      case 'home': navigation.navigate('AdminHome'); break;
+      case 'profiles': navigation.navigate('ManageAccount'); break;
+      case 'comments': break; // Already here
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={HEADER_BG} barStyle="dark-content" />
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
 
       {/* --- HEADER --- */}
-      <View style={styles.headerContainer}>
-        {/* Back Button */}
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-           <Icon name="chevron-back-outline" size={28} color={colors.dark} />
-        </TouchableOpacity>
-
-        {/* Logo */}
-        <Image 
-            source={require('../../assets/images/swapism logo.png')} 
-            style={styles.headerLogo}
-            resizeMode="contain"
-        />
-        
-        {/* Placeholder for right side balance */}
-        <View style={styles.backButton} />
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+                <Icon name="arrow-back" size={24} color={colors.dark} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Manage Comments</Text>
+        </View>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Icon name="ellipsis-horizontal" size={24} color={colors.dark} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* --- POST HEADER (USER) --- */}
+        {/* --- POST HEADER --- */}
         <View style={styles.userHeader}>
             <View style={styles.avatar}>
-                <Image 
-                    source={{ uri: 'https://via.placeholder.com/40' }} // Placeholder for Ben's avatar
-                    style={styles.avatarImage} 
-                />
+                {/* Placeholder for Ben's avatar */}
+                <Icon name="person" size={20} color="#fff" />
             </View>
             <Text style={styles.headerUsername}>Ben</Text>
+            <TouchableOpacity style={{ marginLeft: 'auto' }}>
+                <Icon name="ellipsis-horizontal" size={20} color={colors.dark} />
+            </TouchableOpacity>
         </View>
 
         {/* --- POST IMAGE --- */}
@@ -105,11 +95,11 @@ export default function ManageCommentsScreen({ navigation }) {
             resizeMode="cover"
         />
 
-        {/* --- SWAP BANNER --- */}
-        <TouchableOpacity style={styles.swapBanner}>
+        {/* --- SWAP BANNER (Styled) --- */}
+        <View style={styles.swapBanner}>
             <Text style={styles.swapBannerText}>Swap NOW!</Text>
-            <Icon name="chevron-forward-outline" size={20} color={colors.dark} />
-        </TouchableOpacity>
+            <Icon name="chevron-forward" size={18} color={colors.dark} />
+        </View>
 
         {/* --- ENGAGEMENT BAR --- */}
         <View style={styles.engagementBar}>
@@ -121,128 +111,108 @@ export default function ManageCommentsScreen({ navigation }) {
                 <Text style={styles.engagementCount}>100</Text>
             </View>
             
-            {/* Post Delete Icon (Different from comment delete) */}
             <TouchableOpacity>
-                <Icon name="trash-outline" size={24} color="#98C1A9" />
+                <Icon name="bookmark-outline" size={22} color={colors.dark} />
             </TouchableOpacity>
         </View>
 
         {/* --- CAPTION --- */}
         <View style={styles.captionContainer}>
             <Text style={styles.captionText}>
-                <Text style={styles.boldUsername}>fashionlogy </Text>
+                <Text style={styles.boldUsername}>Ben </Text>
                 Rayban sunglasses! Love da heat
             </Text>
             <Text style={styles.hashtags}>#love it #fllw #ootd</Text>
+            <Text style={styles.dateText}>2 hours ago</Text>
         </View>
+
+        {/* --- SEPARATOR --- */}
+        <View style={styles.separator} />
 
         {/* --- COMMENTS LIST --- */}
         <View style={styles.commentsList}>
+            <Text style={styles.sectionTitle}>Comments</Text>
             
-            {/* Comment 1 */}
-            <View style={styles.commentItem}>
-                <Text style={styles.commentText}>
-                    <Text style={styles.boldUsername}>xixihaha{'\n'}</Text>
-                    Nice! I love the it is soo cutee
-                </Text>
-                <Text style={styles.replyText}>reply</Text>
-            </View>
-
-            {/* Comment 2 */}
-            <View style={styles.commentItem}>
-                <Text style={styles.commentText}>
-                    <Text style={styles.boldUsername}>heheheh{'\n'}</Text>
-                    WOw i rate it 10/10
-                </Text>
-                <Text style={styles.replyText}>reply</Text>
-            </View>
-
-            {/* Comment 3 */}
-            <View style={styles.commentItem}>
-                <Text style={styles.commentText}>
-                    <Text style={styles.boldUsername}>1000000{'\n'}</Text>
-                    Swap?
-                </Text>
-                <Text style={styles.replyText}>reply</Text>
-            </View>
-
-            {/* Comment 4 */}
-            <View style={styles.commentItem}>
-                <Text style={styles.commentText}>
-                    <Text style={styles.boldUsername}>Author{'\n'}</Text>
-                    Pm :)
-                </Text>
-                <Text style={styles.replyText}>reply</Text>
-            </View>
-
-            {/* --- FLAGGED COMMENT (Conditional Render) --- */}
+            {/* --- FLAGGED COMMENT (Highlighted) --- */}
             {showFlaggedComment && (
                 <View style={styles.flaggedCommentContainer}>
-                    <View style={styles.flaggedContent}>
-                        <Text style={styles.commentText}>
-                            <Text style={styles.boldUsername}>Zen{'\n'}</Text>
-                            <Text style={styles.flaggedText}>ur fit is shit</Text>
-                        </Text>
-                        <Text style={styles.replyText}>reply</Text>
+                    <View style={styles.flaggedHeader}>
+                        <Icon name="alert-circle" size={16} color={ALERT_RED} />
+                        <Text style={styles.flaggedLabel}>Reported Content</Text>
                     </View>
-                    <TouchableOpacity onPress={handleDeleteComment}>
-                        <Icon name="trash-outline" size={24} color={colors.dark} />
-                    </TouchableOpacity>
+                    
+                    <View style={styles.commentContentRow}>
+                        <View style={styles.commentAvatar}>
+                             <Icon name="person" size={14} color="#fff" />
+                        </View>
+                        <View style={styles.commentBubble}>
+                            <Text style={styles.commentText}>
+                                <Text style={styles.boldUsername}>Zen</Text>
+                                {'\n'}
+                                <Text style={styles.flaggedText}>ur fit is shit</Text>
+                            </Text>
+                            <Text style={styles.replyText}>reply • 10m</Text>
+                        </View>
+                        
+                        {/* Delete Action */}
+                        <TouchableOpacity 
+                            style={styles.deleteButton} 
+                            onPress={handleDeleteComment}
+                        >
+                            <Icon name="trash-outline" size={20} color={ALERT_RED} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             )}
+
+            {/* Standard Comments */}
+            <View style={styles.commentItem}>
+                <View style={styles.commentAvatar}><Icon name="person" size={14} color="#fff" /></View>
+                <View>
+                    <Text style={styles.commentText}>
+                        <Text style={styles.boldUsername}>xixihaha</Text> Nice! I love the it is soo cutee
+                    </Text>
+                    <Text style={styles.replyText}>reply</Text>
+                </View>
+            </View>
+
+            <View style={styles.commentItem}>
+                <View style={styles.commentAvatar}><Icon name="person" size={14} color="#fff" /></View>
+                <View>
+                    <Text style={styles.commentText}>
+                        <Text style={styles.boldUsername}>heheheh</Text> WOw i rate it 10/10
+                    </Text>
+                    <Text style={styles.replyText}>reply</Text>
+                </View>
+            </View>
+
+            <View style={styles.commentItem}>
+                <View style={styles.commentAvatar}><Icon name="person" size={14} color="#fff" /></View>
+                <View>
+                    <Text style={styles.commentText}>
+                        <Text style={styles.boldUsername}>1000000</Text> Swap?
+                    </Text>
+                    <Text style={styles.replyText}>reply</Text>
+                </View>
+            </View>
 
         </View>
 
       </ScrollView>
 
-      {/* --- REUSABLE NAVBAR COMPONENT --- */}
+      {/* --- BOTTOM NAVBAR (Active Yellow on Comments) --- */}
       <View style={styles.bottomNav}>
-        
-        {/* Tab 1: Admin Home */}
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => handleNavigation('home')}
-        >
-          <Icon 
-            name={activeTab === 'home' ? 'home' : 'home-outline'} 
-            size={24} 
-            color={activeTab === 'home' ? colors.accent : colors.dark} 
-          />
-          <Text style={[styles.navText, activeTab === 'home' && styles.navTextActive]}>
-            Admin Home
-          </Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('home')}>
+          <Icon name="home-outline" size={24} color={colors.gray} />
         </TouchableOpacity>
 
-        {/* Tab 2: Manage Profiles */}
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => handleNavigation('profiles')}
-        >
-          <Icon 
-            name={activeTab === 'profiles' ? 'people' : 'people-outline'} 
-            size={24} 
-            color={activeTab === 'profiles' ? colors.accent : colors.dark} 
-          />
-          <Text style={[styles.navText, activeTab === 'profiles' && styles.navTextActive]}>
-            Manage Profiles
-          </Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('profiles')}>
+          <Icon name="people-outline" size={24} color={colors.gray} />
         </TouchableOpacity>
 
-        {/* Tab 3: Manage Comments */}
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => handleNavigation('comments')}
-        >
-          <Icon 
-            name={activeTab === 'comments' ? 'chatbubbles' : 'chatbubbles-outline'} 
-            size={24} 
-            color={activeTab === 'comments' ? colors.accent : colors.dark} 
-          />
-          <Text style={[styles.navText, activeTab === 'comments' && styles.navTextActive]}>
-            Manage Comments
-          </Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('comments')}>
+          <Icon name="chatbubbles" size={24} color={ACTIVE_YELLOW} /> 
         </TouchableOpacity>
-
       </View>
 
     </SafeAreaView>
@@ -255,24 +225,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   
-  // --- HEADER ---
-  headerContainer: {
-    backgroundColor: HEADER_BG,
-    height: 100,
+  // --- HEADER (Standard White) ---
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbdbdb',
+  },
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingTop: 10,
+    gap: 10,
   },
-  headerLogo: {
-    width: 100,
-    height: 50,
-    transform: [{ rotate: '-10deg' }]
+  headerTitle: {
+    fontFamily: fonts.header,
+    fontSize: 20, 
+    fontWeight: '700',
+    color: THEME_GREEN, 
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  headerIcon: {
+    padding: 4,
   },
   backButton: {
-    width: 40, 
-    alignItems: 'flex-start',
+    padding: 4,
+  },
+
+  // --- SCROLL CONTENT ---
+  scrollContent: {
+      paddingBottom: 80,
   },
 
   // --- POST HEADER ---
@@ -282,20 +270,17 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 10,
-    backgroundColor: '#eee',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
   },
   headerUsername: {
     fontFamily: fonts.body,
-    fontWeight: 'bold',
+    fontWeight: '600',
     fontSize: 14,
     color: colors.dark,
   },
@@ -303,20 +288,23 @@ const styles = StyleSheet.create({
   // --- POST CONTENT ---
   postImage: {
     width: '100%',
-    height: 300,
+    height: 400, // Tall aesthetic
     backgroundColor: '#eee',
   },
   swapBanner: {
-    backgroundColor: '#FCE77D', // Yellow banner
+    backgroundColor: THEME_CREAM, // Cream/Beige banner
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   swapBannerText: {
-    fontFamily: 'serif',
+    fontFamily: fonts.header,
     fontSize: 14,
+    fontWeight: '600',
     color: colors.dark,
   },
 
@@ -335,6 +323,7 @@ const styles = StyleSheet.create({
   engagementCount: {
     marginLeft: 6,
     fontSize: 14,
+    fontWeight: '600',
     color: colors.dark,
   },
 
@@ -350,89 +339,107 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   boldUsername: {
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   hashtags: {
-    color: '#999',
-    fontSize: 12,
+    color: THEME_GREEN,
+    fontSize: 14,
     marginTop: 4,
+  },
+  dateText: {
+    color: colors.gray,
+    fontSize: 10,
+    marginTop: 6,
+  },
+
+  separator: {
+      height: 1,
+      backgroundColor: '#eee',
+      marginVertical: 10,
   },
 
   // --- COMMENTS ---
   commentsList: {
     paddingHorizontal: spacing.md,
-    paddingBottom: 40,
+    paddingBottom: 20,
+  },
+  sectionTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.dark,
+      marginBottom: 16,
   },
   commentItem: {
+    flexDirection: 'row',
     marginBottom: 16,
+    paddingRight: 20,
+  },
+  commentAvatar: {
+      width: 24, height: 24, borderRadius: 12, backgroundColor: '#ccc', marginRight: 10,
+      justifyContent: 'center', alignItems: 'center'
   },
   commentText: {
     fontFamily: fonts.body,
     fontSize: 14,
     color: colors.dark,
-    lineHeight: 20,
+    lineHeight: 18,
+    flex: 1,
   },
   replyText: {
-    color: '#aaa',
+    color: colors.gray,
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 4,
+    fontWeight: '600',
   },
 
   // --- FLAGGED COMMENT ---
   flaggedCommentContainer: {
-    backgroundColor: FLAG_BG,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
+    backgroundColor: FLAG_BG, // Light yellow background
     borderRadius: 8,
-    marginTop: 8,
+    padding: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
-  flaggedContent: {
-    flex: 1,
+  flaggedHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+      gap: 6,
+  },
+  flaggedLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: ALERT_RED,
+      textTransform: 'uppercase',
+  },
+  commentContentRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+  },
+  commentBubble: {
+      flex: 1,
   },
   flaggedText: {
-    color: '#FF4444', // Red text for bad word
+    color: colors.dark, 
+    fontStyle: 'italic', // Emphasize flagged text
   },
-  
-  // --- SCROLL CONTENT ---
-  scrollContent: {
-      paddingBottom: 100, // Ensure space for bottom nav
+  deleteButton: {
+      padding: 4,
   },
 
   // --- NAVBAR ---
   bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: colors.secondary,
-    paddingVertical: 8,
-    paddingHorizontal: spacing.sm,
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.primary,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderTopColor: '#e0e0e0',
   },
   navItem: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
   },
-  navText: {
-    fontFamily: fonts.body,
-    fontSize: 10,
-    color: colors.dark,
-    marginTop: 2,
-  },
-  navTextActive: {
-    color: colors.accent,
-    fontWeight: 'bold',
-  },
-}); 
+});

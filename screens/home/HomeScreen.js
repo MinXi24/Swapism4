@@ -333,8 +333,45 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  // --- UPDATED FUNCTION: Fixed Collection Name to 'report' ---
   const handleReportPost = async (post) => {
-    Alert.alert('Report Sent', 'Thank you for reporting. We will review this post.');
+    if (!currentUser) {
+      Alert.alert('Error', 'You must be logged in to report posts.');
+      return;
+    }
+
+    Alert.alert(
+      'Report Post',
+      'Are you sure you want to report this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const reportData = {
+                reporter_user_id: currentUser.uid,
+                reported_clothes_id: post.id,
+                reason: 'Inappropriate Content',
+                status: 'pending',
+                created_at: new Date(),
+                snapshot_image_url: post.url || '',
+                snapshot_description: post.description || ''
+              };
+
+              // UPDATED: Changed from 'reports' to 'report' to match your database screenshot
+              await addDoc(collection(db, 'report'), reportData);
+              
+              Alert.alert('Report Sent', 'Thank you. We will review this post.');
+            } catch (error) {
+              console.error('Error reporting post:', error);
+              Alert.alert('Error', 'Failed to send report.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderPost = ({ item }) => (
