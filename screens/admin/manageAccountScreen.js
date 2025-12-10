@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   SafeAreaView,
@@ -8,11 +9,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 // --- FIREBASE IMPORTS ---
-import { deleteDoc, doc, getFirestore, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, getFirestore, updateDoc } from 'firebase/firestore';
 
 // --- IMPORTS ---
 import Icon from '../../assets/icons/icons';
@@ -25,27 +26,93 @@ const THEME_CREAM = '#f5f3e4';
 
 export default function ManageAccountScreen({ navigation, route }) {
   const [hasPost, setHasPost] = useState(true);
-  const [activeTab, setActiveTab] = useState('posts');
   
   // 1. GET REPORT DATA
-  // Check if we navigated here with a 'report' object from AdminHomeScreen
   const { report } = route.params || {};
-  
   const db = getFirestore();
 
-  // 2. DYNAMIC USER DATA
-  // If a report exists, we show "Reported User" and the reason.
-  // Otherwise, we fall back to the mock "Andy" data.
-  const userInfo = {
-      username: report ? 'Reported User' : 'Andy',
-      bio: report ? `Report Reason: ${report.reason}` : 'hello check out my posts',
-      location: 'Singapore',
+  // 2. STATE FOR REAL USER INFO
+  const [userInfo, setUserInfo] = useState({
+      username: 'Loading...',
+      bio: '...',
+      location: '...',
       rating: 0.0,
       reviewCount: 0,
-      posts: report ? 1 : 0,
-      followers: 3,
-      following: 1170
-  };
+      posts: 0,
+      followers: 0,
+      following: 0,
+      photoURL: null,
+      ownerUid: null
+  });
+
+  const [loadingUser, setLoadingUser] = useState(true);
+
+  // 3. FETCH REAL USER DETAILS
+  useEffect(() => {
+    const fetchRealOwnerDetails = async () => {
+        // Validation: If report or clothes_id is missing/empty, stop.
+        if (!report || !report.reported_clothes_id) {
+            console.log("No valid reported_clothes_id found in report");
+            setUserInfo(prev => ({ ...prev, username: 'Andy', bio: 'CLICK THE LINK' }));
+            setLoadingUser(false);
+            return;
+        }
+
+        try {
+            // STEP A: Fetch the Reported Post (to find who posted it)
+            // Path matches your HomeScreen: 'wardrobe-plug-fyp/user/images'
+            const postRef = doc(db, 'wardrobe-plug-fyp/user/images', report.reported_clothes_id);
+            const postSnap = await getDoc(postRef);
+
+            let ownerId = null;
+
+            if (postSnap.exists()) {
+                const postData = postSnap.data();
+                // Get the Owner ID (Checking ownerUid or owner_id)
+                ownerId = postData.ownerUid || postData.owner_id || postData.userId;
+            } else {
+                // Post might be deleted, but we check if report has a backup reporter_user_id just in case
+                // (Usually we want the offender, not the reporter, so we stick to post owner)
+                setUserInfo(prev => ({ ...prev, username: 'Post Deleted', bio: 'Content no longer exists' }));
+                setHasPost(false);
+            }
+
+            // STEP B: Fetch the User Profile from 'users' collection
+            // (Your screenshot 'image_fc1812.png' shows bio/rating/photoURL is inside 'users')
+            if (ownerId) {
+                const userRef = doc(db, 'users', ownerId);
+                const userSnap = await getDoc(userRef);
+
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    
+                    // Map Firestore data to UI
+                    setUserInfo({
+                        username: userData.username || userData.display_name || 'No Name',
+                        bio: userData.bio || 'No bio available',
+                        location: userData.location || userData.area || 'Singapore', // 'area' seen in screenshot
+                        rating: userData.rating || 0.0,
+                        reviewCount: userData.reviewCount || 0,
+                        // Check if these are numbers or array lengths
+                        posts: typeof userData.posts === 'number' ? userData.posts : (userData.posts?.length || 0),
+                        followers: typeof userData.followers === 'number' ? userData.followers : (userData.followers?.length || 0),
+                        following: typeof userData.following === 'number' ? userData.following : (userData.following?.length || 0),
+                        photoURL: userData.photoURL || null,
+                        ownerUid: ownerId
+                    });
+                } else {
+                    setUserInfo(prev => ({ ...prev, username: 'User Not Found', bio: 'User account deleted' }));
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching user details:", error);
+        } finally {
+            setLoadingUser(false);
+        }
+    };
+
+    fetchRealOwnerDetails();
+  }, [report]);
 
   const handleBack = () => navigation.goBack();
   
@@ -57,13 +124,9 @@ export default function ManageAccountScreen({ navigation, route }) {
     }
   };
 
-  // --- DELETE LOGIC (Connects to Firebase) ---
+  // 4. DELETE LOGIC
   const handleDeletePost = async () => {
-    // Fallback for mock mode (if you view the screen without clicking a report)
-    if (!report) {
-       Alert.alert("Delete Post", "Mock post deleted.", [{ text: "OK", onPress: () => setHasPost(false) }]);
-       return;
-    }
+    if (!report) return;
 
     Alert.alert(
       "Confirm Deletion",
@@ -75,13 +138,12 @@ export default function ManageAccountScreen({ navigation, route }) {
             style: "destructive", 
             onPress: async () => {
                 try {
-                    // A. Delete the image from the 'user/images' collection
-                    // We use the ID stored in the report document
+                    // Delete image
                     if (report.reported_clothes_id) {
                         await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', report.reported_clothes_id));
                     }
                     
-                    // B. Mark the report as 'resolved' in the 'report' collection
+                    // Resolve report
                     await updateDoc(doc(db, 'report', report.id), {
                         status: 'resolved',
                         resolved_at: new Date()
@@ -91,7 +153,7 @@ export default function ManageAccountScreen({ navigation, route }) {
                     Alert.alert("Success", "Post deleted.", [{ text: "Back", onPress: () => navigation.goBack() }]);
                 } catch (error) {
                     console.error("Delete error:", error);
-                    Alert.alert("Error", "Could not delete post. It might already be gone.");
+                    Alert.alert("Error", "Could not delete post.");
                 }
             } 
         }
@@ -124,36 +186,49 @@ export default function ManageAccountScreen({ navigation, route }) {
         
         {/* --- PROFILE INFO SECTION --- */}
         <View style={styles.profileSection}>
-          <View style={styles.profileTopRow}>
-            <View style={styles.profileImageContainer}>
-                <View style={styles.profileImagePlaceholder}>
-                  <Icon name="person" size={40} color="#fff" />
+          {loadingUser ? (
+              <ActivityIndicator color={THEME_GREEN} style={{padding:20}} />
+          ) : (
+            <>
+              <View style={styles.profileTopRow}>
+                <View style={styles.profileImageContainer}>
+                    <View style={styles.profileImagePlaceholder}>
+                      {userInfo.photoURL ? (
+                          <Image 
+                            source={{ uri: userInfo.photoURL }} 
+                            style={{ width: 80, height: 80, borderRadius: 40 }} 
+                          />
+                      ) : (
+                          <Icon name="person" size={40} color="#fff" />
+                      )}
+                    </View>
                 </View>
-            </View>
 
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{userInfo.posts}</Text>
-                <Text style={styles.statLabel}>posts</Text>
+                <View style={styles.statsRow}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{userInfo.posts}</Text>
+                    <Text style={styles.statLabel}>posts</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{userInfo.followers}</Text>
+                    <Text style={styles.statLabel}>followers</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{userInfo.following}</Text>
+                    <Text style={styles.statLabel}>following</Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{userInfo.followers}</Text>
-                <Text style={styles.statLabel}>followers</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{userInfo.following}</Text>
-                <Text style={styles.statLabel}>following</Text>
-              </View>
-            </View>
-          </View>
 
-          <Text style={styles.userName}>{userInfo.username}</Text>
-          <Text style={styles.userBio}>{userInfo.bio}</Text>
-          
-          <View style={styles.locationContainer}>
-            <Icon name="location-outline" size={16} color={colors.dark} />
-            <Text style={styles.locationText}>{userInfo.location}</Text>
-          </View>
+              <Text style={styles.userName}>{userInfo.username}</Text>
+              <Text style={styles.userBio}>{userInfo.bio}</Text>
+              
+              <View style={styles.locationContainer}>
+                <Icon name="location-outline" size={16} color={colors.dark} />
+                <Text style={styles.locationText}>{userInfo.location}</Text>
+              </View>
+            </>
+          )}
 
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
@@ -175,7 +250,7 @@ export default function ManageAccountScreen({ navigation, route }) {
         {/* --- RATING SECTION --- */}
         <View style={styles.ratingSection}>
             <View style={styles.ratingHeader}>
-                <Text style={styles.ratingScore}>{userInfo.rating.toFixed(1)}</Text>
+                <Text style={styles.ratingScore}>{Number(userInfo.rating).toFixed(1)}</Text>
             </View>
             <View style={styles.starsContainer}>
                 {[1, 2, 3, 4, 5].map(star => (
@@ -188,20 +263,12 @@ export default function ManageAccountScreen({ navigation, route }) {
             </View>
         </View>
 
-        {/* --- TABS --- */}
+        {/* --- ONE TAB SECTION (Reported Posts Only) --- */}
         <View style={styles.tabsContainer}>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'posts' && styles.activeTab]}
-            onPress={() => setActiveTab('posts')}
-          >
-            <Icon name="grid-outline" size={24} color={colors.dark} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'tags' && styles.activeTab]}
-            onPress={() => setActiveTab('tags')}
-          >
-            <Icon name="pricetag-outline" size={24} color={colors.dark} />
-          </TouchableOpacity>
+             <View style={[styles.tab, styles.activeTab]}>
+                <Icon name="alert-circle-outline" size={20} color={colors.dark} />
+                <Text style={{fontFamily: fonts.header, fontWeight:'700', marginLeft: 5}}>Reported Content</Text>
+             </View>
         </View>
 
         {/* --- POSTS CONTENT --- */}
@@ -209,7 +276,13 @@ export default function ManageAccountScreen({ navigation, route }) {
             {hasPost ? (
                 <View style={styles.adminPostView}>
                       <View style={styles.postHeader}>
-                        <View style={styles.smallAvatar}><Icon name="person" size={16} color="#fff"/></View>
+                        <View style={styles.smallAvatar}>
+                            {userInfo.photoURL ? (
+                                <Image source={{ uri: userInfo.photoURL }} style={{ width: 30, height: 30, borderRadius: 15 }} />
+                            ) : (
+                                <Icon name="person" size={16} color="#fff"/>
+                            )}
+                        </View>
                         <Text style={styles.postUsername}>{userInfo.username}</Text>
                         <Text style={styles.postTime}>
                             {report?.created_at?.toDate ? 'Recent' : '57mins ago'}
@@ -219,7 +292,7 @@ export default function ManageAccountScreen({ navigation, route }) {
                         </TouchableOpacity>
                     </View>
 
-                    {/* DYNAMIC IMAGE: Uses report.snapshot_image_url if available */}
+                    {/* Report Image */}
                     <Image 
                         source={
                             report && report.snapshot_image_url 
@@ -237,15 +310,16 @@ export default function ManageAccountScreen({ navigation, route }) {
                         </View>
                         <Text style={styles.captionText}>
                             <Text style={{fontWeight: 'bold'}}>{userInfo.username} </Text>
-                            {/* Uses report.snapshot_description if available */}
                             {report ? report.snapshot_description : 'CLICK INTO THE LINK!!'}
                         </Text>
                         
-                        {/* Show Red Flag Text if Report exists */}
+                        {/* Red Flag Warning */}
                         {report && (
-                            <Text style={{color: '#FF6B6B', fontSize: 12, marginTop: 5, fontWeight:'bold'}}>
-                                FLAG REASON: {report.reason}
-                            </Text>
+                            <View style={{marginTop: 10, padding: 8, backgroundColor: '#FFEBEE', borderRadius: 4}}>
+                                <Text style={{color: '#D32F2F', fontSize: 12, fontWeight:'bold'}}>
+                                    REPORTED FOR: {report.reason}
+                                </Text>
+                            </View>
                         )}
 
                         <Text style={styles.dateText}>
@@ -255,8 +329,8 @@ export default function ManageAccountScreen({ navigation, route }) {
                 </View>
             ) : (
                 <View style={styles.emptyState}>
-                    <Icon name="image-outline" size={64} color={colors.gray} />
-                    <Text style={styles.emptyStateText}>No active posts</Text>
+                    <Icon name="checkmark-circle-outline" size={64} color={colors.gray} />
+                    <Text style={styles.emptyStateText}>Report Resolved / Post Deleted</Text>
                 </View>
             )}
         </View>
@@ -338,6 +412,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#333', 
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   statsRow: {
     flex: 1,
@@ -474,7 +549,7 @@ const styles = StyleSheet.create({
   },
   smallAvatar: {
       width: 30, height: 30, borderRadius: 15, backgroundColor: '#ccc', marginRight: 10,
-      justifyContent: 'center', alignItems: 'center'
+      justifyContent: 'center', alignItems: 'center', overflow: 'hidden'
   },
   postUsername: { fontWeight: '600', fontSize: 14, color: colors.dark },
   postTime: { fontSize: 12, color: colors.gray, marginLeft: 8 },
