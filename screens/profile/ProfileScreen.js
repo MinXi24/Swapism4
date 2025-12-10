@@ -37,6 +37,7 @@ export default function ProfileScreen({ navigation }) {
   });
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [postalCode, setPostalCode] = useState('');
+  const [favoritePosts, setFavoritePosts] = useState([]);
 
   const auth = getAuth();
   const db = getFirestore();
@@ -44,6 +45,7 @@ export default function ProfileScreen({ navigation }) {
 
   useEffect(() => {
     loadUserProfile();
+    loadFavoritePosts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -66,6 +68,38 @@ export default function ProfileScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
+    }
+  };
+
+  const loadFavoritePosts = async () => {
+    try {
+      const uid = user?.uid;
+      if (!uid) return;
+
+      const q = query(
+        collection(db, 'likes'),
+        where('userId', '==', uid)
+      );
+      const querySnapshot = await getDocs(q);
+      const likedPostIds = querySnapshot.docs.map(doc => doc.data().postId);
+
+      if (likedPostIds.length > 0) {
+        const postsPromises = likedPostIds.map(async (postId) => {
+          try {
+            const postDoc = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', postId));
+            if (postDoc.exists()) {
+              return { id: postDoc.id, ...postDoc.data() };
+            }
+          } catch (err) {
+            console.error('Error loading post:', err);
+          }
+          return null;
+        });
+        const posts = (await Promise.all(postsPromises)).filter(p => p !== null);
+        setFavoritePosts(posts);
+      }
+    } catch (error) {
+      console.error('Error loading favorite posts:', error);
     }
   };
 
@@ -484,10 +518,32 @@ export default function ProfileScreen({ navigation }) {
           )}
 
           {activeTab === 'mirror' && (
-            <View style={styles.emptyState}>
-              <Icon name="accessibility-outline" size={64} color={colors.gray} />
-              <Text style={styles.emptyStateText}>Mirror coming soon</Text>
-              <Text style={styles.emptyStateSubtext}>Check your full outfit mirror here!</Text>
+            <View>
+              <Text style={styles.sectionTitle}>Try On Your Clothes</Text>
+              {userPosts.filter(p => p.postType === 'forSwap' || p.postType === 'forFun').length === 0 && favoritePosts.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Icon name="accessibility-outline" size={64} color={colors.gray} />
+                  <Text style={styles.emptyStateText}>No items to try on</Text>
+                  <Text style={styles.emptyStateSubtext}>Post items or add favorites to try them virtually!</Text>
+                </View>
+              ) : (
+                <View style={styles.postsGrid}>
+                  {[...userPosts.filter(p => p.postType === 'forSwap' || p.postType === 'forFun'), ...favoritePosts]
+                    .map(post => (
+                      <TouchableOpacity
+                        key={post.id}
+                        style={styles.postItem}
+                        onPress={() => navigation.navigate('TryOnScreen', { item: post })}
+                      >
+                        <Image source={{ uri: post.url }} style={styles.postImage} />
+                        <View style={styles.tryOnBadge}>
+                          <Icon name="accessibility" size={16} color="#fff" />
+                          <Text style={styles.tryOnBadgeText}>Try On</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -931,6 +987,23 @@ const styles = StyleSheet.create({
     color: colors.dark,
   },
   modalButtonTextSave: {
+    color: '#fff',
+  },
+  tryOnBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#9ABEAA',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tryOnBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
     color: '#fff',
   },
 });

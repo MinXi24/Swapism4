@@ -287,15 +287,24 @@ export default function PostDetailsScreen({ route, navigation }) {
           {post.postType === 'forSwap' && (
             <View style={styles.swapActionsContainer}>
               {post.ownerUid !== auth.currentUser.uid ? (
-                // Show "Swap Now" button for non-owners if available
+                // Show "Swap Now" and "Try On" buttons for non-owners if available
                 currentSwapStatus === 'available' && (
-                  <TouchableOpacity 
-                    style={styles.swapNowButton}
-                    onPress={handleSwapNow}
-                  >
-                    <Icon name="swap-horizontal" size={20} color="#fff" />
-                    <Text style={styles.swapNowButtonText}>Swap Now</Text>
-                  </TouchableOpacity>
+                  <View>
+                    <TouchableOpacity 
+                      style={styles.swapNowButton}
+                      onPress={handleSwapNow}
+                    >
+                      <Icon name="swap-horizontal" size={20} color="#fff" />
+                      <Text style={styles.swapNowButtonText}>Swap Now</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.tryOnButton}
+                      onPress={() => navigation.navigate('TryOnScreen', { item: post })}
+                    >
+                      <Icon name="accessibility" size={20} color="#9ABEAA" />
+                      <Text style={styles.tryOnButtonText}>Try On Virtually</Text>
+                    </TouchableOpacity>
+                  </View>
                 )
               ) : (
                 // Show status change button for owners
@@ -467,11 +476,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     paddingVertical: spacing.md,
     borderRadius: 8,
+    marginBottom: spacing.sm,
   },
   swapNowButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  tryOnButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#F5F3E4',
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#9ABEAA',
+  },
+  tryOnButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#9ABEAA',
   },
   changeStatusButton: {
     flexDirection: 'row',
