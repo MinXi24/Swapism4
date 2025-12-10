@@ -24,6 +24,10 @@ export default function PostDetailsScreen({ route, navigation }) {
   const [liked, setLiked] = useState(false);
   const [likeId, setLikeId] = useState(null);
   const [currentSwapStatus, setCurrentSwapStatus] = useState(post.swapStatus);
+  const [likes, setLikes] = useState([]);
+  const [showLikes, setShowLikes] = useState(false);
+  const [userPhotoURL, setUserPhotoURL] = useState(post.userPhotoURL || null);
+  const [editingComment, setEditingComment] = useState(null);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -31,9 +35,32 @@ export default function PostDetailsScreen({ route, navigation }) {
   useEffect(() => {
     loadComments();
     checkIfLiked();
+    loadLikes();
     logViewActivity();
+    loadUserPhoto();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadUserPhoto = async () => {
+    // If we already have the photo URL, no need to fetch
+    if (post.userPhotoURL) {
+      setUserPhotoURL(post.userPhotoURL);
+      return;
+    }
+
+    // Fetch the user's photo from the users collection
+    try {
+      if (post.ownerUid) {
+        const userDoc = await getDoc(doc(db, 'users', post.ownerUid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUserPhotoURL(userData.photoURL || null);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user photo:', error);
+    }
+  };
 
   const loadComments = async () => {
     try {
@@ -46,13 +73,16 @@ export default function PostDetailsScreen({ route, navigation }) {
         querySnapshot.docs.map(async (docSnapshot) => {
           const commentData = docSnapshot.data();
           
-          // Fetch username from users collection
+          // Fetch username and photo from users collection
           let userName = commentData.userName || 'Anonymous';
+          let userPhoto = null;
           if (commentData.userId) {
             try {
               const userDoc = await getDoc(doc(db, 'users', commentData.userId));
               if (userDoc.exists()) {
-                userName = userDoc.data().displayName || userDoc.data().username || userName;
+                const userData = userDoc.data();
+                userName = userData.displayName || userData.username || userName;
+                userPhoto = userData.photoURL || null;
               }
             } catch (err) {
               console.error('Error fetching user:', err);
@@ -63,6 +93,7 @@ export default function PostDetailsScreen({ route, navigation }) {
             id: docSnapshot.id,
             ...commentData,
             userName,
+            userPhoto,
           };
         })
       );
@@ -79,6 +110,34 @@ export default function PostDetailsScreen({ route, navigation }) {
     }
   };
 
+  const handleDeleteComment = async (commentId, commentUserId) => {
+    if (commentUserId !== auth.currentUser.uid) {
+      Alert.alert('Error', 'You can only delete your own comments');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'comments', commentId));
+              loadComments();
+            } catch (error) {
+              console.error('Error deleting comment:', error);
+              Alert.alert('Error', 'Failed to delete comment');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const checkIfLiked = async () => {
     try {
       const q = query(
@@ -93,6 +152,23 @@ export default function PostDetailsScreen({ route, navigation }) {
       }
     } catch (error) {
       console.error('Error checking like status:', error);
+    }
+  };
+
+  const loadLikes = async () => {
+    try {
+      const q = query(
+        collection(db, 'likes'),
+        where('postId', '==', post.id)
+      );
+      const querySnapshot = await getDocs(q);
+      const likesData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setLikes(likesData);
+    } catch (error) {
+      console.error('Error loading likes:', error);
     }
   };
 
@@ -147,9 +223,22 @@ export default function PostDetailsScreen({ route, navigation }) {
         setLiked(false);
         setLikeId(null);
       } else {
+        // Get username from Firestore
+        let userName = auth.currentUser.displayName || auth.currentUser.email;
+        try {
+          const userDocRef = doc(db, 'users', auth.currentUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            userName = userDoc.data().username || userName;
+          }
+        } catch (err) {
+          console.error('Error fetching username:', err);
+        }
+
         // Like
         const likeDoc = await addDoc(collection(db, 'likes'), {
           userId: auth.currentUser.uid,
+          userName: userName,
           postId: post.id,
           createdAt: new Date(),
         });
@@ -164,6 +253,8 @@ export default function PostDetailsScreen({ route, navigation }) {
         setLiked(true);
         setLikeId(likeDoc.id);
       }
+      // Reload likes to update the list
+      loadLikes();
     } catch (error) {
       console.error('Error toggling like:', error);
       alert('Failed to update like status');
@@ -175,21 +266,69 @@ export default function PostDetailsScreen({ route, navigation }) {
 
     setLoading(true);
     try {
-      await addDoc(collection(db, 'comments'), {
-        postId: post.id,
-        userId: auth.currentUser.uid,
-        userName: auth.currentUser.displayName || 'Anonymous',
-        text: newComment.trim(),
-        createdAt: new Date(),
-      });
+      if (editingComment) {
+        // Update the existing comment
+        await updateDoc(doc(db, 'comments', editingComment.id), {
+          text: newComment.trim(),
+          updatedAt: new Date(),
+        });
+        setEditingComment(null);
+      } else {
+        // Get username from Firestore
+        let userName = auth.currentUser.displayName || 'Anonymous';
+        try {
+          const userDocRef = doc(db, 'users', auth.currentUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            userName = userDoc.data().username || userName;
+          }
+        } catch (err) {
+          console.error('Error fetching username:', err);
+        }
+
+        await addDoc(collection(db, 'comments'), {
+          postId: post.id,
+          userId: auth.currentUser.uid,
+          userName: userName,
+          text: newComment.trim(),
+          createdAt: new Date(),
+        });
+
+        // Add to activity
+        await addDoc(collection(db, 'activity'), {
+          userId: auth.currentUser.uid,
+          postId: post.id,
+          post: post,
+          type: 'commented',
+          timestamp: new Date(),
+        });
+
+        // Send notification to post owner
+        if (post.ownerUid !== auth.currentUser.uid) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: post.ownerUid,
+            type: 'comment',
+            message: `${userName} commented on your post`,
+            postId: post.id,
+            read: false,
+            createdAt: new Date(),
+          });
+        }
+      }
+
       setNewComment('');
       loadComments();
     } catch (error) {
-      console.error('Error adding comment:', error);
-      alert('Failed to add comment');
+      console.error('Error adding/editing comment:', error);
+      alert('Failed to add/edit comment');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEditComment = (comment) => {
+    setEditingComment(comment);
+    setNewComment(comment.text);
   };
 
   const handleSwapNow = () => {
@@ -259,7 +398,13 @@ export default function PostDetailsScreen({ route, navigation }) {
         {/* Post Info */}
         <View style={styles.postInfo}>
           <View style={styles.userInfo}>
-            <Icon name="person-circle" size={40} color={colors.accent} />
+            <View style={styles.userAvatar}>
+              {userPhotoURL ? (
+                <Image source={{ uri: userPhotoURL }} style={styles.userAvatarImage} />
+              ) : (
+                <Icon name="person-circle" size={40} color={colors.accent} />
+              )}
+            </View>
             <View style={styles.userDetails}>
               <Text style={styles.userName}>{post.userName || 'User'}</Text>
               <Text style={styles.postDate}>
@@ -327,7 +472,7 @@ export default function PostDetailsScreen({ route, navigation }) {
               <Icon 
                 name={liked ? "heart" : "heart-outline"} 
                 size={24} 
-                color={liked ? "#ff4444" : colors.dark} 
+                color={liked ? "#9ABEAA" : colors.dark} 
               />
               <Text style={[styles.actionText, liked && styles.likedText]}>
                 {liked ? 'Liked' : 'Like'}
@@ -342,6 +487,37 @@ export default function PostDetailsScreen({ route, navigation }) {
               <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Likes Section */}
+          {likes.length > 0 && (
+            <View style={styles.likesSection}>
+              <TouchableOpacity 
+                style={styles.likesHeader}
+                onPress={() => setShowLikes(!showLikes)}
+              >
+                <Icon name="heart" size={20} color="#9ABEAA" />
+                <Text style={styles.likesCount}>
+                  {likes.length} {likes.length === 1 ? 'like' : 'likes'}
+                </Text>
+                <Icon 
+                  name={showLikes ? "chevron-up" : "chevron-down"} 
+                  size={20} 
+                  color={colors.gray} 
+                />
+              </TouchableOpacity>
+              
+              {showLikes && (
+                <View style={styles.likesList}>
+                  {likes.map(like => (
+                    <View key={like.id} style={styles.likeItem}>
+                      <Icon name="person-circle" size={32} color={colors.accent} />
+                      <Text style={styles.likeUserName}>{like.userName || 'User'}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Comments Section */}
@@ -352,12 +528,35 @@ export default function PostDetailsScreen({ route, navigation }) {
           ) : (
             comments.map(comment => (
               <View key={comment.id} style={styles.comment}>
-                <Icon name="person-circle" size={32} color={colors.accent} />
+                {comment.userPhoto ? (
+                  <Image source={{ uri: comment.userPhoto }} style={styles.commentUserImage} />
+                ) : (
+                  <Icon name="person-circle" size={32} color={colors.accent} />
+                )}
                 <View style={styles.commentContent}>
-                  <Text style={styles.commentUser}>{comment.userName}</Text>
+                  <View style={styles.commentHeader}>
+                    <Text style={styles.commentUser}>{comment.userName}</Text>
+                    {comment.userId === auth.currentUser.uid && (
+                      <View style={{ flexDirection: 'row' }}>
+                        <TouchableOpacity
+                          style={styles.editCommentButton}
+                          onPress={() => handleEditComment(comment)}
+                        >
+                          <Icon name="create-outline" size={16} color="#9ABEAA" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteCommentButton}
+                          onPress={() => handleDeleteComment(comment.id, comment.userId)}
+                        >
+                          <Icon name="trash-outline" size={16} color="#9ABEAA" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.commentText}>{comment.text}</Text>
                   <Text style={styles.commentDate}>
                     {comment.createdAt?.toDate?.().toLocaleDateString() || 'Just now'}
+                    {comment.updatedAt ? ' (edited)' : ''}
                   </Text>
                 </View>
               </View>
@@ -371,6 +570,7 @@ export default function PostDetailsScreen({ route, navigation }) {
         <TextInput
           style={styles.commentInput}
           placeholder="Add a comment..."
+          placeholderTextColor="#585555ff"
           value={newComment}
           onChangeText={setNewComment}
           multiline
@@ -382,8 +582,8 @@ export default function PostDetailsScreen({ route, navigation }) {
         >
           <Icon
             name="send"
-            size={20}
-            color={newComment.trim() ? colors.accent : colors.gray}
+            size={25}
+            color="#9ABEAA"
           />
         </TouchableOpacity>
       </View>
@@ -424,6 +624,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginRight: spacing.sm,
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userAvatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   userDetails: {
     marginLeft: spacing.sm,
@@ -533,7 +748,41 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   likedText: {
-    color: '#ff4444',
+    color: '#9ABEAA',
+  },
+  likesSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  likesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  likesCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    flex: 1,
+  },
+  likesList: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  likeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  likeUserName: {
+    fontSize: 14,
+    color: colors.dark,
   },
   commentsSection: {
     padding: spacing.md,
@@ -556,17 +805,28 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     gap: spacing.sm,
   },
+  commentUserImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
   commentContent: {
     flex: 1,
     backgroundColor: '#f8f8f8',
     padding: spacing.sm,
     borderRadius: 12,
   },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   commentUser: {
     fontSize: 14,
     fontWeight: 'bold',
     color: colors.dark,
-    marginBottom: 4,
+    flex: 1,
   },
   commentText: {
     fontSize: 14,
@@ -578,17 +838,28 @@ const styles = StyleSheet.create({
     color: colors.gray,
     marginTop: 4,
   },
+  deleteCommentButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editCommentButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
   addCommentContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: '#ffffffff',
     backgroundColor: '#fff',
   },
   commentInput: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#F5F3E4',
     borderRadius: 20,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -599,7 +870,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#ffffffff',
     justifyContent: 'center',
     alignItems: 'center',
   },

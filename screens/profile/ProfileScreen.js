@@ -32,12 +32,12 @@ export default function ProfileScreen({ navigation }) {
     bio: 'i overestimated how much i can achieve when i reached how old i am now',
     location: 'Singapore',
     area: '',
-    rating: 4.8,
-    reviewCount: 2,
+    rating: 0,
+    reviewCount: 0,
+    reviews: [],
   });
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [postalCode, setPostalCode] = useState('');
-  const [favoritePosts, setFavoritePosts] = useState([]);
 
   const auth = getAuth();
   const db = getFirestore();
@@ -59,11 +59,26 @@ export default function ProfileScreen({ navigation }) {
       
       if (userDoc.exists()) {
         const userData = userDoc.data();
+        
+        // Load followers and following counts
+        const followers = userData.followers || [];
+        const following = userData.following || [];
+        
         setUserInfo(prev => ({
           ...prev,
+          username: userData.username || user?.displayName || 'User',
           location: userData.location || 'Singapore',
           area: userData.area || '',
           bio: userData.bio || prev.bio,
+          rating: userData.rating || 0,
+          reviewCount: userData.reviewCount || 0,
+          reviews: userData.reviews || [],
+        }));
+        
+        setStats(prev => ({
+          ...prev,
+          followers: followers.length,
+          following: following.length,
         }));
       }
     } catch (error) {
@@ -131,6 +146,9 @@ export default function ProfileScreen({ navigation }) {
       console.log('Loaded posts:', posts.length);
       setUserPosts(posts);
       setStats(prev => ({ ...prev, swaps: posts.length }));
+      
+      // Load discover posts (other users' swap posts)
+      await loadDiscoverPosts();
     } catch (error) {
       console.error('Error loading posts:', error);
     } finally {
@@ -138,8 +156,34 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
+  const loadDiscoverPosts = async () => {
+    try {
+      const uid = user?.uid;
+      if (!uid) return;
+
+      // Fetch all forSwap posts, then filter in JavaScript to avoid composite index
+      const q = query(
+        collection(db, 'wardrobe-plug-fyp/user/images'),
+        where('postType', '==', 'forSwap')
+      );
+      const querySnapshot = await getDocs(q);
+      const posts = querySnapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .filter(post => post.ownerUid !== uid && post.swapStatus === 'available') // Filter out current user's posts and swapped out items
+        .slice(0, 10); // Show only first 10 posts
+      
+      setDiscoverPosts(posts);
+    } catch (error) {
+      console.error('Error loading discover posts:', error);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
+      loadUserProfile();
       loadUserPosts();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -154,8 +198,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleEditProfile = () => {
-    // Navigate to edit profile screen
-    console.log('Edit profile');
+    navigation.navigate('EditProfile');
   };
 
   const handleShareProfile = () => {
@@ -298,14 +341,16 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={colors.accent} barStyle="dark-content" />
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>Profile</Text>
-        <TouchableOpacity>
-          <Icon name="menu-outline" size={24} color={colors.dark} />
-        </TouchableOpacity>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Icon name="menu-outline" size={28} color={colors.dark} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -342,7 +387,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
 
           {/* Username */}
-          <Text style={styles.userName}>{user?.displayName || 'User'}</Text>
+          <Text style={styles.userName}>{userInfo.username || user?.displayName || 'User'}</Text>
           
           {/* Bio */}
           <Text style={styles.userBio}>{userInfo.bio}</Text>
@@ -372,27 +417,76 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Discover Closets Section */}
+        {/* Discover Closets Section - Other Users' Swap Posts */}
         <View style={styles.discoverSection}>
-          <Text style={styles.sectionTitle}>Discover closets</Text>
+          <Text style={styles.sectionTitle}>Discover Swap Closets</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.discoverScroll}
           >
-            <View style={styles.discoverCard}>
-              <Text style={styles.discoverEmoji}>👕</Text>
-              <Text style={styles.discoverText}>casual</Text>
-            </View>
-            <View style={styles.discoverCard}>
-              <Text style={styles.discoverEmoji}>🔄</Text>
-              <Text style={styles.discoverText}>swap</Text>
-            </View>
-            <View style={styles.discoverCard}>
-              <Text style={styles.discoverEmoji}>🛍️</Text>
-              <Text style={styles.discoverText}>don&apos;t shop</Text>
-            </View>
+            {discoverPosts.map((post) => (
+              <TouchableOpacity
+                key={post.id}
+                style={styles.discoverCard}
+                onPress={() => navigation.navigate('UserProfile', { 
+                  userId: post.ownerUid, 
+                  username: post.userName,
+                  initialTab: 'forSwap'
+                })}
+              >
+                <Image source={{ uri: post.url }} style={styles.discoverImage} />
+                <Text style={styles.discoverUsername} numberOfLines={1}>{post.userName}</Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
+        </View>
+
+        {/* Rating Section */}
+        <View style={styles.ratingSection}>
+          <View style={styles.ratingHeader}>
+            <Text style={styles.ratingScore}>{userInfo.rating.toFixed(1)}</Text>
+          </View>
+          <View style={styles.starsContainer}>
+            {[1, 2, 3, 4, 5].map(star => (
+              <Icon 
+                key={star}
+                name={star <= Math.floor(userInfo.rating) ? 'star' : star === Math.ceil(userInfo.rating) ? 'star-half' : 'star-outline'}
+                size={20}
+                color={colors.highlight}
+              />
+            ))}
+          </View>
+          <Text style={styles.reviewsTitle}>Reviews ({userInfo.reviewCount})</Text>
+          {userInfo.reviewCount === 0 ? (
+            <View style={styles.noReviewsContainer}>
+              <Text style={styles.noReviewsText}>No reviews yet</Text>
+            </View>
+          ) : (
+            (userInfo.reviews || []).map((review, index) => (
+              <View key={index} style={styles.reviewItem}>
+                {review.userPhoto ? (
+                  <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />
+                ) : (
+                  <Icon name="person-circle" size={40} color={colors.gray} />
+                )}
+                <View style={styles.reviewContent}>
+                  <Text style={styles.reviewAuthor}>{review.userName}</Text>
+                  <Text style={styles.reviewText}>{review.text}</Text>
+                  <View style={styles.reviewStars}>
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <Icon 
+                        key={star}
+                        name={star <= review.rating ? 'star' : 'star-outline'}
+                        size={14}
+                        color={colors.highlight}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
         {/* Tabs */}
@@ -418,44 +512,6 @@ export default function ProfileScreen({ navigation }) {
             <Icon name="accessibility-outline" size={24} color={colors.dark} />
             <Text style={styles.tabText}>MIRROR</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Rating Section */}
-        <View style={styles.ratingSection}>
-          <View style={styles.ratingHeader}>
-            <Text style={styles.ratingScore}>{userInfo.rating}</Text>
-            <Text style={styles.ratingName}>{user?.displayName || 'Ben'}</Text>
-            <TouchableOpacity style={styles.rateButton}>
-              <Text style={styles.rateButtonText}>Rate</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.starsContainer}>
-            {[1, 2, 3, 4, 5].map(star => (
-              <Icon 
-                key={star}
-                name={star <= Math.floor(userInfo.rating) ? 'star' : star === Math.ceil(userInfo.rating) ? 'star-half' : 'star-outline'}
-                size={20}
-                color={colors.highlight}
-              />
-            ))}
-          </View>
-          <Text style={styles.reviewsTitle}>Reviews</Text>
-          
-          {/* Sample Reviews */}
-          <View style={styles.reviewItem}>
-            <Icon name="person-circle" size={40} color={colors.gray} />
-            <View style={styles.reviewContent}>
-              <Text style={styles.reviewText}>Wow wow oww amazing</Text>
-            </View>
-          </View>
-          <View style={styles.reviewItem}>
-            <Icon name="person-circle" size={40} color={colors.gray} />
-            <View style={styles.reviewContent}>
-              <Text style={styles.reviewText}>Wow wow oww amazing</Text>
-              <Text style={styles.reviewText}>Wow wow oww amazing Wow wow oww amazing</Text>
-              <Text style={styles.reviewText}>Wow wow oww amazing</Text>
-            </View>
-          </View>
         </View>
 
         {/* Posts Grid */}
@@ -620,13 +676,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
-    backgroundColor: colors.accent,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbdbdb',
   },
   logo: {
     fontFamily: fonts.header,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.dark,
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#9abeaa',
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  headerIcon: {
+    padding: 4,
   },
   profileSection: {
     backgroundColor: '#fff',
@@ -718,7 +783,7 @@ const styles = StyleSheet.create({
     color: colors.dark,
   },
   discoverSection: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F5F3E4',
     paddingVertical: spacing.md,
     marginTop: spacing.sm,
   },
@@ -734,21 +799,24 @@ const styles = StyleSheet.create({
   },
   discoverCard: {
     width: 120,
-    height: 120,
-    backgroundColor: colors.primary,
+    height: 150,
+    backgroundColor: '#DAD3A1',
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
     marginRight: spacing.sm,
   },
-  discoverEmoji: {
-    fontSize: 40,
-    marginBottom: spacing.sm,
+  discoverImage: {
+    width: '100%',
+    height: 120,
+    resizeMode: 'cover',
   },
-  discoverText: {
-    fontSize: 14,
+  discoverUsername: {
+    fontSize: 12,
     fontWeight: '600',
     color: colors.dark,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+    textAlign: 'center',
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -775,7 +843,7 @@ const styles = StyleSheet.create({
     color: colors.dark,
   },
   ratingSection: {
-    backgroundColor: colors.light,
+    backgroundColor: '#9abeaa',
     padding: spacing.md,
     marginTop: spacing.sm,
   },
@@ -788,7 +856,7 @@ const styles = StyleSheet.create({
   ratingScore: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: colors.dark,
+    color: '#ffd75c',
   },
   ratingName: {
     flex: 1,
@@ -826,13 +894,37 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: spacing.sm,
   },
+  reviewUserImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
   reviewContent: {
     flex: 1,
+  },
+  reviewAuthor: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: 4,
   },
   reviewText: {
     fontSize: 14,
     color: colors.dark,
     marginBottom: 4,
+  },
+  reviewStars: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  noReviewsContainer: {
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  noReviewsText: {
+    fontSize: 14,
+    color: colors.gray,
+    fontStyle: 'italic',
   },
   postsContainer: {
     backgroundColor: '#fff',
@@ -892,7 +984,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 6,
     right: 6,
-    backgroundColor: colors.highlight,
+    backgroundColor: '#9abeaa',
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 4,
