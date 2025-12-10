@@ -3,9 +3,11 @@ import * as Font from 'expo-font';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import Navigation from './navigation/Navigation';
+import SplashScreen from './screens/SplashScreen';
 
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     async function loadFonts() {
@@ -19,12 +21,16 @@ export default function App() {
     loadFonts();
   }, []);
 
-  if (!fontsLoaded) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#9abeaa" />
-      </View>
-    );
+  if (!fontsLoaded || showSplash) {
+    if (!fontsLoaded) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#9abeaa" />
+        </View>
+      );
+    }
+
+    return <SplashScreen onAnimationComplete={() => setShowSplash(false)} />;
   }
 
   return (
