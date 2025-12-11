@@ -518,6 +518,21 @@ export default function PostDetailsScreen({ route, navigation }) {
               )}
             </View>
           )}
+
+          {/* Tagged Users Section */}
+          {post.taggedUsers && post.taggedUsers.length > 0 && (
+            <View style={styles.taggedUsers}>
+              <Text>Tagged: </Text>
+              {post.taggedUsers.map((user, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => navigation.navigate('UserProfile', { userId: user.uid })}
+                >
+                  <Text style={styles.taggedUsername}>@{user.username} </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Comments Section */}
@@ -876,5 +891,17 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  taggedUsers: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: spacing.sm,
+  },
+  taggedUsername: {
+    fontSize: 14,
+    color: colors.accent,
+    fontWeight: '500',
+    marginRight: 4,
   },
 });

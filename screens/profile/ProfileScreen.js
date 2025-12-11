@@ -1,9 +1,10 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   SafeAreaView,
@@ -38,6 +39,8 @@ export default function ProfileScreen({ navigation }) {
   });
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [postalCode, setPostalCode] = useState('');
+  const [favoritePosts, setFavoritePosts] = useState([]);
+  const [discoverPosts, setDiscoverPosts] = useState([]);
 
   const auth = getAuth();
   const db = getFirestore();
@@ -191,6 +194,52 @@ export default function ProfileScreen({ navigation }) {
 
   const handlePostPress = (post) => {
     navigation.navigate('PostDetails', { post });
+  };
+
+  const handlePostMenu = (post) => {
+    Alert.alert(
+      'Post Options',
+      'What would you like to do?',
+      [
+        {
+          text: 'Delete Post',
+          style: 'destructive',
+          onPress: () => handleDeletePost(post),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const handleDeletePost = async (post) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', post.id));
+              // Refresh posts
+              await loadUserPosts();
+              Alert.alert('Success', 'Post deleted successfully');
+            } catch (error) {
+              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Failed to delete post. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleAddPost = () => {
@@ -534,11 +583,20 @@ export default function ProfileScreen({ navigation }) {
                       onPress={() => handlePostPress(post)}
                     >
                       <Image source={{ uri: post.url }} style={styles.postImage} />
+                      <TouchableOpacity
+                        style={styles.postMenuButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handlePostMenu(post);
+                        }}
+                      >
+                        <Icon name="ellipsis-vertical" size={20} color="#fff" />
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   ))}
               </View>
-            )
-          )}
+            ))
+          }
 
           {activeTab === 'forSwap' && (
             userPosts.filter(p => p.postType === 'forSwap').length === 0 ? (
@@ -558,6 +616,15 @@ export default function ProfileScreen({ navigation }) {
                       onPress={() => handlePostPress(post)}
                     >
                       <Image source={{ uri: post.url }} style={styles.postImage} />
+                      <TouchableOpacity
+                        style={styles.postMenuButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handlePostMenu(post);
+                        }}
+                      >
+                        <Icon name="ellipsis-vertical" size={20} color="#fff" />
+                      </TouchableOpacity>
                       {/* Swap Status Badge */}
                       <View style={[
                         styles.swapStatusBadge,
@@ -570,35 +637,29 @@ export default function ProfileScreen({ navigation }) {
                     </TouchableOpacity>
                   ))}
               </View>
-            )
-          )}
+            ))
+          }
 
           {activeTab === 'mirror' && (
             <View>
-              <Text style={styles.sectionTitle}>Try On Your Clothes</Text>
-              {userPosts.filter(p => p.postType === 'forSwap' || p.postType === 'forFun').length === 0 && favoritePosts.length === 0 ? (
+              <Text style={styles.sectionTitle}>Virtual Try-On Mirror</Text>
+              {Array.isArray(userPosts) && (userPosts.filter(p => p.postType === 'forSwap' || p.postType === 'forFun').length === 0) ? (
                 <View style={styles.emptyState}>
                   <Icon name="accessibility-outline" size={64} color={colors.gray} />
                   <Text style={styles.emptyStateText}>No items to try on</Text>
-                  <Text style={styles.emptyStateSubtext}>Post items or add favorites to try them virtually!</Text>
+                  <Text style={styles.emptyStateSubtext}>Post your clothes to try them virtually!</Text>
                 </View>
               ) : (
-                <View style={styles.postsGrid}>
-                  {[...userPosts.filter(p => p.postType === 'forSwap' || p.postType === 'forFun'), ...favoritePosts]
-                    .map(post => (
-                      <TouchableOpacity
-                        key={post.id}
-                        style={styles.postItem}
-                        onPress={() => navigation.navigate('TryOnScreen', { item: post })}
-                      >
-                        <Image source={{ uri: post.url }} style={styles.postImage} />
-                        <View style={styles.tryOnBadge}>
-                          <Icon name="accessibility" size={16} color="#fff" />
-                          <Text style={styles.tryOnBadgeText}>Try On</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                </View>
+                <TouchableOpacity
+                  style={styles.tryOnButton}
+                  onPress={() => navigation.navigate('TryOnScreen', { 
+                    allItems: (Array.isArray(userPosts) ? userPosts : []).filter(p => p.postType === 'forSwap' || p.postType === 'forFun')
+                  })}
+                >
+                  <Icon name="shirt-outline" size={32} color={colors.accent} />
+                  <Text style={styles.tryOnButtonText}>Open Virtual Mirror</Text>
+                  <Text style={styles.tryOnButtonSubtext}>Try on your {(Array.isArray(userPosts) ? userPosts : []).filter(p => p.postType === 'forSwap' || p.postType === 'forFun').length} clothing items</Text>
+                </TouchableOpacity>
               )}
             </View>
           )}
@@ -1097,5 +1158,39 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#fff',
+  },
+  tryOnButton: {
+    backgroundColor: '#f0f8f4',
+    padding: spacing.xl,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.accent,
+    borderStyle: 'dashed',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+  },
+  tryOnButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.accent,
+    marginTop: spacing.sm,
+  },
+  tryOnButtonSubtext: {
+    fontSize: 14,
+    color: colors.gray,
+    marginTop: 4,
+  },
+  postMenuButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
 });
