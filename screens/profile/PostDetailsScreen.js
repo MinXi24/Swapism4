@@ -1,11 +1,24 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  updateDoc,
+  where
+} from 'firebase/firestore';
+import { useCallback, useState } from 'react';
 import {
   Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,41 +30,85 @@ import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
 
 export default function PostDetailsScreen({ route, navigation }) {
-  const { post } = route.params;
+  const { post: initialPost } = route.params;
+  const [activePost, setActivePost] = useState(initialPost); // Store live post data here
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false); // For pull-to-refresh
   const [liked, setLiked] = useState(false);
   const [likeId, setLikeId] = useState(null);
-  const [currentSwapStatus, setCurrentSwapStatus] = useState(post.swapStatus);
+  const [currentSwapStatus, setCurrentSwapStatus] = useState(initialPost.swapStatus);
   const [likes, setLikes] = useState([]);
   const [showLikes, setShowLikes] = useState(false);
-  const [userPhotoURL, setUserPhotoURL] = useState(post.userPhotoURL || null);
+  const [userPhotoURL, setUserPhotoURL] = useState(initialPost.userPhotoURL || null);
   const [editingComment, setEditingComment] = useState(null);
 
   const db = getFirestore();
   const auth = getAuth();
 
-  useEffect(() => {
-    loadComments();
-    checkIfLiked();
-    loadLikes();
+  // --- UPDATED: REFRESH LOGIC ---
+  useFocusEffect(
+    useCallback(() => {
+      loadAllData();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
+
+  const loadAllData = async () => {
+    await Promise.all([
+      loadLatestPostDetails(),
+      loadComments(),
+      loadLikes(),
+      checkIfLiked(),
+      loadUserPhoto()
+    ]);
     logViewActivity();
-    loadUserPhoto();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  };
+
+  // --- NEW: FETCH LIVE POST DETAILS ---
+  // This ensures if Admin deletes the description, it updates here immediately.
+  const loadLatestPostDetails = async () => {
+    try {
+      // Try fetching from main collection
+      let postRef = doc(db, 'wardrobe-plug-fyp/user/images', initialPost.id);
+      let postSnap = await getDoc(postRef);
+
+      // Fallbacks for older data structures
+      if (!postSnap.exists()) {
+         postRef = doc(db, 'clothes', initialPost.id);
+         postSnap = await getDoc(postRef);
+      }
+      if (!postSnap.exists()) {
+         postRef = doc(db, 'userImages', initialPost.id);
+         postSnap = await getDoc(postRef);
+      }
+
+      if (postSnap.exists()) {
+        const freshData = postSnap.data();
+        setActivePost(prev => ({ ...prev, ...freshData }));
+        // Sync local swap status state
+        if (freshData.swapStatus) setCurrentSwapStatus(freshData.swapStatus);
+      }
+    } catch (error) {
+      console.error("Error fetching latest post details:", error);
+    }
+  };
 
   const loadUserPhoto = async () => {
-    // If we already have the photo URL, no need to fetch
-    if (post.userPhotoURL) {
-      setUserPhotoURL(post.userPhotoURL);
+    if (activePost.userPhotoURL) {
+      setUserPhotoURL(activePost.userPhotoURL);
       return;
     }
-
-    // Fetch the user's photo from the users collection
     try {
-      if (post.ownerUid) {
-        const userDoc = await getDoc(doc(db, 'users', post.ownerUid));
+      if (activePost.ownerUid) {
+        const userDoc = await getDoc(doc(db, 'users', activePost.ownerUid));
         if (userDoc.exists()) {
           const userData = userDoc.data();
           setUserPhotoURL(userData.photoURL || null);
@@ -66,14 +123,13 @@ export default function PostDetailsScreen({ route, navigation }) {
     try {
       const q = query(
         collection(db, 'comments'),
-        where('postId', '==', post.id)
+        where('postId', '==', activePost.id)
       );
       const querySnapshot = await getDocs(q);
       const commentsData = await Promise.all(
         querySnapshot.docs.map(async (docSnapshot) => {
           const commentData = docSnapshot.data();
           
-          // Fetch username and photo from users collection
           let userName = commentData.userName || 'Anonymous';
           let userPhoto = null;
           if (commentData.userId) {
@@ -138,9 +194,7 @@ export default function PostDetailsScreen({ route, navigation }) {
     );
   };
 
-  // --- NEW: REPORT COMMENT FUNCTIONS ---
   const handleReportComment = (comment) => {
-    // Prevent reporting own comments (though UI hides button, good for safety)
     if (comment.userId === auth.currentUser.uid) return;
 
     Alert.alert(
@@ -167,29 +221,21 @@ export default function PostDetailsScreen({ route, navigation }) {
   const submitCommentReport = async (comment, reason) => {
     setLoading(true);
     try {
-      // 1. Get Reporter User Info to save with report
       const reporterId = auth.currentUser.uid;
       const reporterDoc = await getDoc(doc(db, 'users', reporterId));
       const reporterName = reporterDoc.exists() ? (reporterDoc.data().username || reporterDoc.data().displayName) : 'Unknown';
 
-      // 2. Create the Report Object for 'reported_comments' collection
       const reportData = {
         type: 'comment', 
         reason: reason,
-        status: 'pending', // pending, reviewed, resolved
+        status: 'pending', 
         createdAt: new Date(),
-        
-        // Target (The Comment) Details
         targetId: comment.id,
         targetContent: comment.text,
         targetOwnerId: comment.userId,
         targetOwnerName: comment.userName,
-        
-        // Context (The Post) Details
-        postId: post.id,
-        postTitle: post.title || 'Untitled Post',
-        
-        // Reporter Details
+        postId: activePost.id,
+        postTitle: activePost.title || 'Untitled Post',
         reporterId: reporterId,
         reporterName: reporterName,
       };
@@ -208,14 +254,13 @@ export default function PostDetailsScreen({ route, navigation }) {
       setLoading(false);
     }
   };
-  // -------------------------------------
 
   const checkIfLiked = async () => {
     try {
       const q = query(
         collection(db, 'likes'),
         where('userId', '==', auth.currentUser.uid),
-        where('postId', '==', post.id)
+        where('postId', '==', activePost.id)
       );
       const querySnapshot = await getDocs(q);
       if (!querySnapshot.empty) {
@@ -231,7 +276,7 @@ export default function PostDetailsScreen({ route, navigation }) {
     try {
       const q = query(
         collection(db, 'likes'),
-        where('postId', '==', post.id)
+        where('postId', '==', activePost.id)
       );
       const querySnapshot = await getDocs(q);
       const likesData = querySnapshot.docs.map(doc => ({
@@ -246,17 +291,15 @@ export default function PostDetailsScreen({ route, navigation }) {
 
   const logViewActivity = async () => {
     try {
-      // Check if already viewed recently (within last hour)
       const oneHourAgo = new Date(Date.now() - 3600000);
       const q = query(
         collection(db, 'activity'),
         where('userId', '==', auth.currentUser.uid),
-        where('postId', '==', post.id),
+        where('postId', '==', activePost.id),
         where('type', '==', 'viewed')
       );
       const querySnapshot = await getDocs(q);
       
-      // Only log if not viewed recently
       const recentView = querySnapshot.docs.find(doc => {
         const timestamp = doc.data().timestamp?.toDate?.();
         return timestamp && timestamp > oneHourAgo;
@@ -265,8 +308,8 @@ export default function PostDetailsScreen({ route, navigation }) {
       if (!recentView) {
         await addDoc(collection(db, 'activity'), {
           userId: auth.currentUser.uid,
-          postId: post.id,
-          post: post,
+          postId: activePost.id,
+          post: activePost,
           type: 'viewed',
           timestamp: new Date(),
         });
@@ -279,13 +322,11 @@ export default function PostDetailsScreen({ route, navigation }) {
   const handleLike = async () => {
     try {
       if (liked && likeId) {
-        // Unlike
         await deleteDoc(doc(db, 'likes', likeId));
-        // Remove from activity
         const activityQuery = query(
           collection(db, 'activity'),
           where('userId', '==', auth.currentUser.uid),
-          where('postId', '==', post.id),
+          where('postId', '==', activePost.id),
           where('type', '==', 'liked')
         );
         const activitySnapshot = await getDocs(activityQuery);
@@ -295,7 +336,6 @@ export default function PostDetailsScreen({ route, navigation }) {
         setLiked(false);
         setLikeId(null);
       } else {
-        // Get username from Firestore
         let userName = auth.currentUser.displayName || auth.currentUser.email;
         try {
           const userDocRef = doc(db, 'users', auth.currentUser.uid);
@@ -307,25 +347,23 @@ export default function PostDetailsScreen({ route, navigation }) {
           console.error('Error fetching username:', err);
         }
 
-        // Like
         const likeDoc = await addDoc(collection(db, 'likes'), {
           userId: auth.currentUser.uid,
           userName: userName,
-          postId: post.id,
+          postId: activePost.id,
           createdAt: new Date(),
         });
-        // Add to activity
+        
         await addDoc(collection(db, 'activity'), {
           userId: auth.currentUser.uid,
-          postId: post.id,
-          post: post,
+          postId: activePost.id,
+          post: activePost,
           type: 'liked',
           timestamp: new Date(),
         });
         setLiked(true);
         setLikeId(likeDoc.id);
       }
-      // Reload likes to update the list
       loadLikes();
     } catch (error) {
       console.error('Error toggling like:', error);
@@ -339,14 +377,12 @@ export default function PostDetailsScreen({ route, navigation }) {
     setLoading(true);
     try {
       if (editingComment) {
-        // Update the existing comment
         await updateDoc(doc(db, 'comments', editingComment.id), {
           text: newComment.trim(),
           updatedAt: new Date(),
         });
         setEditingComment(null);
       } else {
-        // Get username from Firestore
         let userName = auth.currentUser.displayName || 'Anonymous';
         try {
           const userDocRef = doc(db, 'users', auth.currentUser.uid);
@@ -359,29 +395,27 @@ export default function PostDetailsScreen({ route, navigation }) {
         }
 
         await addDoc(collection(db, 'comments'), {
-          postId: post.id,
+          postId: activePost.id,
           userId: auth.currentUser.uid,
           userName: userName,
           text: newComment.trim(),
           createdAt: new Date(),
         });
 
-        // Add to activity
         await addDoc(collection(db, 'activity'), {
           userId: auth.currentUser.uid,
-          postId: post.id,
-          post: post,
+          postId: activePost.id,
+          post: activePost,
           type: 'commented',
           timestamp: new Date(),
         });
 
-        // Send notification to post owner
-        if (post.ownerUid !== auth.currentUser.uid) {
+        if (activePost.ownerUid !== auth.currentUser.uid) {
           await addDoc(collection(db, 'notifications'), {
-            userId: post.ownerUid,
+            userId: activePost.ownerUid,
             type: 'comment',
             message: `${userName} commented on your post`,
-            postId: post.id,
+            postId: activePost.id,
             read: false,
             createdAt: new Date(),
           });
@@ -406,14 +440,13 @@ export default function PostDetailsScreen({ route, navigation }) {
   const handleSwapNow = () => {
     Alert.alert(
       'Request Swap',
-      `Do you want to request a swap for "${post.title}"?`,
+      `Do you want to request a swap for "${activePost.title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Request Swap',
           onPress: () => {
             Alert.alert('Swap Request Sent', 'The owner will be notified of your swap request.');
-            // TODO: Implement actual swap request logic
           }
         }
       ]
@@ -432,12 +465,12 @@ export default function PostDetailsScreen({ route, navigation }) {
           text: 'Confirm',
           onPress: async () => {
             try {
-              const postRef = doc(db, 'wardrobe-plug-fyp/user/images', post.id);
+              const postRef = doc(db, 'wardrobe-plug-fyp/user/images', activePost.id);
               await updateDoc(postRef, {
                 swapStatus: newStatus
               });
               setCurrentSwapStatus(newStatus);
-              post.swapStatus = newStatus; // Update the post object
+              setActivePost(prev => ({ ...prev, swapStatus: newStatus }));
               Alert.alert('Success', `Status changed to ${newStatus === 'available' ? 'Available' : 'Swapped Out'}`);
             } catch (error) {
               console.error('Error updating swap status:', error);
@@ -454,7 +487,12 @@ export default function PostDetailsScreen({ route, navigation }) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        style={styles.scrollView}
+        refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -465,7 +503,7 @@ export default function PostDetailsScreen({ route, navigation }) {
         </View>
 
         {/* Post Image */}
-        <Image source={{ uri: post.url }} style={styles.postImage} />
+        <Image source={{ uri: activePost.url }} style={styles.postImage} />
 
         {/* Post Info */}
         <View style={styles.postInfo}>
@@ -478,20 +516,21 @@ export default function PostDetailsScreen({ route, navigation }) {
               )}
             </View>
             <View style={styles.userDetails}>
-              <Text style={styles.userName}>{post.userName || 'User'}</Text>
+              <Text style={styles.userName}>{activePost.userName || 'User'}</Text>
               <Text style={styles.postDate}>
-                {post.uploadedAt?.toDate?.().toLocaleDateString() || 'Recently'}
+                {activePost.uploadedAt?.toDate?.().toLocaleDateString() || 'Recently'}
               </Text>
             </View>
           </View>
 
-          {post.title && <Text style={styles.postTitle}>{post.title}</Text>}
-          {post.description && (
-            <Text style={styles.postDescription}>{post.description}</Text>
-          )}
+          {/* UPDATED: Uses activePost to render live updates */}
+          {activePost.title && <Text style={styles.postTitle}>{activePost.title}</Text>}
+          {activePost.description ? (
+            <Text style={styles.postDescription}>{activePost.description}</Text>
+          ) : null}
 
-          {/* Swap Info Badge (if forSwap) */}
-          {post.postType === 'forSwap' && (
+          {/* Swap Info Badge */}
+          {activePost.postType === 'forSwap' && (
             <View style={styles.swapInfoBadge}>
               <Icon name="swap-horizontal" size={20} color={colors.accent} />
               <Text style={styles.swapInfoText}>
@@ -501,10 +540,9 @@ export default function PostDetailsScreen({ route, navigation }) {
           )}
 
           {/* Swap Action Buttons */}
-          {post.postType === 'forSwap' && (
+          {activePost.postType === 'forSwap' && (
             <View style={styles.swapActionsContainer}>
-              {post.ownerUid !== auth.currentUser.uid ? (
-                // Show "Swap Now" button for non-owners if available
+              {activePost.ownerUid !== auth.currentUser.uid ? (
                 currentSwapStatus === 'available' && (
                   <TouchableOpacity 
                     style={styles.swapNowButton}
@@ -515,7 +553,6 @@ export default function PostDetailsScreen({ route, navigation }) {
                   </TouchableOpacity>
                 )
               ) : (
-                // Show status change button for owners
                 <TouchableOpacity 
                   style={styles.changeStatusButton}
                   onPress={handleChangeSwapStatus}
@@ -600,7 +637,6 @@ export default function PostDetailsScreen({ route, navigation }) {
                   <View style={styles.commentHeader}>
                     <Text style={styles.commentUser}>{comment.userName}</Text>
                     
-                    {/* CHANGED: Logic to show Edit/Delete for owner, or Report for others */}
                     {comment.userId === auth.currentUser.uid ? (
                       <View style={{ flexDirection: 'row' }}>
                         <TouchableOpacity
@@ -617,7 +653,6 @@ export default function PostDetailsScreen({ route, navigation }) {
                         </TouchableOpacity>
                       </View>
                     ) : (
-                        /* Report Button for comments not owned by user */
                         <TouchableOpacity
                             style={styles.reportCommentButton}
                             onPress={() => handleReportComment(comment)}
@@ -906,7 +941,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
   },
-  // ADDED: Style for the new report button
   reportCommentButton: {
     padding: 4,
     justifyContent: 'center',

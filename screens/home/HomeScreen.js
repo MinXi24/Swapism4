@@ -1,6 +1,18 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  serverTimestamp // <--- ADDED THIS IMPORT
+  ,
+  where
+} from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -348,7 +360,8 @@ export default function HomeScreen({ navigation }) {
         [
           {
             text: 'Report Post',
-            onPress: () => handleReportPost(post)
+            // FIXED: Added setTimeout to prevent Alert chaining issues on Android
+            onPress: () => setTimeout(() => handleReportPost(post), 500)
           },
           { text: 'Cancel', style: 'cancel' }
         ]
@@ -367,12 +380,15 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  // --- UPDATED FUNCTION: Fixed Collection Name to 'report' ---
+  // --- UPDATED FUNCTION: Added Debugging & ServerTimestamp ---
   const handleReportPost = async (post) => {
     if (!currentUser) {
       Alert.alert('Error', 'You must be logged in to report posts.');
       return;
     }
+    
+    // Debug log to ensure function is called
+    console.log("Initiating report for post:", post.id);
 
     Alert.alert(
       'Report Post',
@@ -384,23 +400,29 @@ export default function HomeScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log("Sending report to Firestore...");
+              
               const reportData = {
                 reporter_user_id: currentUser.uid,
                 reported_clothes_id: post.id,
                 reason: 'Inappropriate Content',
                 status: 'pending',
-                created_at: new Date(),
+                // FIXED: Using serverTimestamp for consistency with Admin sorting
+                created_at: serverTimestamp(), 
                 snapshot_image_url: post.url || '',
                 snapshot_description: post.description || ''
               };
 
-              // UPDATED: Changed from 'reports' to 'report' to match your database screenshot
+              // Explicitly log the data being sent
+              console.log("Report Data:", reportData);
+
               await addDoc(collection(db, 'report'), reportData);
               
+              console.log("Report successfully added to DB.");
               Alert.alert('Report Sent', 'Thank you. We will review this post.');
             } catch (error) {
               console.error('Error reporting post:', error);
-              Alert.alert('Error', 'Failed to send report.');
+              Alert.alert('Error', 'Failed to send report. Please check your internet.');
             }
           },
         },

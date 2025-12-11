@@ -22,7 +22,6 @@ import {
   getDocs,
   getFirestore,
   query,
-  updateDoc,
   where
 } from 'firebase/firestore';
 
@@ -33,30 +32,19 @@ import { colors, fonts, spacing } from '../../lib/theme';
 // --- CONSTANTS ---
 const ACTIVE_YELLOW = '#FDD835'; 
 
-// --- MOCK DATA ---
-const feedbacksData = [
-  { 
-    id: '3', 
-    name: 'Ben', 
-    detail: 'Dear admins, i am unable to access to my profile.', 
-    type: 'SYSTEM_ISSUE', 
-  },
-];
-
 export default function AdminHomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home');
 
-  // --- NEW STATE FOR REAL DATA ---
+  // --- DATA STATE ---
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // New State for Dashboard Counts
   const [stats, setStats] = useState({
     pending: 0,
     users: 0,
-    swaps: 0,
-    feedback: 0
+    listings: 0,
+    resolved: 0
   });
 
   const db = getFirestore();
@@ -72,72 +60,78 @@ export default function AdminHomeScreen({ navigation }) {
     try {
       setLoading(true);
       
-      // 1. Prepare Report Queries
+      // 1. Prepare Queries
+      // Pending Reports (Posts)
       const postsQuery = query(
         collection(db, 'report'),
         where('status', '==', 'pending')
       );
       
+      // Pending Reports (Comments)
       const commentsQuery = query(
         collection(db, 'reported_comments'),
         where('status', '==', 'pending')
       );
+
+      // Resolved Reports (For Stats)
+      const resolvedQuery = query(
+        collection(db, 'report'),
+        where('status', '==', 'resolved')
+      );
       
       // 2. Prepare Count Collections
       const usersColl = collection(db, 'users');
-      const swapsColl = collection(db, 'swaps'); 
-      const feedbackColl = collection(db, 'feedbacks');
+      const clothesColl = collection(db, 'clothes');
 
       // 3. Run EVERYTHING in parallel
       const [
         postSnapshot, 
         commentSnapshot,
         usersSnap,
-        swapsSnap,
-        feedbackSnap
+        clothesSnap,
+        resolvedSnap
       ] = await Promise.all([
         getDocs(postsQuery),
         getDocs(commentsQuery),
         getCountFromServer(usersColl),
-        getCountFromServer(swapsColl),
-        getCountFromServer(feedbackColl)
+        getCountFromServer(clothesColl),
+        getCountFromServer(resolvedQuery)
       ]);
       
-      // 4. Process Reports List
+      // 4. Process Reports List (Pending only)
       
-      // --- Process Posts (With Correct Field Name Check) ---
+      // --- Process Posts ---
       const postPromises = postSnapshot.docs.map(async (docSnapshot) => {
         const data = docSnapshot.data();
         
-        // CORRECTION: Use the field name from your screenshot
-        const reportedId = data.reported_clothes_id; 
+        // Smart ID lookup
+        const reportedId = data.reported_clothes_id || data.post_id || data.clothes_id;
+        
+        let statusDetail = `Post: ${data.reason || 'Reported Content'}`;
+        let isMissing = false;
 
         if (reportedId) {
-            // Check the 'swaps' collection for this ID
-            const postRef = doc(db, 'swaps', reportedId);
-            const postSnap = await getDoc(postRef);
-            const postData = postSnap.exists() ? postSnap.data() : null;
+            // Check 'wardrobe-plug-fyp/user/images' first (User side source)
+            let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', reportedId));
+            
+            // Fallback checks
+            if (!postSnap.exists()) {
+                 postSnap = await getDoc(doc(db, 'clothes', reportedId));
+            }
+            if (!postSnap.exists()) {
+                 postSnap = await getDoc(doc(db, 'userImages', reportedId));
+            }
 
-            // Check if physically missing OR marked deleted in data
-            const isPhysicallyDeleted = !postSnap.exists();
-            const isMarkedDeleted = postData && (
-                postData.status === 'deleted' || 
-                postData.status === 'archived' || 
-                postData.status === 'sold' ||
-                postData.isDeleted === true
-            );
-
-            if (isPhysicallyDeleted || isMarkedDeleted) {
-                console.log(`Auto-resolving report ${docSnapshot.id}. Item ${reportedId} is missing/deleted.`);
-                
-                // 1. Update Firestore to 'resolved'
-                await updateDoc(doc(db, 'report', docSnapshot.id), {
-                    status: 'resolved',
-                    admin_note: 'System Auto-Resolve: Item deleted'
-                });
-
-                // 2. Return null to hide from screen immediately
-                return null; 
+            // If post doesn't exist, we just flag it visually
+            if (!postSnap.exists()) {
+                isMissing = true;
+                statusDetail = "⚠️ Post Unavailable (Deleted?)";
+            } else {
+                const postData = postSnap.data();
+                if (postData.status === 'deleted' || postData.isDeleted === true) {
+                    isMissing = true;
+                    statusDetail = "⚠️ Post Marked Deleted";
+                }
             }
         }
 
@@ -146,10 +140,10 @@ export default function AdminHomeScreen({ navigation }) {
             ...data,
             reportType: 'post',
             name: data.reporter_user_id ? `User...${data.reporter_user_id.slice(-4)}` : 'Anonymous',
-            detail: `Post: ${data.reason || 'Reported Content'}`,
+            detail: statusDetail,
             timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
-            icon: 'alert-circle',
-            iconColor: '#FF6B6B'
+            icon: isMissing ? 'alert' : 'alert-circle',
+            iconColor: isMissing ? '#999' : '#FF6B6B' 
         };
       });
 
@@ -168,13 +162,9 @@ export default function AdminHomeScreen({ navigation }) {
         };
       });
 
-      // Await all checks
       const resolvedPosts = await Promise.all(postPromises);
       
-      // Filter out the nulls (the auto-resolved ones)
-      const validPosts = resolvedPosts.filter(item => item !== null);
-
-      const allReports = [...validPosts, ...formattedComments];
+      const allReports = [...resolvedPosts, ...formattedComments];
       allReports.sort((a, b) => b.timestamp - a.timestamp);
 
       setReports(allReports);
@@ -183,8 +173,8 @@ export default function AdminHomeScreen({ navigation }) {
       setStats({
         pending: allReports.length,
         users: usersSnap.data().count,
-        swaps: swapsSnap.data().count,
-        feedback: feedbackSnap.data().count
+        listings: clothesSnap.data().count, // Renamed from swaps
+        resolved: resolvedSnap.data().count // New metric
       });
 
     } catch (error) {
@@ -198,8 +188,8 @@ export default function AdminHomeScreen({ navigation }) {
   const statsData = [
     { label: 'Pending', value: stats.pending, icon: 'alert-circle-outline', color: '#FF6B6B' },
     { label: 'Users', value: stats.users, icon: 'people-outline', color: colors.dark }, 
-    { label: 'Swaps', value: stats.swaps, icon: 'swap-horizontal-outline', color: '#9abeaa' }, 
-    { label: 'Feedback', value: stats.feedback, icon: 'chatbubble-outline', color: '#FCE77D' },
+    { label: 'Listings', value: stats.listings, icon: 'shirt-outline', color: '#9abeaa' }, 
+    { label: 'Resolved', value: stats.resolved, icon: 'checkmark-done-circle-outline', color: '#FCE77D' },
   ];
 
   // --- NAVIGATION LOGIC ---
@@ -294,7 +284,7 @@ export default function AdminHomeScreen({ navigation }) {
             {loading ? (
                 <ActivityIndicator size="small" color={colors.dark} style={{padding:20}} />
             ) : reports.length === 0 ? (
-                <Text style={{textAlign:'center', color: colors.gray, padding: 20}}>No pending reports.</Text>
+                <Text style={styles.emptyText}>No pending reports.</Text>
             ) : (
                 reports.map((item) => (
                 <View key={item.id} style={styles.listItem}>
@@ -320,62 +310,18 @@ export default function AdminHomeScreen({ navigation }) {
             )}
         </View>
 
-        {/* --- FEEDBACKS SECTION --- */}
-        <View style={styles.sectionHeaderRow}>
-             <Text style={styles.sectionTitle}>User Feedbacks</Text>
-        </View>
-
-        <View style={styles.listContainer}>
-            {feedbacksData.map((item) => (
-              <View key={item.id} style={styles.listItem}>
-                <View style={styles.listItemLeft}>
-                    <View style={[styles.statusIndicator, { backgroundColor: '#9abeaa' }]} />
-                    <View style={styles.avatar}>
-                         <Icon name="person" size={20} color={colors.gray} />
-                    </View>
-                    <View style={styles.textContainer}>
-                        <Text style={styles.nameText}>{item.name}</Text>
-                        <Text style={styles.detailText} numberOfLines={1}>
-                            {item.detail}
-                        </Text>
-                    </View>
-                </View>
-                <TouchableOpacity 
-                    style={styles.reviewButton}
-                    onPress={() => {}}
-                >
-                    <Text style={styles.reviewButtonText}>Reply</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-        </View>
-
       </ScrollView>
 
       {/* --- BOTTOM NAVBAR --- */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('home')}>
-          <Icon 
-            name={activeTab === 'home' ? 'home' : 'home-outline'} 
-            size={24} 
-            color={activeTab === 'home' ? ACTIVE_YELLOW : colors.gray} 
-          />
+          <Icon name={activeTab === 'home' ? 'home' : 'home-outline'} size={24} color={activeTab === 'home' ? ACTIVE_YELLOW : colors.gray} />
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('profiles')}>
-          <Icon 
-            name={activeTab === 'profiles' ? 'people' : 'people-outline'} 
-            size={24} 
-            color={activeTab === 'profiles' ? ACTIVE_YELLOW : colors.gray} 
-          />
+          <Icon name={activeTab === 'profiles' ? 'people' : 'people-outline'} size={24} color={activeTab === 'profiles' ? ACTIVE_YELLOW : colors.gray} />
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.navItem} onPress={() => handleNavigation('comments')}>
-          <Icon 
-            name={activeTab === 'comments' ? 'chatbubbles' : 'chatbubbles-outline'} 
-            size={24} 
-            color={activeTab === 'comments' ? ACTIVE_YELLOW : colors.gray} 
-          />
+          <Icon name={activeTab === 'comments' ? 'chatbubbles' : 'chatbubbles-outline'} size={24} color={activeTab === 'comments' ? ACTIVE_YELLOW : colors.gray} />
         </TouchableOpacity>
       </View>
 
@@ -388,7 +334,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  // --- HEADER ---
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -412,7 +357,9 @@ const styles = StyleSheet.create({
   headerIcon: {
     padding: 4,
   },
-  // --- SEARCH ---
+  scrollContent: {
+    paddingBottom: 80,
+  },
   searchContainer: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
@@ -427,13 +374,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eee',
   },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 14, fontFamily: fonts.body, color: colors.dark, height: '100%' },
-  // --- SCROLL CONTENT ---
-  scrollContent: { 
-    paddingBottom: 80 
+  searchIcon: {
+    marginRight: 10,
   },
-  // --- HERO ---
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: colors.dark,
+    height: '100%',
+  },
   heroContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -446,14 +396,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eee',
   },
-  heroTextContainer: { flex: 1 },
-  greetingText: { fontFamily: fonts.header, fontSize: 18, fontWeight: '700', color: colors.dark },
-  subGreetingText: { fontFamily: fonts.body, fontSize: 14, color: colors.gray, marginTop: 4 },
-  heroIconCircle: {
-      width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', 
-      justifyContent: 'center', alignItems: 'center'
+  heroTextContainer: {
+    flex: 1,
   },
-  // --- STATS ---
+  greetingText: {
+    fontFamily: fonts.header,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.dark,
+  },
+  subGreetingText: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.gray,
+    marginTop: 4,
+  },
+  heroIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -462,7 +427,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   statCard: {
-    width: '48%', 
+    width: '48%',
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: spacing.md,
@@ -470,20 +435,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dbdbdb',
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
   statHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  statValue: { fontFamily: fonts.header, fontSize: 24, fontWeight: '700', color: colors.dark },
-  statLabel: { fontFamily: fonts.body, fontSize: 12, color: colors.gray },
-  // --- SECTIONS ---
+  statValue: {
+    fontFamily: fonts.header,
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.dark,
+  },
+  statLabel: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.gray,
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -492,44 +468,88 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     marginTop: spacing.sm,
   },
-  sectionTitle: { fontFamily: fonts.header, fontSize: 16, fontWeight: '700', color: colors.dark },
-  viewAllText: { fontFamily: fonts.body, fontSize: 14, color: '#9abeaa', fontWeight: '600' },
-  // --- LIST ITEMS ---
-  listContainer: { paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+  sectionTitle: {
+    fontFamily: fonts.header,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.dark,
+  },
+  viewAllText: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: '#9abeaa',
+    fontWeight: '600',
+  },
+  listContainer: {
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
   listItem: {
-      backgroundColor: '#fff', 
-      borderRadius: 12,
-      padding: spacing.md,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: spacing.sm,
-      borderWidth: 1,
-      borderColor: '#eee',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#eee',
   },
-  listItemLeft: { flexDirection: 'row', flex: 1, alignItems: 'center', marginRight: 10 },
-  statusIndicator: { width: 4, height: 24, borderRadius: 2, marginRight: 12 },
+  listItemLeft: {
+    flexDirection: 'row',
+    flex: 1,
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  statusIndicator: {
+    width: 4,
+    height: 24,
+    borderRadius: 2,
+    marginRight: 12,
+  },
   avatar: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: '#f5f5f5',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  textContainer: { flex: 1 },
-  nameText: { fontFamily: fonts.body, fontWeight: '600', fontSize: 14, color: colors.dark, marginBottom: 2 },
-  detailText: { fontFamily: fonts.body, fontSize: 12, color: colors.gray },
+  textContainer: {
+    flex: 1,
+  },
+  nameText: {
+    fontFamily: fonts.body,
+    fontWeight: '600',
+    fontSize: 14,
+    color: colors.dark,
+    marginBottom: 2,
+  },
+  detailText: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.gray,
+  },
   reviewButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: '#dbdbdb',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#dbdbdb',
   },
-  reviewButtonText: { fontFamily: fonts.body, fontSize: 12, fontWeight: '600', color: colors.dark },
-  // --- NAVBAR ---
+  reviewButtonText: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: colors.gray,
+    padding: 20,
+    fontFamily: fonts.body,
+  },
   bottomNav: {
     position: 'absolute',
     bottom: 0,
