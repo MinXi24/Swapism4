@@ -3,23 +3,25 @@ import { getAuth } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
+import { useGuestCheck } from '../../hooks/useGuestCheck';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function ProfileScreen({ navigation }) {
+  const { isGuest, checkGuestAccess, GuestAccessModal } = useGuestCheck();
   const [userPosts, setUserPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('forFun');
@@ -162,14 +164,17 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleAddPost = () => {
+    if (!checkGuestAccess(navigation, 'add posts')) return;
     navigation.navigate('AddPost');
   };
 
   const handleEditProfile = () => {
+    if (!checkGuestAccess(navigation, 'edit profile')) return;
     navigation.navigate('EditProfile');
   };
 
   const handleShareProfile = () => {
+    if (!checkGuestAccess(navigation, 'share profile')) return;
     // Share profile functionality
     console.log('Share profile');
   };
@@ -315,7 +320,10 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.logo}>Profile</Text>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerIcon}>
+          <TouchableOpacity 
+            style={styles.headerIcon}
+            onPress={handleAddPost}
+          >
             <Icon name="add-outline" size={28} color={colors.dark} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerIcon}>
@@ -361,15 +369,17 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.userName}>{userInfo.username || user?.displayName || 'User'}</Text>
           
           {/* Bio */}
-          <Text style={styles.userBio}>{userInfo.bio}</Text>
+          {!isGuest && <Text style={styles.userBio}>{userInfo.bio}</Text>}
           
           {/* Location */}
-          <TouchableOpacity style={styles.locationContainer} onPress={handleLocationPress}>
-            <Icon name="location-outline" size={16} color={colors.dark} />
-            <Text style={styles.locationText}>
-              {userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location}
-            </Text>
-          </TouchableOpacity>
+          {!isGuest && (
+            <TouchableOpacity style={styles.locationContainer} onPress={handleLocationPress}>
+              <Icon name="location-outline" size={16} color={colors.dark} />
+              <Text style={styles.locationText}>
+                {userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
@@ -602,6 +612,7 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Bottom Navigation */}
       <BottomNavBar navigation={navigation} activeRoute="Profile" />
+      <GuestAccessModal />
     </SafeAreaView>
   );
 }

@@ -14,10 +14,12 @@ import {
   View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
+import { useGuestCheck } from '../../hooks/useGuestCheck';
 import { colors, spacing } from '../../lib/theme';
 
 export default function PostDetailsScreen({ route, navigation }) {
   const { post } = route.params;
+  const { checkGuestAccess, GuestAccessModal } = useGuestCheck();
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
@@ -84,6 +86,8 @@ export default function PostDetailsScreen({ route, navigation }) {
 
   const checkIfLiked = async () => {
     try {
+      if (!auth.currentUser) return;
+      
       const q = query(
         collection(db, 'likes'),
         where('userId', '==', auth.currentUser.uid),
@@ -118,6 +122,8 @@ export default function PostDetailsScreen({ route, navigation }) {
 
   const logViewActivity = async () => {
     try {
+      if (!auth.currentUser) return;
+      
       // Check if already viewed recently (within last hour)
       const oneHourAgo = new Date(Date.now() - 3600000);
       const q = query(
@@ -149,6 +155,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleLike = async () => {
+    if (!checkGuestAccess(navigation, 'like posts')) return;
+    
     try {
       if (liked && likeId) {
         // Unlike
@@ -206,6 +214,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleAddComment = async () => {
+    if (!checkGuestAccess(navigation, 'comment on posts')) return;
+    
     if (!newComment.trim()) return;
 
     setLoading(true);
@@ -250,6 +260,11 @@ export default function PostDetailsScreen({ route, navigation }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleShare = () => {
+    if (!checkGuestAccess(navigation, 'share posts')) return;
+    console.log('Share post');
   };
 
   const handleSwapNow = () => {
@@ -394,7 +409,7 @@ export default function PostDetailsScreen({ route, navigation }) {
               <Icon name="chatbubble-outline" size={24} color={colors.dark} />
               <Text style={styles.actionText}>{comments.length} Comments</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
               <Icon name="share-social-outline" size={24} color={colors.dark} />
               <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
@@ -475,6 +490,7 @@ export default function PostDetailsScreen({ route, navigation }) {
           />
         </TouchableOpacity>
       </View>
+      <GuestAccessModal />
     </KeyboardAvoidingView>
   );
 }

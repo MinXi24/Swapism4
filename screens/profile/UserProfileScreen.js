@@ -3,27 +3,29 @@ import { getAuth } from 'firebase/auth';
 import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
+import { useGuestCheck } from '../../hooks/useGuestCheck';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId, username, initialTab } = route.params;
+  const { checkGuestAccess, GuestAccessModal } = useGuestCheck();
   const [userPosts, setUserPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab || 'forFun');
@@ -128,6 +130,8 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleFollowToggle = async () => {
+    if (!checkGuestAccess(navigation, 'follow users')) return;
+    
     if (!currentUser) {
       Alert.alert('Error', 'Please log in to follow users');
       return;
@@ -199,6 +203,7 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleMessage = () => {
+    if (!checkGuestAccess(navigation, 'send messages')) return;
     navigation.navigate('Messages');
   };
 
@@ -207,6 +212,8 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleSubmitReview = async () => {
+    if (!checkGuestAccess(navigation, 'submit reviews')) return;
+    
     if (reviewRating === 0) {
       Alert.alert('Error', 'Please select a rating');
       return;
@@ -586,6 +593,7 @@ export default function UserProfileScreen({ route, navigation }) {
       </Modal>
 
       <BottomNavBar navigation={navigation} activeRoute="Home" />
+      <GuestAccessModal />
     </SafeAreaView>
   );
 }

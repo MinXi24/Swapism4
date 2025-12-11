@@ -1,15 +1,18 @@
 import {
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { useGuest } from '../../context/GuestContext';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function WelcomeScreen({ navigation }) {
+  const { enterGuestMode } = useGuest();
+
   const handleLogin = () => {
     navigation.navigate('Login');
   };
@@ -18,7 +21,8 @@ export default function WelcomeScreen({ navigation }) {
     navigation.navigate('Signup');
   };
 
-  const handleSkip = () => {
+  const handleContinueAsGuest = () => {
+    enterGuestMode();
     navigation.navigate('Home');
   };
 
@@ -66,11 +70,18 @@ export default function WelcomeScreen({ navigation }) {
           >
             <Text style={styles.signupButtonText}>Sign Up</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.guestButton}
+            onPress={handleContinueAsGuest}
+          >
+            <Text style={styles.guestButtonText}>Continue as Guest</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Skip for now */}
-        <TouchableOpacity onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip for now</Text>
+        <TouchableOpacity onPress={handleContinueAsGuest}>
+          <Text style={styles.skipText}>Browse without account</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -166,6 +177,19 @@ const styles = StyleSheet.create({
     borderColor: colors.dark,
   },
   signupButtonText: {
+    fontFamily: fonts.header,
+    fontSize: 16,
+    color: colors.dark,
+    fontWeight: 'bold',
+  },
+  guestButton: {
+    backgroundColor: colors.secondary,
+    paddingVertical: spacing.md,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  guestButtonText: {
     fontFamily: fonts.header,
     fontSize: 16,
     color: colors.dark,

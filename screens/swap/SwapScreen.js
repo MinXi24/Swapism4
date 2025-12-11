@@ -1,21 +1,23 @@
 import { useEffect, useState } from 'react';
 import {
-    FlatList,
-    Modal,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  FlatList,
+  Modal,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
+import { useGuestCheck } from '../../hooks/useGuestCheck';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function SwapScreen({ navigation }) {
+  const { checkGuestAccess, GuestAccessModal } = useGuestCheck();
   const sampleItems = [
   {
     id: 1,
@@ -133,10 +135,12 @@ export default function SwapScreen({ navigation }) {
   };
 
   const handleFavorite = (item) => {
+    if (!checkGuestAccess(navigation, 'save favorites')) return;
     console.log('Favorited:', item.title);
   };
 
   const handleSwap = (item) => {
+    if (!checkGuestAccess(navigation, 'initiate swaps')) return;
     console.log('Swap:', item.title);
   };
 
@@ -226,6 +230,7 @@ export default function SwapScreen({ navigation }) {
 
       {/* Bottom Navigation Bar */}
       <BottomNavBar navigation={navigation} activeRoute="Swap" />
+      <GuestAccessModal />
 
       {/* Sort Modal */}
       <Modal

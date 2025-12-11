@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import {
-    FlatList,
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  FlatList,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import Input from '../../components/Input';
+import { useAuth } from '../../context/GuestContext';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 // Sample message data - replace with your actual data
@@ -35,7 +36,45 @@ const sampleMessages = [
 ];
 
 export default function MessagesScreen({ navigation }) {
+  const { isGuest } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+
+  // If guest, show login prompt
+  if (isGuest) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar backgroundColor={colors.accent} barStyle="dark-content" />
+        
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logo}>Swapism</Text>
+          </View>
+          <Text style={styles.pageTitle}>Messages</Text>
+          <TouchableOpacity style={styles.menuButton}>
+            <Icon name="menu-outline" size={24} color={colors.dark} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Guest Content */}
+        <View style={[styles.messagesContainer, styles.guestContent]}>
+          <Image source={require('../../assets/images/logo.png')} style={styles.logoImage} resizeMode="contain" />
+          <Text style={styles.guestMessage}>Please login to access Messages</Text>
+          <TouchableOpacity 
+            style={styles.loginButton}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={styles.loginButtonText}>Login</Text>
+          </TouchableOpacity>
+        </View>
+
+        <BottomNavBar navigation={navigation} activeRoute="Messages" />
+      </SafeAreaView>
+    );
+  }
+
+  // Normal screen content for logged-in users
+  const [searchQuery2] = useState('');
 
   const handleMessagePress = (message) => {
     console.log('Open chat with:', message.name);
@@ -188,6 +227,37 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sub,
     fontSize: 14,
     color: colors.gray,
+  },
+  guestContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  logoImage: {
+    width: 300,
+    height: 300,
+    marginBottom: spacing.lg,
+  },
+  guestMessage: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.dark,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    fontFamily: fonts.header,
+  },
+  loginButton: {
+    backgroundColor: colors.dark,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 25,
+    padding: 20,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.light,
+    fontFamily: fonts.header,
   },
   bottomNav: {
     position: 'absolute',

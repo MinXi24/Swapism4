@@ -2,6 +2,7 @@
 import * as Font from 'expo-font';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { AuthProvider } from './context/GuestContext';
 import Navigation from './navigation/Navigation';
 import SplashScreen from './screens/SplashScreen';
 
@@ -34,6 +35,8 @@ export default function App() {
   }
 
   return (
-      <Navigation />
+      <AuthProvider>
+        <Navigation />
+      </AuthProvider>
   );
 }

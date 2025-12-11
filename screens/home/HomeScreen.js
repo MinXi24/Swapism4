@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
+import { useGuestCheck } from '../../hooks/useGuestCheck';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function HomeScreen({ navigation }) {
@@ -33,6 +34,7 @@ export default function HomeScreen({ navigation }) {
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
+  const { checkGuestAccess, GuestAccessModal } = useGuestCheck();
 
   useFocusEffect(
     useCallback(() => {
@@ -209,6 +211,8 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleLike = async (post) => {
+    if (!checkGuestAccess(navigation, 'like posts')) return;
+
     if (!currentUser) return;
 
     try {
@@ -297,6 +301,8 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handlePostOptions = (post) => {
+    if (!checkGuestAccess(navigation, 'interact with posts')) return;
+
     const isOwner = post.ownerUid === currentUser?.uid;
     
     if (isOwner) {
@@ -438,6 +444,7 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.headerIcon} 
             onPress={() => {
+              if (!checkGuestAccess(navigation, 'view activity')) return;
               setHasUnreadNotifications(false);
               navigation.navigate('Activity');
             }}
@@ -506,6 +513,7 @@ export default function HomeScreen({ navigation }) {
       )}
 
       <BottomNavBar navigation={navigation} activeRoute="Home" />
+      <GuestAccessModal />
     </SafeAreaView>
   );
 }
