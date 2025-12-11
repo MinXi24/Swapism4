@@ -1,3 +1,4 @@
+import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   FlatList,
@@ -16,61 +17,14 @@ import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function SwapScreen({ navigation }) {
-  const sampleItems = [
-  {
-    id: 1,
-    title: 'Jeans cool and baggy (fit)',
-    image: { uri: 'https://via.placeholder.com/200x150' },
-    rating: 4.3,
-    reviews: 12,
-    datePosted: '2024-01-15',
-  },
-  {
-    id: 2,
-    title: 'kirthi dress',
-    image: { uri: 'https://via.placeholder.com/200x150' },
-    rating: 4.2,
-    reviews: 19,
-    datePosted: '2024-01-20',
-  },
-  {
-    id: 3,
-    title: 'Jeans cool and baggy (fit)',
-    image: { uri: 'https://via.placeholder.com/200x150' },
-    rating: 3.1,
-    reviews: 8,
-    datePosted: '2024-01-10',
-  },
-  {
-    id: 4,
-    title: 'Jeans cool and baggy (fit)',
-    image: { uri: 'https://via.placeholder.com/200x150' },
-    rating: 4.3,
-    reviews: 15,
-    datePosted: '2024-01-25',
-  },
-  {
-    id: 5,
-    title: 'Felicia cute pants',
-    image: { uri: 'https://via.placeholder.com/200x150' },
-    rating: 4.5,
-    reviews: 15,
-    datePosted: '2024-01-18',
-  },
-  {
-    id: 6,
-    title: 'mini skirt floral',
-    image: { uri: 'https://via.placeholder.com/200x150' },
-    rating: 4.0,
-    reviews: 15,
-    datePosted: '2024-01-22',
-  },
-];
-
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredItems, setFilteredItems] = useState(sampleItems);
+  const [allItems, setAllItems] = useState([]);
+  const [filteredItems, setFilteredItems] = useState([]);
   const [showSortModal, setShowSortModal] = useState(false);
   const [selectedSort, setSelectedSort] = useState('Newest to Oldest');
+  const [loading, setLoading] = useState(true);
+
+  const db = getFirestore();
 
   const sortOptions = [
     'Newest to Oldest',
@@ -80,18 +34,53 @@ export default function SwapScreen({ navigation }) {
   ];
 
   useEffect(() => {
-    const sorted = applySorting(sampleItems, selectedSort);
-    setFilteredItems(sorted);
+    loadSwapItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadSwapItems = async () => {
+    try {
+      setLoading(true);
+      
+      // Query only items that are available for swap and not swapped out
+      const q = query(
+        collection(db, 'wardrobe-plug-fyp/user/images'),
+        where('postType', '==', 'forSwap'),
+        where('swapStatus', '==', 'available')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const items = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title || data.description || 'Item',
+          image: { uri: data.url },
+          rating: data.rating || 0,
+          reviews: data.reviewCount || 0,
+          datePosted: data.uploadedAt?.toDate?.() || new Date(),
+          ...data
+        };
+      });
+      
+      setAllItems(items);
+      const sorted = applySorting(items, selectedSort);
+      setFilteredItems(sorted);
+    } catch (error) {
+      console.error('Error loading swap items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSearch = (query) => {
     setSearchQuery(query);
     
     if (query.trim() === '') {
-      const sorted = applySorting(sampleItems, selectedSort);
+      const sorted = applySorting(allItems, selectedSort);
       setFilteredItems(sorted);
     } else {
-      const filtered = sampleItems.filter(item =>
+      const filtered = allItems.filter(item =>
         item.title.toLowerCase().includes(query.toLowerCase())
       );
       const sorted = applySorting(filtered, selectedSort);
@@ -222,6 +211,13 @@ export default function SwapScreen({ navigation }) {
         numColumns={2}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={
+          loading ? (
+            <Text style={{ textAlign: 'center', marginTop: 50, color: colors.dark }}>Loading items...</Text>
+          ) : (
+            <Text style={{ textAlign: 'center', marginTop: 50, color: colors.dark }}>No items available</Text>
+          )
+        }
       />
 
       {/* Bottom Navigation Bar */}
@@ -256,7 +252,7 @@ export default function SwapScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#DAD3A1',
   },
   header: {
     flexDirection: 'row',
@@ -304,7 +300,7 @@ const styles = StyleSheet.create({
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.secondary,
+    backgroundColor: '#DAD3A1',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 20,
@@ -318,7 +314,7 @@ const styles = StyleSheet.create({
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.secondary,
+    backgroundColor: '#DAD3A1',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 20,
@@ -341,7 +337,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: colors.secondary,
+    backgroundColor: '#DAD3A1',
     paddingVertical: 8,
     paddingHorizontal: spacing.sm,
     borderTopWidth: 1,
@@ -373,7 +369,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: colors.secondary,
+    backgroundColor: '#DAD3A1',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: 30,
@@ -403,7 +399,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: 8,
     marginBottom: spacing.sm,
-    backgroundColor: colors.secondary,
+    backgroundColor: '#DAD3A1',
   },
   sortOptionSelected: {
     backgroundColor: colors.primary,

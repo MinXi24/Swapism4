@@ -26,6 +26,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   const [currentSwapStatus, setCurrentSwapStatus] = useState(post.swapStatus);
   const [likes, setLikes] = useState([]);
   const [showLikes, setShowLikes] = useState(false);
+  const [userPhotoURL, setUserPhotoURL] = useState(post.userPhotoURL || null);
+  const [editingComment, setEditingComment] = useState(null);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -35,8 +37,30 @@ export default function PostDetailsScreen({ route, navigation }) {
     checkIfLiked();
     loadLikes();
     logViewActivity();
+    loadUserPhoto();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadUserPhoto = async () => {
+    // If we already have the photo URL, no need to fetch
+    if (post.userPhotoURL) {
+      setUserPhotoURL(post.userPhotoURL);
+      return;
+    }
+
+    // Fetch the user's photo from the users collection
+    try {
+      if (post.ownerUid) {
+        const userDoc = await getDoc(doc(db, 'users', post.ownerUid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUserPhotoURL(userData.photoURL || null);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user photo:', error);
+    }
+  };
 
   const loadComments = async () => {
     try {
@@ -49,13 +73,16 @@ export default function PostDetailsScreen({ route, navigation }) {
         querySnapshot.docs.map(async (docSnapshot) => {
           const commentData = docSnapshot.data();
           
-          // Fetch username from users collection
+          // Fetch username and photo from users collection
           let userName = commentData.userName || 'Anonymous';
+          let userPhoto = null;
           if (commentData.userId) {
             try {
               const userDoc = await getDoc(doc(db, 'users', commentData.userId));
               if (userDoc.exists()) {
-                userName = userDoc.data().displayName || userDoc.data().username || userName;
+                const userData = userDoc.data();
+                userName = userData.displayName || userData.username || userName;
+                userPhoto = userData.photoURL || null;
               }
             } catch (err) {
               console.error('Error fetching user:', err);
@@ -66,6 +93,7 @@ export default function PostDetailsScreen({ route, navigation }) {
             id: docSnapshot.id,
             ...commentData,
             userName,
+            userPhoto,
           };
         })
       );
@@ -80,6 +108,34 @@ export default function PostDetailsScreen({ route, navigation }) {
     } catch (error) {
       console.error('Error loading comments:', error);
     }
+  };
+
+  const handleDeleteComment = async (commentId, commentUserId) => {
+    if (commentUserId !== auth.currentUser.uid) {
+      Alert.alert('Error', 'You can only delete your own comments');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'comments', commentId));
+              loadComments();
+            } catch (error) {
+              console.error('Error deleting comment:', error);
+              Alert.alert('Error', 'Failed to delete comment');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const checkIfLiked = async () => {
@@ -210,46 +266,69 @@ export default function PostDetailsScreen({ route, navigation }) {
 
     setLoading(true);
     try {
-      // Get username from Firestore
-      let userName = auth.currentUser.displayName || 'Anonymous';
-      try {
-        const userDocRef = doc(db, 'users', auth.currentUser.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          userName = userDoc.data().username || userName;
+      if (editingComment) {
+        // Update the existing comment
+        await updateDoc(doc(db, 'comments', editingComment.id), {
+          text: newComment.trim(),
+          updatedAt: new Date(),
+        });
+        setEditingComment(null);
+      } else {
+        // Get username from Firestore
+        let userName = auth.currentUser.displayName || 'Anonymous';
+        try {
+          const userDocRef = doc(db, 'users', auth.currentUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            userName = userDoc.data().username || userName;
+          }
+        } catch (err) {
+          console.error('Error fetching username:', err);
         }
-      } catch (err) {
-        console.error('Error fetching username:', err);
-      }
 
-      await addDoc(collection(db, 'comments'), {
-        postId: post.id,
-        userId: auth.currentUser.uid,
-        userName: userName,
-        text: newComment.trim(),
-        createdAt: new Date(),
-      });
-
-      // Send notification to post owner
-      if (post.ownerUid !== auth.currentUser.uid) {
-        await addDoc(collection(db, 'notifications'), {
-          userId: post.ownerUid,
-          type: 'comment',
-          message: `${userName} commented on your post`,
+        await addDoc(collection(db, 'comments'), {
           postId: post.id,
-          read: false,
+          userId: auth.currentUser.uid,
+          userName: userName,
+          text: newComment.trim(),
           createdAt: new Date(),
         });
+
+        // Add to activity
+        await addDoc(collection(db, 'activity'), {
+          userId: auth.currentUser.uid,
+          postId: post.id,
+          post: post,
+          type: 'commented',
+          timestamp: new Date(),
+        });
+
+        // Send notification to post owner
+        if (post.ownerUid !== auth.currentUser.uid) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: post.ownerUid,
+            type: 'comment',
+            message: `${userName} commented on your post`,
+            postId: post.id,
+            read: false,
+            createdAt: new Date(),
+          });
+        }
       }
 
       setNewComment('');
       loadComments();
     } catch (error) {
-      console.error('Error adding comment:', error);
-      alert('Failed to add comment');
+      console.error('Error adding/editing comment:', error);
+      alert('Failed to add/edit comment');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEditComment = (comment) => {
+    setEditingComment(comment);
+    setNewComment(comment.text);
   };
 
   const handleSwapNow = () => {
@@ -320,8 +399,8 @@ export default function PostDetailsScreen({ route, navigation }) {
         <View style={styles.postInfo}>
           <View style={styles.userInfo}>
             <View style={styles.userAvatar}>
-              {post.userPhotoURL ? (
-                <Image source={{ uri: post.userPhotoURL }} style={styles.userAvatarImage} />
+              {userPhotoURL ? (
+                <Image source={{ uri: userPhotoURL }} style={styles.userAvatarImage} />
               ) : (
                 <Icon name="person-circle" size={40} color={colors.accent} />
               )}
@@ -384,7 +463,7 @@ export default function PostDetailsScreen({ route, navigation }) {
               <Icon 
                 name={liked ? "heart" : "heart-outline"} 
                 size={24} 
-                color={liked ? "#ff4444" : colors.dark} 
+                color={liked ? "#9ABEAA" : colors.dark} 
               />
               <Text style={[styles.actionText, liked && styles.likedText]}>
                 {liked ? 'Liked' : 'Like'}
@@ -407,7 +486,7 @@ export default function PostDetailsScreen({ route, navigation }) {
                 style={styles.likesHeader}
                 onPress={() => setShowLikes(!showLikes)}
               >
-                <Icon name="heart" size={20} color="#ff4444" />
+                <Icon name="heart" size={20} color="#9ABEAA" />
                 <Text style={styles.likesCount}>
                   {likes.length} {likes.length === 1 ? 'like' : 'likes'}
                 </Text>
@@ -440,12 +519,35 @@ export default function PostDetailsScreen({ route, navigation }) {
           ) : (
             comments.map(comment => (
               <View key={comment.id} style={styles.comment}>
-                <Icon name="person-circle" size={32} color={colors.accent} />
+                {comment.userPhoto ? (
+                  <Image source={{ uri: comment.userPhoto }} style={styles.commentUserImage} />
+                ) : (
+                  <Icon name="person-circle" size={32} color={colors.accent} />
+                )}
                 <View style={styles.commentContent}>
-                  <Text style={styles.commentUser}>{comment.userName}</Text>
+                  <View style={styles.commentHeader}>
+                    <Text style={styles.commentUser}>{comment.userName}</Text>
+                    {comment.userId === auth.currentUser.uid && (
+                      <View style={{ flexDirection: 'row' }}>
+                        <TouchableOpacity
+                          style={styles.editCommentButton}
+                          onPress={() => handleEditComment(comment)}
+                        >
+                          <Icon name="create-outline" size={16} color="#9ABEAA" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteCommentButton}
+                          onPress={() => handleDeleteComment(comment.id, comment.userId)}
+                        >
+                          <Icon name="trash-outline" size={16} color="#9ABEAA" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.commentText}>{comment.text}</Text>
                   <Text style={styles.commentDate}>
                     {comment.createdAt?.toDate?.().toLocaleDateString() || 'Just now'}
+                    {comment.updatedAt ? ' (edited)' : ''}
                   </Text>
                 </View>
               </View>
@@ -459,6 +561,7 @@ export default function PostDetailsScreen({ route, navigation }) {
         <TextInput
           style={styles.commentInput}
           placeholder="Add a comment..."
+          placeholderTextColor="#585555ff"
           value={newComment}
           onChangeText={setNewComment}
           multiline
@@ -470,8 +573,8 @@ export default function PostDetailsScreen({ route, navigation }) {
         >
           <Icon
             name="send"
-            size={20}
-            color={newComment.trim() ? colors.accent : colors.gray}
+            size={25}
+            color="#9ABEAA"
           />
         </TouchableOpacity>
       </View>
@@ -619,7 +722,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   likedText: {
-    color: '#ff4444',
+    color: '#9ABEAA',
   },
   likesSection: {
     marginTop: spacing.md,
@@ -676,17 +779,28 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     gap: spacing.sm,
   },
+  commentUserImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
   commentContent: {
     flex: 1,
     backgroundColor: '#f8f8f8',
     padding: spacing.sm,
     borderRadius: 12,
   },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   commentUser: {
     fontSize: 14,
     fontWeight: 'bold',
     color: colors.dark,
-    marginBottom: 4,
+    flex: 1,
   },
   commentText: {
     fontSize: 14,
@@ -698,17 +812,28 @@ const styles = StyleSheet.create({
     color: colors.gray,
     marginTop: 4,
   },
+  deleteCommentButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editCommentButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
   addCommentContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: '#ffffffff',
     backgroundColor: '#fff',
   },
   commentInput: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#F5F3E4',
     borderRadius: 20,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -719,7 +844,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#ffffffff',
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -9,6 +9,7 @@ import {
   Animated,
   FlatList,
   Image,
+  PanResponder,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -16,6 +17,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
@@ -34,10 +36,32 @@ export default function HomeScreen({ navigation }) {
   const auth = getAuth();
   const currentUser = auth.currentUser;
 
+  // Pan responder for swipe-to-dismiss notification
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderMove: (_, gestureState) => {
+      if (gestureState.dy < 0) {
+        notificationAnim.setValue(gestureState.dy);
+      }
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      if (gestureState.dy < -50) {
+        dismissNotification();
+      } else {
+        Animated.spring(notificationAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      }
+    },
+  });
+
   useFocusEffect(
     useCallback(() => {
       loadPosts();
       loadSuggestedUsers();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
 
@@ -47,6 +71,7 @@ export default function HomeScreen({ navigation }) {
     }, 5000);
 
     return () => clearInterval(checkNotifications);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadPosts = async () => {
@@ -190,7 +215,7 @@ export default function HomeScreen({ navigation }) {
 
   const showNotification = (notif) => {
     setNotification(notif);
-    
+
     Animated.timing(notificationAnim, {
       toValue: 0,
       duration: 300,
@@ -198,14 +223,23 @@ export default function HomeScreen({ navigation }) {
     }).start();
 
     setTimeout(() => {
-      Animated.timing(notificationAnim, {
-        toValue: -100,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
-        setNotification(null);
-      });
-    }, 20000); // Changed from 10000 to 20000 (20 seconds)
+      dismissNotification();
+    }, 5000); // Notification disappears after 5 seconds
+  };
+
+  const dismissNotification = () => {
+    Animated.timing(notificationAnim, {
+      toValue: -100,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setNotification(null);
+    });
+  };
+
+  const handleNotificationPress = () => {
+    navigation.navigate('Activity');
+    setHasUnreadNotifications(false); // Only reset when user navigates to Activity screen
   };
 
   const handleLike = async (post) => {
@@ -381,7 +415,7 @@ export default function HomeScreen({ navigation }) {
             <Icon 
               name={item.userLiked ? 'heart' : 'heart-outline'} 
               size={28} 
-              color={item.userLiked ? '#ff0000' : colors.dark} 
+              color={item.userLiked ? '#9ABEAA' : colors.dark} 
             />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => handleComment(item)} style={styles.actionButton}>
@@ -421,15 +455,23 @@ export default function HomeScreen({ navigation }) {
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       
       {notification && (
-        <Animated.View 
-          style={[
-            styles.notificationBanner,
-            { transform: [{ translateY: notificationAnim }] }
-          ]}
-        >
-          <Icon name="notifications" size={20} color="#fff" />
-          <Text style={styles.notificationText}>{notification.message}</Text>
-        </Animated.View>
+        <TouchableWithoutFeedback onPress={handleNotificationPress}>
+          <Animated.View 
+            style={[
+              styles.notificationBanner,
+              { transform: [{ translateY: notificationAnim }] }
+            ]}
+            {...panResponder.panHandlers}
+          >
+            <View style={styles.notificationContent}>
+              <Icon name="notifications" size={20} color="#F4C430" />
+              <Text style={styles.notificationText}>{notification.message}</Text>
+            </View>
+            <TouchableOpacity onPress={dismissNotification}>
+              <Icon name="close" size={20} color={colors.dark} />
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableWithoutFeedback>
       )}
       
       <View style={styles.header}>
@@ -438,11 +480,14 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.headerIcon} 
             onPress={() => {
-              setHasUnreadNotifications(false);
               navigation.navigate('Activity');
             }}
           >
-            <Icon name="heart-outline" size={28} color={colors.dark} />
+            <Icon 
+              name={hasUnreadNotifications ? "heart" : "heart-outline"} 
+              size={28} 
+              color={hasUnreadNotifications ? "#F4C430" : colors.dark} 
+            />
             {hasUnreadNotifications && (
               <View style={styles.notificationDot} />
             )}
@@ -549,21 +594,36 @@ const styles = StyleSheet.create({
   },
   notificationBanner: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.accent,
+    top: 50,
+    left: spacing.md,
+    right: spacing.md,
+    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
     zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  notificationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
+    flex: 1,
   },
   notificationText: {
-    color: '#fff',
+    color: colors.dark,
     fontFamily: fonts.body,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     flex: 1,
   },

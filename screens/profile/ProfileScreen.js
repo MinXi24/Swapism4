@@ -3,17 +3,17 @@ import { getAuth } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -140,7 +140,7 @@ export default function ProfileScreen({ navigation }) {
           id: doc.id,
           ...doc.data()
         }))
-        .filter(post => post.ownerUid !== uid) // Filter out current user's posts
+        .filter(post => post.ownerUid !== uid && post.swapStatus === 'available') // Filter out current user's posts and swapped out items
         .slice(0, 10); // Show only first 10 posts
       
       setDiscoverPosts(posts);
@@ -316,9 +316,6 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.logo}>Profile</Text>
         <View style={styles.headerIcons}>
           <TouchableOpacity style={styles.headerIcon}>
-            <Icon name="add-outline" size={28} color={colors.dark} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon}>
             <Icon name="menu-outline" size={28} color={colors.dark} />
           </TouchableOpacity>
         </View>
@@ -436,7 +433,11 @@ export default function ProfileScreen({ navigation }) {
           ) : (
             (userInfo.reviews || []).map((review, index) => (
               <View key={index} style={styles.reviewItem}>
-                <Icon name="person-circle" size={40} color={colors.gray} />
+                {review.userPhoto ? (
+                  <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />
+                ) : (
+                  <Icon name="person-circle" size={40} color={colors.gray} />
+                )}
                 <View style={styles.reviewContent}>
                   <Text style={styles.reviewAuthor}>{review.userName}</Text>
                   <Text style={styles.reviewText}>{review.text}</Text>
@@ -728,7 +729,7 @@ const styles = StyleSheet.create({
     color: colors.dark,
   },
   discoverSection: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F5F3E4',
     paddingVertical: spacing.md,
     marginTop: spacing.sm,
   },
@@ -745,7 +746,7 @@ const styles = StyleSheet.create({
   discoverCard: {
     width: 120,
     height: 150,
-    backgroundColor: colors.secondary,
+    backgroundColor: '#DAD3A1',
     borderRadius: 12,
     overflow: 'hidden',
     marginRight: spacing.sm,
@@ -838,6 +839,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 8,
     marginBottom: spacing.sm,
+  },
+  reviewUserImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   reviewContent: {
     flex: 1,

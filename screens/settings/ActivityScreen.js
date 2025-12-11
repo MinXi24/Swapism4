@@ -12,18 +12,26 @@ import {
   View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
-import BottomNavBar from '../../components/BottomNavBar';
 import { colors, fonts, spacing } from '../../lib/theme';
 
-export default function ActivityScreen({ navigation }) {
-  const [likesOnMyPosts, setLikesOnMyPosts] = useState([]);
+export default function ActivityScreen({ navigation, route }) {
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const auth = getAuth();
   const db = getFirestore();
   const user = auth.currentUser;
 
-  const loadLikesOnMyPosts = async () => {
+  // Clear unread notifications when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (route.params?.clearNotifications) {
+        // Notification cleared by visiting this screen
+      }
+    }, [route.params])
+  );
+
+  const loadActivities = async () => {
     try {
       const uid = user?.uid;
       if (!uid) {
@@ -31,7 +39,7 @@ export default function ActivityScreen({ navigation }) {
         return;
       }
 
-      console.log('Loading likes on my posts...');
+      console.log('Loading activities on my posts...');
       
       // First, get all user's posts
       const postsQuery = query(
@@ -42,10 +50,12 @@ export default function ActivityScreen({ navigation }) {
       const userPostIds = postsSnapshot.docs.map(doc => doc.id);
       
       if (userPostIds.length === 0) {
-        setLikesOnMyPosts([]);
+        setActivities([]);
         setLoading(false);
         return;
       }
+
+      const allActivities = [];
 
       // Get all likes on these posts
       const likesQuery = query(
@@ -54,7 +64,7 @@ export default function ActivityScreen({ navigation }) {
       );
       const likesSnapshot = await getDocs(likesQuery);
       
-      // Enrich likes with post data
+      // Process likes
       const likesData = await Promise.all(
         likesSnapshot.docs.map(async (likeDoc) => {
           const likeData = likeDoc.data();
@@ -63,6 +73,7 @@ export default function ActivityScreen({ navigation }) {
           
           return {
             id: likeDoc.id,
+            type: 'like',
             ...likeData,
             post: postData ? {
               id: postDoc.id,
@@ -72,17 +83,47 @@ export default function ActivityScreen({ navigation }) {
         })
       );
 
+      allActivities.push(...likesData);
+
+      // Get all comments on these posts
+      const commentsQuery = query(
+        collection(db, 'comments'),
+        where('postId', 'in', userPostIds.slice(0, 10))
+      );
+      const commentsSnapshot = await getDocs(commentsQuery);
+      
+      // Process comments
+      const commentsData = await Promise.all(
+        commentsSnapshot.docs.map(async (commentDoc) => {
+          const commentData = commentDoc.data();
+          const postDoc = postsSnapshot.docs.find(doc => doc.id === commentData.postId);
+          const postData = postDoc ? postDoc.data() : null;
+          
+          return {
+            id: commentDoc.id,
+            type: 'comment',
+            ...commentData,
+            post: postData ? {
+              id: postDoc.id,
+              ...postData
+            } : null,
+          };
+        })
+      );
+
+      allActivities.push(...commentsData);
+
       // Sort by created date
-      likesData.sort((a, b) => {
+      allActivities.sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(0);
         const dateB = b.createdAt?.toDate?.() || new Date(0);
         return dateB - dateA;
       });
       
-      console.log('Loaded likes:', likesData.length);
-      setLikesOnMyPosts(likesData);
+      console.log('Loaded activities:', allActivities.length);
+      setActivities(allActivities);
     } catch (error) {
-      console.error('Error loading likes:', error);
+      console.error('Error loading activities:', error);
     } finally {
       setLoading(false);
     }
@@ -90,7 +131,7 @@ export default function ActivityScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      loadLikesOnMyPosts();
+      loadActivities();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
@@ -124,7 +165,7 @@ export default function ActivityScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={24} color={colors.dark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Likes on My Posts</Text>
+        <Text style={styles.headerTitle}>My post&apos;s activities</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -134,41 +175,63 @@ export default function ActivityScreen({ navigation }) {
         </View>
       ) : (
         <ScrollView style={styles.content}>
-          {likesOnMyPosts.length === 0 ? (
+          {activities.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="heart-outline" size={64} color={colors.gray} />
-              <Text style={styles.emptyText}>No likes yet</Text>
+              <Text style={styles.emptyText}>No activity yet</Text>
               <Text style={styles.emptySubtext}>
-                When someone likes your posts, you&apos;ll see them here
+                When someone likes or comments on your posts, you&apos;ll see them here
               </Text>
             </View>
           ) : (
-            likesOnMyPosts.map(like => (
+            activities.map(activity => (
               <TouchableOpacity 
-                key={like.id} 
+                key={activity.id} 
                 style={styles.activityItem}
-                onPress={() => handlePostPress(like.post)}
+                onPress={() => handlePostPress(activity.post)}
               >
-                {like.post?.url && (
+                {activity.post?.url && (
                   <Image 
-                    source={{ uri: like.post.url }} 
+                    source={{ uri: activity.post.url }} 
                     style={styles.activityImage} 
                   />
                 )}
                 <View style={styles.activityInfo}>
                   <Text style={styles.activityTitle}>
-                    <Text style={styles.userName}>{like.userName || 'Someone'}</Text>
-                    {' liked your post'}
+                    <Text 
+                      style={styles.userName}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        if (activity.userId) {
+                          navigation.navigate('UserProfile', { 
+                            userId: activity.userId,
+                            username: activity.userName
+                          });
+                        }
+                      }}
+                    >
+                      {activity.userName || 'Someone'}
+                    </Text>
+                    {activity.type === 'like' ? ' liked your post' : ' commented on your post'}
                   </Text>
-                  {like.post?.title && (
+                  {activity.type === 'comment' && activity.text && (
+                    <Text style={styles.activityDescription} numberOfLines={2}>
+                      {activity.text}
+                    </Text>
+                  )}
+                  {activity.type === 'like' && activity.post?.title && (
                     <Text style={styles.activityDescription} numberOfLines={1}>
-                      {like.post.title}
+                      {activity.post.title}
                     </Text>
                   )}
                   <View style={styles.activityMeta}>
-                    <Icon name="heart" size={14} color="#ff4444" />
+                    <Icon 
+                      name={activity.type === 'like' ? 'heart' : 'chatbubble'} 
+                      size={14} 
+                      color={activity.type === 'like' ? '#ff4444' : colors.accent} 
+                    />
                     <Text style={styles.activityTime}>
-                      {formatDate(like.createdAt)}
+                      {formatDate(activity.createdAt)}
                     </Text>
                   </View>
                 </View>
@@ -178,8 +241,6 @@ export default function ActivityScreen({ navigation }) {
           )}
         </ScrollView>
       )}
-
-      <BottomNavBar navigation={navigation} activeRoute="Profile" />
     </View>
   );
 }

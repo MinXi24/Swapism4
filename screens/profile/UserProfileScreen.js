@@ -1,22 +1,22 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -50,6 +50,37 @@ export default function UserProfileScreen({ route, navigation }) {
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
+
+  const logProfileView = async () => {
+    if (!currentUser || currentUser.uid === userId) return;
+
+    try {
+      // Get current user's username
+      let viewerName = currentUser.displayName || 'Anonymous';
+      try {
+        const viewerDocRef = doc(db, 'users', currentUser.uid);
+        const viewerDoc = await getDoc(viewerDocRef);
+        if (viewerDoc.exists()) {
+          viewerName = viewerDoc.data().username || viewerName;
+        }
+      } catch (err) {
+        console.error('Error fetching viewer name:', err);
+      }
+
+      // Create notification for profile owner
+      await addDoc(collection(db, 'notifications'), {
+        userId: userId,
+        type: 'profile_view',
+        message: `${viewerName} viewed your profile`,
+        viewerId: currentUser.uid,
+        viewerName: viewerName,
+        read: false,
+        createdAt: new Date(),
+      });
+    } catch (error) {
+      console.error('Error logging profile view:', error);
+    }
+  };
 
   const loadUserProfile = async () => {
     try {
@@ -119,6 +150,7 @@ export default function UserProfileScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadUserPosts();
+      logProfileView();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
@@ -221,11 +253,14 @@ export default function UserProfileScreen({ route, navigation }) {
       
       // Get current user's username
       let reviewerName = currentUser?.displayName || 'Anonymous';
+      let reviewerPhoto = null;
       try {
         const reviewerDocRef = doc(db, 'users', currentUser.uid);
         const reviewerDoc = await getDoc(reviewerDocRef);
         if (reviewerDoc.exists()) {
-          reviewerName = reviewerDoc.data().username || reviewerName;
+          const reviewerData = reviewerDoc.data();
+          reviewerName = reviewerData.username || reviewerName;
+          reviewerPhoto = reviewerData.photoURL || null;
         }
       } catch (err) {
         console.error('Error fetching reviewer name:', err);
@@ -234,6 +269,7 @@ export default function UserProfileScreen({ route, navigation }) {
       const newReview = {
         userId: currentUser.uid,
         userName: reviewerName,
+        userPhoto: reviewerPhoto,
         rating: reviewRating,
         text: reviewText.trim(),
         createdAt: new Date().toISOString(),
@@ -440,7 +476,11 @@ export default function UserProfileScreen({ route, navigation }) {
           ) : (
             userInfo.reviews.map((review, index) => (
               <View key={index} style={styles.reviewItem}>
-                <Icon name="person-circle" size={40} color={colors.gray} />
+                {review.userPhoto ? (
+                  <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />
+                ) : (
+                  <Icon name="person-circle" size={40} color={colors.gray} />
+                )}
                 <View style={styles.reviewContent}>
                   <View style={styles.reviewHeader}>
                     <Text style={styles.reviewAuthor}>{review.userName}</Text>
@@ -765,6 +805,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: spacing.sm,
   },
+  reviewUserImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
   reviewContent: {
     flex: 1,
   },
@@ -844,13 +889,14 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     fontSize: 14,
     minHeight: 100,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
   },
   submitButton: {
     backgroundColor: colors.accent,
     padding: spacing.md,
     borderRadius: 8,
     alignItems: 'center',
+    marginBottom: spacing.lg,
   },
   submitButtonText: {
     color: '#fff',
