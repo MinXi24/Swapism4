@@ -845,18 +845,21 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalScrollContent: {
     flexGrow: 1,
-    justifyContent: 'flex-end',
-    paddingBottom: spacing.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     padding: spacing.lg,
+    paddingBottom: spacing.xl * 2,
+    width: '90%',
     maxHeight: '85%',
   },
   modalHeader: {

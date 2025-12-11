@@ -1,20 +1,21 @@
 
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -39,6 +40,7 @@ export default function ProfileScreen({ navigation }) {
   });
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [postalCode, setPostalCode] = useState('');
+  const [favoritePosts, setFavoritePosts] = useState([]);
   const [discoverPosts, setDiscoverPosts] = useState([]);
 
   const auth = getAuth();
@@ -47,6 +49,7 @@ export default function ProfileScreen({ navigation }) {
 
   useEffect(() => {
     loadUserProfile();
+    loadFavoritePosts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -84,6 +87,38 @@ export default function ProfileScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
+    }
+  };
+
+  const loadFavoritePosts = async () => {
+    try {
+      const uid = user?.uid;
+      if (!uid) return;
+
+      const q = query(
+        collection(db, 'likes'),
+        where('userId', '==', uid)
+      );
+      const querySnapshot = await getDocs(q);
+      const likedPostIds = querySnapshot.docs.map(doc => doc.data().postId);
+
+      if (likedPostIds.length > 0) {
+        const postsPromises = likedPostIds.map(async (postId) => {
+          try {
+            const postDoc = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', postId));
+            if (postDoc.exists()) {
+              return { id: postDoc.id, ...postDoc.data() };
+            }
+          } catch (err) {
+            console.error('Error loading post:', err);
+          }
+          return null;
+        });
+        const posts = (await Promise.all(postsPromises)).filter(p => p !== null);
+        setFavoritePosts(posts);
+      }
+    } catch (error) {
+      console.error('Error loading favorite posts:', error);
     }
   };
 
@@ -160,6 +195,52 @@ export default function ProfileScreen({ navigation }) {
 
   const handlePostPress = (post) => {
     navigation.navigate('PostDetails', { post });
+  };
+
+  const handlePostMenu = (post) => {
+    Alert.alert(
+      'Post Options',
+      'What would you like to do?',
+      [
+        {
+          text: 'Delete Post',
+          style: 'destructive',
+          onPress: () => handleDeletePost(post),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const handleDeletePost = async (post) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', post.id));
+              // Refresh posts
+              await loadUserPosts();
+              Alert.alert('Success', 'Post deleted successfully');
+            } catch (error) {
+              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Failed to delete post. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleAddPost = () => {
@@ -503,11 +584,20 @@ export default function ProfileScreen({ navigation }) {
                       onPress={() => handlePostPress(post)}
                     >
                       <Image source={{ uri: post.url }} style={styles.postImage} />
+                      <TouchableOpacity
+                        style={styles.postMenuButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handlePostMenu(post);
+                        }}
+                      >
+                        <Icon name="ellipsis-vertical" size={20} color="#fff" />
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   ))}
               </View>
-            )
-          )}
+            ))
+          }
 
           {activeTab === 'forSwap' && (
             userPosts.filter(p => p.postType === 'forSwap').length === 0 ? (
@@ -527,6 +617,15 @@ export default function ProfileScreen({ navigation }) {
                       onPress={() => handlePostPress(post)}
                     >
                       <Image source={{ uri: post.url }} style={styles.postImage} />
+                      <TouchableOpacity
+                        style={styles.postMenuButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handlePostMenu(post);
+                        }}
+                      >
+                        <Icon name="ellipsis-vertical" size={20} color="#fff" />
+                      </TouchableOpacity>
                       {/* Swap Status Badge */}
                       <View style={[
                         styles.swapStatusBadge,
@@ -539,14 +638,30 @@ export default function ProfileScreen({ navigation }) {
                     </TouchableOpacity>
                   ))}
               </View>
-            )
-          )}
+            ))
+          }
 
           {activeTab === 'mirror' && (
-            <View style={styles.emptyState}>
-              <Icon name="accessibility-outline" size={64} color={colors.gray} />
-              <Text style={styles.emptyStateText}>Mirror coming soon</Text>
-              <Text style={styles.emptyStateSubtext}>Check your full outfit mirror here!</Text>
+            <View>
+              <Text style={styles.sectionTitle}>Virtual Try-On Mirror</Text>
+              {Array.isArray(userPosts) && (userPosts.filter(p => p.postType === 'forSwap' || p.postType === 'forFun').length === 0) ? (
+                <View style={styles.emptyState}>
+                  <Icon name="accessibility-outline" size={64} color={colors.gray} />
+                  <Text style={styles.emptyStateText}>No items to try on</Text>
+                  <Text style={styles.emptyStateSubtext}>Post your clothes to try them virtually!</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.tryOnButton}
+                  onPress={() => navigation.navigate('TryOnScreen', { 
+                    allItems: (Array.isArray(userPosts) ? userPosts : []).filter(p => p.postType === 'forSwap' || p.postType === 'forFun')
+                  })}
+                >
+                  <Icon name="shirt-outline" size={32} color={colors.accent} />
+                  <Text style={styles.tryOnButtonText}>Open Virtual Mirror</Text>
+                  <Text style={styles.tryOnButtonSubtext}>Try on your {(Array.isArray(userPosts) ? userPosts : []).filter(p => p.postType === 'forSwap' || p.postType === 'forFun').length} clothing items</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
@@ -1027,5 +1142,56 @@ const styles = StyleSheet.create({
   },
   modalButtonTextSave: {
     color: '#fff',
+  },
+  tryOnBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#9ABEAA',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tryOnBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  tryOnButton: {
+    backgroundColor: '#f0f8f4',
+    padding: spacing.xl,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.accent,
+    borderStyle: 'dashed',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+  },
+  tryOnButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.accent,
+    marginTop: spacing.sm,
+  },
+  tryOnButtonSubtext: {
+    fontSize: 14,
+    color: colors.gray,
+    marginTop: 4,
+  },
+  postMenuButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
 });

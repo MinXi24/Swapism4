@@ -543,14 +543,24 @@ export default function PostDetailsScreen({ route, navigation }) {
           {activePost.postType === 'forSwap' && (
             <View style={styles.swapActionsContainer}>
               {activePost.ownerUid !== auth.currentUser.uid ? (
+                // Show "Swap Now" and "Try On" buttons for non-owners if available
                 currentSwapStatus === 'available' && (
-                  <TouchableOpacity 
-                    style={styles.swapNowButton}
-                    onPress={handleSwapNow}
-                  >
-                    <Icon name="swap-horizontal" size={20} color="#fff" />
-                    <Text style={styles.swapNowButtonText}>Swap Now</Text>
-                  </TouchableOpacity>
+                  <View>
+                    <TouchableOpacity 
+                      style={styles.swapNowButton}
+                      onPress={handleSwapNow}
+                    >
+                      <Icon name="swap-horizontal" size={20} color="#fff" />
+                      <Text style={styles.swapNowButtonText}>Swap Now</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.tryOnButton}
+                      onPress={() => navigation.navigate('TryOnScreen', { item: activePost })}
+                    >
+                      <Icon name="accessibility" size={20} color="#9ABEAA" />
+                      <Text style={styles.tryOnButtonText}>Try On Virtually</Text>
+                    </TouchableOpacity>
+                  </View>
                 )
               ) : (
                 <TouchableOpacity 
@@ -616,6 +626,21 @@ export default function PostDetailsScreen({ route, navigation }) {
                   ))}
                 </View>
               )}
+            </View>
+          )}
+
+          {/* Tagged Users Section */}
+          {activePost.taggedUsers && activePost.taggedUsers.length > 0 && (
+            <View style={styles.taggedUsers}>
+              <Text>Tagged: </Text>
+              {activePost.taggedUsers.map((user, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => navigation.navigate('UserProfile', { userId: user.uid })}
+                >
+                  <Text style={styles.taggedUsername}>@{user.username} </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           )}
         </View>
@@ -800,11 +825,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     paddingVertical: spacing.md,
     borderRadius: 8,
+    marginBottom: spacing.sm,
   },
   swapNowButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  tryOnButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#F5F3E4',
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#9ABEAA',
+  },
+  tryOnButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#9ABEAA',
   },
   changeStatusButton: {
     flexDirection: 'row',
@@ -973,5 +1015,17 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  taggedUsers: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: spacing.sm,
+  },
+  taggedUsername: {
+    fontSize: 14,
+    color: colors.accent,
+    fontWeight: '500',
+    marginRight: 4,
   },
 });
