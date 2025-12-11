@@ -3,7 +3,6 @@ import {
   Alert,
   Image,
   SafeAreaView,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -96,7 +95,7 @@ export default function LoginScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={colors.secondary} barStyle="dark-content" />
       
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
         {/* Back Button */}
         <TouchableOpacity 
           style={styles.backButton}
@@ -177,25 +176,25 @@ export default function LoginScreen({ navigation }) {
               style={styles.socialButton}
               onPress={() => handleSocialLogin('Google')}
             >
-              <Icon name="logo-google" size={24} color="#DB4437" />
+              <Icon name="logo-google" size={32} color={colors.dark} />
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.socialButton}
               onPress={() => handleSocialLogin('Apple')}
             >
-              <Icon name="logo-apple" size={24} color={colors.dark} />
+              <Icon name="logo-apple" size={32} color={colors.dark} />
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.socialButton}
               onPress={() => handleSocialLogin('Facebook')}
             >
-              <Icon name="logo-facebook" size={24} color="#1877F2" />
+              <Icon name="logo-facebook" size={32} color="#1877F2" />
             </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -205,8 +204,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.secondary,
   },
-  scrollContent: {
-    flexGrow: 1,
+  content: {
+    flex: 1,
     paddingHorizontal: spacing.sm,
   },
   backButton: {
@@ -216,7 +215,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 0,
+    marginBottom: -10,
   },
   logo: {
     width: 250,
@@ -224,38 +223,39 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   title: {
     fontFamily: fonts.header,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.dark,
   },
   illustrationContainer: {
     alignItems: 'center',
-    marginBottom: 0,
+    marginBottom: -10,
   },
+  // --- CONFLICT REMOVED HERE ---
   illustration: {
-    width: 280,
-    height: 200,
+    width: 240,
+    height: 160,
   },
   formContainer: {
     flex: 1,
   },
   input: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   loginButton: {
     marginTop: spacing.sm,
-    marginBottom: spacing.md,
-    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   linksContainer: {
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
     gap: 4,
   },
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   dividerLine: {
     flex: 1,
@@ -291,13 +291,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: spacing.lg,
-    paddingBottom: spacing.lg,
+    paddingTop: 0,
+    paddingBottom: spacing.md,
   },
   socialButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.light,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: colors.dark,
