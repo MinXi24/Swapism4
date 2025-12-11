@@ -4,7 +4,6 @@ import { getAuth } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   FlatList,
@@ -450,9 +449,53 @@ export default function HomeScreen({ navigation }) {
     </View>
   );
 
+  const renderHeader = () => (
+    <>
+      {/* Home Illustration */}
+      <View style={styles.illustrationContainer}>
+        <Image
+          source={require('../../assets/images/home-illustration.png')}
+          style={styles.illustration}
+          resizeMode="contain"
+        />
+      </View>
+
+      {/* Suggested Accounts Section */}
+      {suggestedUsers.length > 0 && (
+        <View style={styles.suggestedSection}>
+          <Text style={styles.suggestedTitle}>Suggested Accounts</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.suggestedScroll}
+          >
+            {suggestedUsers.map((user) => (
+              <TouchableOpacity
+                key={user.uid}
+                style={styles.suggestedUser}
+                onPress={() => handleUserProfilePress(user)}
+              >
+                <View style={styles.suggestedAvatar}>
+                  {user.photoURL ? (
+                    <Image source={{ uri: user.photoURL }} style={styles.suggestedAvatarImage} />
+                  ) : (
+                    <Icon name="person" size={32} color={colors.gray} />
+                  )}
+                </View>
+                <Text style={styles.suggestedUsername} numberOfLines={1}>
+                  {user.userName}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+      <StatusBar backgroundColor={colors.accent} barStyle="dark-content" />
       
       {notification && (
         <TouchableWithoutFeedback onPress={handleNotificationPress}>
@@ -495,60 +538,16 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Suggested Accounts Section */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.loadingText}>Loading posts...</Text>
-        </View>
-      ) : posts.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Icon name="images-outline" size={64} color={colors.gray} />
-          <Text style={styles.emptyText}>No posts yet</Text>
-          <Text style={styles.emptySubtext}>Start following people or create your first post!</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={posts}
-          renderItem={renderPost}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            suggestedUsers.length > 0 ? (
-              <View style={styles.suggestedSection}>
-                <Text style={styles.suggestedTitle}>Suggested Accounts</Text>
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.suggestedScroll}
-                >
-                  {suggestedUsers.map((user) => (
-                    <TouchableOpacity 
-                      key={user.uid} 
-                      style={styles.suggestedUser}
-                      onPress={() => handleUserProfilePress(user)}
-                    >
-                    <View style={styles.suggestedAvatar}>
-                      {user.photoURL ? (
-                        <Image source={{ uri: user.photoURL }} style={styles.suggestedAvatarImage} />
-                      ) : (
-                        <Icon name="person" size={32} color={colors.gray} />
-                      )}
-                    </View>
-                      <Text style={styles.suggestedUsername} numberOfLines={1}>
-                        {user.userName}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null
-          }
-          refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={loadPosts} />
-          }
-        />
-      )}
+      <FlatList
+        data={posts}
+        renderItem={renderPost}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={renderHeader}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={loadPosts} />
+        }
+      />
 
       <BottomNavBar navigation={navigation} activeRoute="Home" />
     </SafeAreaView>
@@ -751,6 +750,15 @@ const styles = StyleSheet.create({
     color: colors.gray,
     textAlign: 'center',
     marginTop: spacing.sm,
+  },
+  illustrationContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  illustration: {
+    width: '100%',
+    height: 200,
   },
   suggestedSection: {
     backgroundColor: '#f5f3e4',

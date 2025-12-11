@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, doc, getDoc, getDocs, getFirestore, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getFirestore, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,7 +21,7 @@ import { colors, spacing } from '../../lib/theme';
 const CLOUDINARY_CLOUD_NAME = 'dblq6cttn';
 const CLOUDINARY_UPLOAD_PRESET = 'myPreset';
 
-export default function AddPostScreen({ navigation }) {
+export default function AddPostScreen({ navigation, route }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [processedImage, setProcessedImage] = useState(null);
   const [title, setTitle] = useState('');
@@ -41,7 +41,12 @@ export default function AddPostScreen({ navigation }) {
 
   useEffect(() => {
     requestPermission();
-  }, []);
+    
+    // Check if we have a captured image from TryOn screen
+    if (route?.params?.capturedImage) {
+      setSelectedImage({ uri: route.params.capturedImage });
+    }
+  }, [route?.params?.capturedImage]);
 
   const requestPermission = async () => {
     const { status: galleryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -242,52 +247,71 @@ export default function AddPostScreen({ navigation }) {
   const handleTagPeople = () => {
     setShowUserSearch(true);
     setSearchQuery('');
-    setFilteredUsers([]);
+    searchUsers(''); // Load all followed users initially
   };
 
   const searchUsers = async (searchText) => {
     setSearchQuery(searchText);
     
-    if (searchText.trim().length < 2) {
-      setFilteredUsers([]);
-      return;
-    }
-
     setLoading(true);
     try {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '>=', searchText), where('username', '<=', searchText + '\uf8ff'));
-      const querySnapshot = await getDocs(q);
+      const currentUserId = auth.currentUser?.uid;
+      if (!currentUserId) {
+        setFilteredUsers([]);
+        return;
+      }
+
+      // Get followed users from current user's following list
+      const userDocRef = doc(db, 'users', currentUserId);
+      const userDocSnap = await getDoc(userDocRef);
       
+      if (!userDocSnap.exists()) {
+        setFilteredUsers([]);
+        return;
+      }
+
+      const userData = userDocSnap.data();
+      const followingList = userData.following || [];
+
+      if (followingList.length === 0) {
+        setFilteredUsers([]);
+        return;
+      }
+
+      // Fetch details of followed users
       const users = [];
-      querySnapshot.forEach((doc) => {
-        const userData = doc.data();
-        const username = userData.username || '';
-        const displayName = userData.displayName || '';
-        
-        // Search by username or display name
-        if (
-          username.toLowerCase().includes(searchText.toLowerCase()) ||
-          displayName.toLowerCase().includes(searchText.toLowerCase())
-        ) {
-          // Don't show already tagged users or current user
-          const alreadyTagged = taggedUsers.some(u => u.uid === doc.id);
-          const isCurrentUser = doc.id === auth.currentUser?.uid;
+      console.log('Following list:', followingList);
+      
+      for (const followedUserId of followingList) {
+        const followedUserDoc = await getDoc(doc(db, 'users', followedUserId));
+        if (followedUserDoc.exists()) {
+          const followedUserData = followedUserDoc.data();
+          const username = followedUserData.username || '';
+          const displayName = followedUserData.displayName || '';
           
-          if (!alreadyTagged && !isCurrentUser) {
+          // Filter by search text if provided
+          const matchesSearch = !searchText.trim() || 
+            username.toLowerCase().includes(searchText.toLowerCase()) ||
+            displayName.toLowerCase().includes(searchText.toLowerCase());
+          
+          // Don't show already tagged users
+          const alreadyTagged = taggedUsers.some(u => u.uid === followedUserId);
+          
+          if (matchesSearch && !alreadyTagged) {
             users.push({
-              uid: doc.id,
+              uid: followedUserId,
               username: username,
               displayName: displayName,
-              photoURL: userData.photoURL || null,
+              photoURL: followedUserData.photoURL || null,
             });
           }
         }
-      });
+      }
       
+      console.log('Filtered users:', users.length);
       setFilteredUsers(users);
     } catch (error) {
-      console.error('Error searching users:', error);
+      console.error('Error fetching followed users:', error);
     } finally {
       setLoading(false);
     }
@@ -722,7 +746,7 @@ export default function AddPostScreen({ navigation }) {
       <Modal
         visible={showUserSearch}
         animationType="slide"
-        transparent={true}
+        transparent={false}
         onRequestClose={() => setShowUserSearch(false)}
       >
         <View style={styles.modalOverlay}>
@@ -738,7 +762,7 @@ export default function AddPostScreen({ navigation }) {
               <Icon name="search" size={20} color={colors.gray} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search users..."
+                placeholder="Search from people you follow..."
                 value={searchQuery}
                 onChangeText={searchUsers}
                 autoFocus
@@ -775,8 +799,10 @@ export default function AddPostScreen({ navigation }) {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                !loading && searchQuery.length >= 2 && (
-                  <Text style={styles.emptyText}>No users found</Text>
+                !loading && (
+                  <Text style={styles.emptyText}>
+                    {searchQuery ? 'No users found' : 'You are not following anyone yet'}
+                  </Text>
                 )
               }
               style={styles.userList}
@@ -808,7 +834,8 @@ const styles = StyleSheet.create({
   },
   uploadSection: {
     backgroundColor: '#fff',
-    padding: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: 0,
     minHeight: '100%',
   },
   imagePicker: {
@@ -818,6 +845,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: spacing.md,
+    marginHorizontal: spacing.md,
+    alignSelf: 'center',
+    maxWidth: '95%',
   },
   imagePickerPlaceholder: {
     flex: 1,
@@ -842,6 +872,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     borderRadius: 8,
     marginBottom: spacing.sm,
+    marginHorizontal: spacing.md,
   },
   processingText: {
     fontSize: 14,
@@ -858,6 +889,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.accent,
+    marginHorizontal: spacing.md,
   },
   bgRemovalButtonText: {
     fontSize: 14,
@@ -871,6 +903,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: spacing.sm,
     marginBottom: spacing.sm,
+    marginHorizontal: spacing.md,
   },
   input: {
     flex: 1,
@@ -884,6 +917,7 @@ const styles = StyleSheet.create({
   },
   postTypeSection: {
     marginBottom: spacing.md,
+    marginHorizontal: spacing.md,
   },
   sectionLabel: {
     fontSize: 16,
@@ -941,6 +975,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: spacing.md,
+    marginHorizontal: spacing.md,
   },
   tagChip: {
     flexDirection: 'row',
@@ -958,8 +993,9 @@ const styles = StyleSheet.create({
   postButton: {
     flexDirection: 'row',
     backgroundColor: colors.accent,
-    borderRadius: 8,
+    borderRadius: 0,
     padding: spacing.md,
+    paddingVertical: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
@@ -976,15 +1012,15 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 20,
+    flex: 1,
     padding: spacing.lg,
-    paddingBottom: spacing.xl * 2,
-    maxHeight: '70%',
-    width: '90%',
+    paddingBottom: spacing.xl,
+    width: '100%',
+    height: '100%',
   },
   modalHeader: {
     flexDirection: 'row',

@@ -40,6 +40,7 @@ export default function UserProfileScreen({ route, navigation }) {
     reviewCount: 0,
     reviews: [],
     photoURL: null,
+    username: username || '',
   });
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
@@ -97,6 +98,7 @@ export default function UserProfileScreen({ route, navigation }) {
           reviewCount: userData.reviewCount || 0,
           reviews: userData.reviews || [],
           photoURL: userData.photoURL || null,
+          username: userData.username || username || 'User',
         });
         
         // Load followers and following counts
@@ -375,7 +377,7 @@ export default function UserProfileScreen({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={24} color={colors.dark} />
         </TouchableOpacity>
-        <Text style={styles.logo}>{username}</Text>
+        <Text style={styles.logo}>{userInfo.username}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -409,7 +411,7 @@ export default function UserProfileScreen({ route, navigation }) {
             </View>
           </View>
 
-          <Text style={styles.userName}>{username}</Text>
+          <Text style={styles.userName}>{userInfo.username}</Text>
           
           {/* Bio */}
           <Text style={styles.userBio}>{userInfo.bio}</Text>
@@ -844,7 +846,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -853,14 +855,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   modalContent: {
     backgroundColor: '#fff',
     borderRadius: 20,
-    padding: spacing.lg,
+    paddingVertical: spacing.xl * 1.5,
+    paddingHorizontal: spacing.xl * 2,
     paddingBottom: spacing.xl * 2,
-    width: '90%',
+    width: '100%',
+    maxWidth: 750,
+    minWidth: 350,
     maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   modalHeader: {
     flexDirection: 'row',
