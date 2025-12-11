@@ -61,29 +61,24 @@ export default function MessagesScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={colors.accent} barStyle="dark-content" />
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logo}>Swapism</Text>
-        </View>
-        <Text style={styles.pageTitle}>Messages</Text>
-        <TouchableOpacity style={styles.menuButton}>
-          <Icon name="menu-outline" size={24} color={colors.dark} />
+        <Text style={styles.logo}>Messages</Text>
+        <TouchableOpacity style={styles.headerIcon}>
+          <Icon name="heart-outline" size={28} color={colors.dark} />
         </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Input
-          placeholder="Search..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          leftIcon="search-outline"
-          style={styles.searchBar}
-        />
-      </View>
+      <Input
+        placeholder="Search..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        leftIcon="search-outline"
+        style={styles.searchBar}
+      />
 
       {/* Messages List */}
       <View style={styles.messagesContainer}>
@@ -105,41 +100,26 @@ export default function MessagesScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: '#ffffff',
   },
   header: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  logoContainer: {
-    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   logo: {
     fontFamily: fonts.header,
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.dark,
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.accent,
   },
-  pageTitle: {
-    fontFamily: fonts.header,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.dark,
-    flex: 2,
-    textAlign: 'center',
-  },
-  menuButton: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  searchContainer: {
-    backgroundColor: colors.light,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
+  headerIcon: {
+    padding: 4,
   },
   searchBar: {
     marginHorizontal: spacing.md,

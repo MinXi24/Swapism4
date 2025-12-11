@@ -72,14 +72,22 @@ export default function BottomNavBar({ navigation, activeRoute }) {
 const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: colors.primary,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   navItem: {
-    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
   },
 });
