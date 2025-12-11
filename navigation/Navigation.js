@@ -9,6 +9,7 @@ import AddPostScreen from '../screens/profile/AddPostScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import PostDetailsScreen from '../screens/profile/PostDetailsScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import TryOnScreen from '../screens/profile/TryOnScreen';
 import UserProfileScreen from '../screens/profile/UserProfileScreen';
 import ActivityScreen from '../screens/settings/ActivityScreen';
 import ItemDetailsScreen from '../screens/swap/ItemDetailsScreen';
@@ -38,6 +39,7 @@ export default function Navigation() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="AddPost" component={AddPostScreen} />
       <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
+      <Stack.Screen name="TryOnScreen" component={TryOnScreen} />
       <Stack.Screen name="Activity" component={ActivityScreen} />
     </Stack.Navigator>
   );
