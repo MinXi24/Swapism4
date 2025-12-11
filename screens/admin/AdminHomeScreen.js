@@ -14,16 +14,26 @@ import {
 
 // --- NEW IMPORTS ---
 import { useFocusEffect } from '@react-navigation/native';
-import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  updateDoc,
+  where
+} from 'firebase/firestore';
 
 // --- IMPORTS ---
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 // --- CONSTANTS ---
-const ACTIVE_YELLOW = '#FDD835'; // Matched active color
+const ACTIVE_YELLOW = '#FDD835'; 
 
-// --- MOCK DATA (Kept for unrelated sections) ---
+// --- MOCK DATA ---
 const feedbacksData = [
   { 
     id: '3', 
@@ -33,13 +43,6 @@ const feedbacksData = [
   },
 ];
 
-const statsData = [
-    { label: 'Pending', value: '12', icon: 'alert-circle-outline', color: '#FF6B6B' },
-    { label: 'Users', value: '1.2k', icon: 'people-outline', color: colors.dark }, 
-    { label: 'Swaps', value: '340', icon: 'swap-horizontal-outline', color: '#9abeaa' }, 
-    { label: 'Feedback', value: '5', icon: 'chatbubble-outline', color: '#FCE77D' },
-];
-
 export default function AdminHomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home');
@@ -47,9 +50,18 @@ export default function AdminHomeScreen({ navigation }) {
   // --- NEW STATE FOR REAL DATA ---
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // New State for Dashboard Counts
+  const [stats, setStats] = useState({
+    pending: 0,
+    users: 0,
+    swaps: 0,
+    feedback: 0
+  });
+
   const db = getFirestore();
 
-  // --- FETCH REPORTS LOGIC ---
+  // --- FETCH REPORTS & STATS LOGIC ---
   useFocusEffect(
     useCallback(() => {
       loadReports();
@@ -59,43 +71,144 @@ export default function AdminHomeScreen({ navigation }) {
   const loadReports = async () => {
     try {
       setLoading(true);
-      // Fetch from your 'report' collection
-      const q = query(
+      
+      // 1. Prepare Report Queries
+      const postsQuery = query(
         collection(db, 'report'),
         where('status', '==', 'pending')
       );
       
-      const querySnapshot = await getDocs(q);
+      const commentsQuery = query(
+        collection(db, 'reported_comments'),
+        where('status', '==', 'pending')
+      );
       
-      // Map Firestore data to your UI structure
-      const fetchedReports = querySnapshot.docs.map(doc => {
-        const data = doc.data();
+      // 2. Prepare Count Collections
+      const usersColl = collection(db, 'users');
+      const swapsColl = collection(db, 'swaps'); 
+      const feedbackColl = collection(db, 'feedbacks');
+
+      // 3. Run EVERYTHING in parallel
+      const [
+        postSnapshot, 
+        commentSnapshot,
+        usersSnap,
+        swapsSnap,
+        feedbackSnap
+      ] = await Promise.all([
+        getDocs(postsQuery),
+        getDocs(commentsQuery),
+        getCountFromServer(usersColl),
+        getCountFromServer(swapsColl),
+        getCountFromServer(feedbackColl)
+      ]);
+      
+      // 4. Process Reports List
+      
+      // --- Process Posts (With Correct Field Name Check) ---
+      const postPromises = postSnapshot.docs.map(async (docSnapshot) => {
+        const data = docSnapshot.data();
+        
+        // CORRECTION: Use the field name from your screenshot
+        const reportedId = data.reported_clothes_id; 
+
+        if (reportedId) {
+            // Check the 'swaps' collection for this ID
+            const postRef = doc(db, 'swaps', reportedId);
+            const postSnap = await getDoc(postRef);
+            const postData = postSnap.exists() ? postSnap.data() : null;
+
+            // Check if physically missing OR marked deleted in data
+            const isPhysicallyDeleted = !postSnap.exists();
+            const isMarkedDeleted = postData && (
+                postData.status === 'deleted' || 
+                postData.status === 'archived' || 
+                postData.status === 'sold' ||
+                postData.isDeleted === true
+            );
+
+            if (isPhysicallyDeleted || isMarkedDeleted) {
+                console.log(`Auto-resolving report ${docSnapshot.id}. Item ${reportedId} is missing/deleted.`);
+                
+                // 1. Update Firestore to 'resolved'
+                await updateDoc(doc(db, 'report', docSnapshot.id), {
+                    status: 'resolved',
+                    admin_note: 'System Auto-Resolve: Item deleted'
+                });
+
+                // 2. Return null to hide from screen immediately
+                return null; 
+            }
+        }
+
         return {
-            id: doc.id,
-            ...data, // Keep original data for the next screen
-            // UI Mappings
+            id: docSnapshot.id,
+            ...data,
+            reportType: 'post',
             name: data.reporter_user_id ? `User...${data.reporter_user_id.slice(-4)}` : 'Anonymous',
-            detail: data.reason || 'Reported Content',
-            type: 'ACCOUNT_FLAG', // Using your existing style type
-            priority: 'high',
-            rating: 0 
+            detail: `Post: ${data.reason || 'Reported Content'}`,
+            timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
+            icon: 'alert-circle',
+            iconColor: '#FF6B6B'
         };
       });
 
-      // Sort by newest
-      fetchedReports.sort((a, b) => b.created_at - a.created_at);
-      setReports(fetchedReports);
+      // --- Process Comments ---
+      const formattedComments = commentSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            reportType: 'comment',
+            name: data.reporterName || 'Unknown Reporter',
+            detail: `Comment: "${data.targetContent}"`, 
+            timestamp: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(0),
+            icon: 'chatbubble-ellipses',
+            iconColor: '#FDD835'
+        };
+      });
+
+      // Await all checks
+      const resolvedPosts = await Promise.all(postPromises);
+      
+      // Filter out the nulls (the auto-resolved ones)
+      const validPosts = resolvedPosts.filter(item => item !== null);
+
+      const allReports = [...validPosts, ...formattedComments];
+      allReports.sort((a, b) => b.timestamp - a.timestamp);
+
+      setReports(allReports);
+
+      // 5. Update Stats State
+      setStats({
+        pending: allReports.length,
+        users: usersSnap.data().count,
+        swaps: swapsSnap.data().count,
+        feedback: feedbackSnap.data().count
+      });
+
     } catch (error) {
-      console.error('Error loading reports:', error);
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  // --- DYNAMIC STATS DATA ---
+  const statsData = [
+    { label: 'Pending', value: stats.pending, icon: 'alert-circle-outline', color: '#FF6B6B' },
+    { label: 'Users', value: stats.users, icon: 'people-outline', color: colors.dark }, 
+    { label: 'Swaps', value: stats.swaps, icon: 'swap-horizontal-outline', color: '#9abeaa' }, 
+    { label: 'Feedback', value: stats.feedback, icon: 'chatbubble-outline', color: '#FCE77D' },
+  ];
+
   // --- NAVIGATION LOGIC ---
   const handleViewItem = (item) => {
-    // Pass the real report item to ManageAccount
-    navigation.navigate('ManageAccount', { report: item });
+    if (item.reportType === 'comment') {
+        navigation.navigate('ManageComments');
+    } else {
+        navigation.navigate('ManageAccount', { report: item });
+    }
   };
 
   const handleNavigation = (tab) => {
@@ -105,22 +218,6 @@ export default function AdminHomeScreen({ navigation }) {
       case 'profiles': navigation.navigate('ManageAccount'); break;
       case 'comments': navigation.navigate('ManageComments'); break;
     }
-  };
-
-  const renderStars = (count) => {
-    return (
-        <View style={styles.starRow}>
-            {[1, 2, 3, 4, 5].map((star, index) => (
-                <Icon 
-                    key={index} 
-                    name={index < count ? "star" : "star-outline"} 
-                    size={14} 
-                    color="#FFD700" 
-                    style={{ marginRight: 2 }}
-                />
-            ))}
-        </View>
-    );
   };
 
   return (
@@ -163,7 +260,7 @@ export default function AdminHomeScreen({ navigation }) {
         <View style={styles.heroContainer}>
            <View style={styles.heroTextContainer}>
                 <Text style={styles.greetingText}>Hello, Admin 👋</Text>
-                <Text style={styles.subGreetingText}>You have {reports.length} pending reports</Text>
+                <Text style={styles.subGreetingText}>You have {stats.pending} pending reports</Text>
            </View>
            <View style={styles.heroIconCircle}>
                 <Icon name="shield-checkmark-outline" size={32} color="#9abeaa" />
@@ -175,7 +272,9 @@ export default function AdminHomeScreen({ navigation }) {
             {statsData.map((stat, index) => (
                 <View key={index} style={styles.statCard}>
                     <View style={styles.statHeader}>
-                        <Text style={styles.statValue}>{stat.value}</Text>
+                        <Text style={styles.statValue}>
+                            {loading && stat.value === 0 ? '...' : stat.value}
+                        </Text>
                         <Icon name={stat.icon} size={20} color={stat.color} />
                     </View>
                     <Text style={styles.statLabel}>{stat.label}</Text>
@@ -183,7 +282,7 @@ export default function AdminHomeScreen({ navigation }) {
             ))}
         </View>
 
-        {/* --- REPORTS SECTION (UPDATED) --- */}
+        {/* --- REPORTS SECTION --- */}
         <View style={styles.sectionHeaderRow}>
              <Text style={styles.sectionTitle}>Recent Reports</Text>
              <TouchableOpacity onPress={loadReports}>
@@ -200,17 +299,13 @@ export default function AdminHomeScreen({ navigation }) {
                 reports.map((item) => (
                 <View key={item.id} style={styles.listItem}>
                     <View style={styles.listItemLeft}>
-                        {/* Status Indicator Line */}
-                        <View style={[styles.statusIndicator, { backgroundColor: '#FF6B6B' }]} />
-                        
+                        <View style={[styles.statusIndicator, { backgroundColor: item.iconColor }]} />
                         <View style={styles.avatar}>
-                            <Icon name="alert-circle" size={20} color={colors.gray} />
+                            <Icon name={item.icon} size={20} color={colors.gray} />
                         </View>
-                        
                         <View style={styles.textContainer}>
                             <Text style={styles.nameText}>{item.name}</Text>
-                            {/* Display Report Reason */}
-                            <Text style={styles.detailText}>{item.detail}</Text>
+                            <Text style={styles.detailText} numberOfLines={1}>{item.detail}</Text>
                         </View>
                     </View>
                     
@@ -235,11 +330,9 @@ export default function AdminHomeScreen({ navigation }) {
               <View key={item.id} style={styles.listItem}>
                 <View style={styles.listItemLeft}>
                     <View style={[styles.statusIndicator, { backgroundColor: '#9abeaa' }]} />
-                    
                     <View style={styles.avatar}>
                          <Icon name="person" size={20} color={colors.gray} />
                     </View>
-                    
                     <View style={styles.textContainer}>
                         <Text style={styles.nameText}>{item.name}</Text>
                         <Text style={styles.detailText} numberOfLines={1}>
@@ -247,7 +340,6 @@ export default function AdminHomeScreen({ navigation }) {
                         </Text>
                     </View>
                 </View>
-                
                 <TouchableOpacity 
                     style={styles.reviewButton}
                     onPress={() => {}}
@@ -296,7 +388,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  
   // --- HEADER ---
   header: {
     flexDirection: 'row',
@@ -321,7 +412,6 @@ const styles = StyleSheet.create({
   headerIcon: {
     padding: 4,
   },
-
   // --- SEARCH ---
   searchContainer: {
     paddingHorizontal: spacing.md,
@@ -339,12 +429,10 @@ const styles = StyleSheet.create({
   },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, fontSize: 14, fontFamily: fonts.body, color: colors.dark, height: '100%' },
-
   // --- SCROLL CONTENT ---
   scrollContent: { 
     paddingBottom: 80 
   },
-
   // --- HERO ---
   heroContainer: {
     flexDirection: 'row',
@@ -365,7 +453,6 @@ const styles = StyleSheet.create({
       width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', 
       justifyContent: 'center', alignItems: 'center'
   },
-
   // --- STATS ---
   statsGrid: {
     flexDirection: 'row',
@@ -396,7 +483,6 @@ const styles = StyleSheet.create({
   },
   statValue: { fontFamily: fonts.header, fontSize: 24, fontWeight: '700', color: colors.dark },
   statLabel: { fontFamily: fonts.body, fontSize: 12, color: colors.gray },
-
   // --- SECTIONS ---
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -408,7 +494,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontFamily: fonts.header, fontSize: 16, fontWeight: '700', color: colors.dark },
   viewAllText: { fontFamily: fonts.body, fontSize: 14, color: '#9abeaa', fontWeight: '600' },
-
   // --- LIST ITEMS ---
   listContainer: { paddingHorizontal: spacing.md, marginBottom: spacing.sm },
   listItem: {
@@ -435,11 +520,7 @@ const styles = StyleSheet.create({
   },
   textContainer: { flex: 1 },
   nameText: { fontFamily: fonts.body, fontWeight: '600', fontSize: 14, color: colors.dark, marginBottom: 2 },
-  
-  ratingDetailContainer: { flexDirection: 'row', alignItems: 'center' },
-  starRow: { flexDirection: 'row', marginRight: 6 },
   detailText: { fontFamily: fonts.body, fontSize: 12, color: colors.gray },
-  
   reviewButton: {
       paddingVertical: 6,
       paddingHorizontal: 12,
@@ -448,7 +529,6 @@ const styles = StyleSheet.create({
       borderColor: '#dbdbdb',
   },
   reviewButtonText: { fontFamily: fonts.body, fontSize: 12, fontWeight: '600', color: colors.dark },
-
   // --- NAVBAR ---
   bottomNav: {
     position: 'absolute',

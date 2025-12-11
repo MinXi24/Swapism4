@@ -1,18 +1,17 @@
-
 import { getAuth } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
@@ -138,6 +137,78 @@ export default function PostDetailsScreen({ route, navigation }) {
       ]
     );
   };
+
+  // --- NEW: REPORT COMMENT FUNCTIONS ---
+  const handleReportComment = (comment) => {
+    // Prevent reporting own comments (though UI hides button, good for safety)
+    if (comment.userId === auth.currentUser.uid) return;
+
+    Alert.alert(
+      'Report Comment',
+      'Please select a reason for reporting this comment:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Spam or Scam', 
+          onPress: () => submitCommentReport(comment, 'Spam') 
+        },
+        { 
+          text: 'Inappropriate Content', 
+          onPress: () => submitCommentReport(comment, 'Inappropriate Content') 
+        },
+        { 
+          text: 'Harassment or Bullying', 
+          onPress: () => submitCommentReport(comment, 'Harassment') 
+        }
+      ]
+    );
+  };
+
+  const submitCommentReport = async (comment, reason) => {
+    setLoading(true);
+    try {
+      // 1. Get Reporter User Info to save with report
+      const reporterId = auth.currentUser.uid;
+      const reporterDoc = await getDoc(doc(db, 'users', reporterId));
+      const reporterName = reporterDoc.exists() ? (reporterDoc.data().username || reporterDoc.data().displayName) : 'Unknown';
+
+      // 2. Create the Report Object for 'reported_comments' collection
+      const reportData = {
+        type: 'comment', 
+        reason: reason,
+        status: 'pending', // pending, reviewed, resolved
+        createdAt: new Date(),
+        
+        // Target (The Comment) Details
+        targetId: comment.id,
+        targetContent: comment.text,
+        targetOwnerId: comment.userId,
+        targetOwnerName: comment.userName,
+        
+        // Context (The Post) Details
+        postId: post.id,
+        postTitle: post.title || 'Untitled Post',
+        
+        // Reporter Details
+        reporterId: reporterId,
+        reporterName: reporterName,
+      };
+
+      await addDoc(collection(db, 'reported_comments'), reportData);
+
+      Alert.alert(
+        'Report Submitted', 
+        'Thank you for your report. We will review this comment shortly.'
+      );
+
+    } catch (error) {
+      console.error('Error reporting comment:', error);
+      Alert.alert('Error', 'Failed to submit report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  // -------------------------------------
 
   const checkIfLiked = async () => {
     try {
@@ -528,7 +599,9 @@ export default function PostDetailsScreen({ route, navigation }) {
                 <View style={styles.commentContent}>
                   <View style={styles.commentHeader}>
                     <Text style={styles.commentUser}>{comment.userName}</Text>
-                    {comment.userId === auth.currentUser.uid && (
+                    
+                    {/* CHANGED: Logic to show Edit/Delete for owner, or Report for others */}
+                    {comment.userId === auth.currentUser.uid ? (
                       <View style={{ flexDirection: 'row' }}>
                         <TouchableOpacity
                           style={styles.editCommentButton}
@@ -543,7 +616,16 @@ export default function PostDetailsScreen({ route, navigation }) {
                           <Icon name="trash-outline" size={16} color="#9ABEAA" />
                         </TouchableOpacity>
                       </View>
+                    ) : (
+                        /* Report Button for comments not owned by user */
+                        <TouchableOpacity
+                            style={styles.reportCommentButton}
+                            onPress={() => handleReportComment(comment)}
+                        >
+                            <Icon name="flag-outline" size={16} color={colors.gray} />
+                        </TouchableOpacity>
                     )}
+
                   </View>
                   <Text style={styles.commentText}>{comment.text}</Text>
                   <Text style={styles.commentDate}>
@@ -823,6 +905,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
+  },
+  // ADDED: Style for the new report button
+  reportCommentButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   addCommentContainer: {
     flexDirection: 'row',
