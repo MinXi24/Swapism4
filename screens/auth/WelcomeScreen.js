@@ -1,3 +1,4 @@
+
 import React from 'react';
 import {
   Image,
@@ -38,7 +39,7 @@ export default function WelcomeScreen({ navigation }) {
         {/* Logo overlaid on illustration */}
         <View style={styles.logoContainer}>
           <Image 
-            source={require('../../assets/images/logo.png')} 
+            source={require('../../assets/images/logo2.png')} 
             style={styles.logo}
           />
         </View>

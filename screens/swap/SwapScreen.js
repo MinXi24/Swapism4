@@ -167,18 +167,10 @@ export default function SwapScreen({ navigation }) {
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.logo}>Swapism</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerIcon} onPress={handleHistory}>
-            <Icon name="time-outline" size={28} color={colors.dark} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon}>
-            <Icon name="heart-outline" size={28} color={colors.dark} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon}>
-            <Icon name="paper-plane-outline" size={28} color={colors.dark} />
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.logo}>Swap</Text>
+        <TouchableOpacity style={styles.headerIcon} onPress={handleHistory}>
+          <Icon name="time-outline" size={28} color={colors.dark} />
+        </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
@@ -252,7 +244,7 @@ export default function SwapScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DAD3A1',
+    backgroundColor: '#ffffff',
   },
   header: {
     flexDirection: 'row',
@@ -260,14 +252,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#dbdbdb',
+    borderBottomColor: '#e0e0e0',
   },
   logo: {
     fontFamily: fonts.header,
     fontSize: 28,
     fontWeight: '700',
-    color: colors.dark,
+    color: colors.accent,
   },
   headerIcons: {
     flexDirection: 'row',
@@ -300,7 +293,7 @@ const styles = StyleSheet.create({
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DAD3A1',
+    backgroundColor: colors.secondary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 20,
@@ -314,7 +307,7 @@ const styles = StyleSheet.create({
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DAD3A1',
+    backgroundColor: colors.secondary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 20,

@@ -16,6 +16,9 @@ import { colors, fonts, spacing } from '../../lib/theme';
 
 // Firebase imports
 import { signInWithEmailAndPassword } from 'firebase/auth';
+// --- NEW IMPORTS START ---
+import { doc, getDoc, getFirestore } from 'firebase/firestore';
+// --- NEW IMPORTS END ---
 import { auth } from '../../firebaseConfig';
 
 export default function LoginScreen({ navigation }) {
@@ -32,10 +35,32 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
 
     try {
-      // Sign in with Firebase
-      await signInWithEmailAndPassword(auth, email, password);
+      // 1. Sign in with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // --- NEW ADMIN ROLE CHECK START ---
+      const db = getFirestore();
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
       Alert.alert('Success', 'Logged in successfully!');
-      navigation.navigate('Home');
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        // Check if role is 'admin'
+        if (userData.role === 'admin') {
+          navigation.replace('AdminHome'); // Use replace to prevent going back to login
+        } else {
+          navigation.navigate('Home');
+        }
+      } else {
+        // Default behavior if no user document exists
+        navigation.navigate('Home');
+      }
+      // --- NEW ADMIN ROLE CHECK END ---
+
     } catch (error) {
       let errorMessage = error.message;
       
@@ -192,18 +217,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: -10,
   },
-  logoBackground: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: 20,
-    transform: [{ rotate: '-5deg' }],
-  },
-  logoText: {
-    fontFamily: fonts.header,
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.dark,
+  logo: {
+    width: 250,
+    height: 150,
   },
   titleContainer: {
     alignItems: 'center',
@@ -219,10 +235,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: -10,
   },
-  logo: {
-    width: 200,
-    height: 120,
-  },
+  // --- CONFLICT REMOVED HERE ---
   illustration: {
     width: 240,
     height: 160,

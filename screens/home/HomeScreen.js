@@ -1,9 +1,26 @@
-﻿// screens/HomeScreen.js
-import { useFocusEffect } from '@react-navigation/native';
+﻿import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  serverTimestamp // <--- ADDED THIS IMPORT
+  ,
+
+
+
+
+
+  where
+} from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   FlatList,
@@ -112,9 +129,6 @@ export default function HomeScreen({ navigation }) {
               const userDoc = await getDoc(userDocRef);
               if (userDoc.exists()) {
                 userPhotoURL = userDoc.data().photoURL || null;
-                console.log('Loaded photo for user:', postData.userName, 'URL:', userPhotoURL);
-              } else {
-                console.log('User document not found for:', postData.ownerUid);
               }
             } catch (error) {
               console.error('Error loading user photo:', error);
@@ -256,7 +270,6 @@ export default function HomeScreen({ navigation }) {
           await deleteDoc(likesSnapshot.docs[0].ref);
         }
       } else {
-        // Get username from Firestore
         let userName = currentUser.displayName || currentUser.email;
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
@@ -352,7 +365,8 @@ export default function HomeScreen({ navigation }) {
         [
           {
             text: 'Report Post',
-            onPress: () => handleReportPost(post)
+            // FIXED: Added setTimeout to prevent Alert chaining issues on Android
+            onPress: () => setTimeout(() => handleReportPost(post), 500)
           },
           { text: 'Cancel', style: 'cancel' }
         ]
@@ -364,16 +378,61 @@ export default function HomeScreen({ navigation }) {
     try {
       await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', post.id));
       Alert.alert('Success', 'Post deleted successfully');
-      loadPosts(); // Reload posts
+      loadPosts();
     } catch (error) {
       console.error('Error deleting post:', error);
       Alert.alert('Error', 'Failed to delete post');
     }
   };
 
+  // --- UPDATED FUNCTION: Added Debugging & ServerTimestamp ---
   const handleReportPost = async (post) => {
-    Alert.alert('Report Sent', 'Thank you for reporting. We will review this post.');
-    // TODO: Implement actual report logic to save to database
+    if (!currentUser) {
+      Alert.alert('Error', 'You must be logged in to report posts.');
+      return;
+    }
+    
+    // Debug log to ensure function is called
+    console.log("Initiating report for post:", post.id);
+
+    Alert.alert(
+      'Report Post',
+      'Are you sure you want to report this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log("Sending report to Firestore...");
+              
+              const reportData = {
+                reporter_user_id: currentUser.uid,
+                reported_clothes_id: post.id,
+                reason: 'Inappropriate Content',
+                status: 'pending',
+                // FIXED: Using serverTimestamp for consistency with Admin sorting
+                created_at: serverTimestamp(), 
+                snapshot_image_url: post.url || '',
+                snapshot_description: post.description || ''
+              };
+
+              // Explicitly log the data being sent
+              console.log("Report Data:", reportData);
+
+              await addDoc(collection(db, 'report'), reportData);
+              
+              console.log("Report successfully added to DB.");
+              Alert.alert('Report Sent', 'Thank you. We will review this post.');
+            } catch (error) {
+              console.error('Error reporting post:', error);
+              Alert.alert('Error', 'Failed to send report. Please check your internet.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderPost = ({ item }) => (
@@ -538,16 +597,30 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      <FlatList
-        data={posts}
-        renderItem={renderPost}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={renderHeader}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={loadPosts} />
-        }
-      />
+      {/* Suggested Accounts Section */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.accent} />
+          <Text style={styles.loadingText}>Loading posts...</Text>
+        </View>
+      ) : posts.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Icon name="images-outline" size={64} color={colors.gray} />
+          <Text style={styles.emptyText}>No posts yet</Text>
+          <Text style={styles.emptySubtext}>Start following people or create your first post!</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={posts}
+          renderItem={renderPost}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={renderHeader}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={loadPosts} />
+          }
+        />
+      )}
 
       <BottomNavBar navigation={navigation} activeRoute="Home" />
     </SafeAreaView>

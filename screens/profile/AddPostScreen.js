@@ -425,7 +425,6 @@ export default function AddPostScreen({ navigation, route }) {
           uploadedAt: new Date(),
         });
         
-        // Removed unused variable `swapPostRef` to resolve lint error
         await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
           ownerUid: uid,
           userName: userName,
