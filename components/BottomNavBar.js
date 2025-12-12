@@ -5,7 +5,15 @@ import { colors, spacing } from '../lib/theme';
 export default function BottomNavBar({ navigation, activeRoute }) {
   const navigateTo = (routeName) => {
     if (routeName !== activeRoute) {
-      navigation.navigate(routeName);
+      if (routeName === 'Home') {
+        // Reset navigation stack to Home to avoid deep navigation stacks
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
+      } else {
+        navigation.navigate(routeName);
+      }
     }
   };
 

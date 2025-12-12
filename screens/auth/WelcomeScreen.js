@@ -1,3 +1,4 @@
+
 import React from 'react';
 import {
   Image,
@@ -90,13 +91,14 @@ const styles = StyleSheet.create({
   },
   illustration: {
     width: '100%',
-    height: '100%',
+    height: '90%',
+    marginTop: 70,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
   logoContainer: {
     position: 'absolute',
-    top: 0,
+    top: -20,
     left: 0,
     right: 0,
     alignItems: 'center',
