@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 
@@ -47,6 +49,10 @@ export default function AdminHomeScreen({ navigation }) {
     resolved: 0
   });
 
+  // --- MODAL STATE ---
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedStatData, setSelectedStatData] = useState(null);
+
   const db = getFirestore();
 
   // --- FETCH REPORTS & STATS LOGIC ---
@@ -61,19 +67,16 @@ export default function AdminHomeScreen({ navigation }) {
       setLoading(true);
       
       // 1. Prepare Queries
-      // Pending Reports (Posts)
       const postsQuery = query(
         collection(db, 'report'),
         where('status', '==', 'pending')
       );
       
-      // Pending Reports (Comments)
       const commentsQuery = query(
         collection(db, 'reported_comments'),
         where('status', '==', 'pending')
       );
 
-      // Resolved Reports (For Stats)
       const resolvedQuery = query(
         collection(db, 'report'),
         where('status', '==', 'resolved')
@@ -99,30 +102,18 @@ export default function AdminHomeScreen({ navigation }) {
       ]);
       
       // 4. Process Reports List (Pending only)
-      
-      // --- Process Posts ---
       const postPromises = postSnapshot.docs.map(async (docSnapshot) => {
         const data = docSnapshot.data();
-        
-        // Smart ID lookup
         const reportedId = data.reported_clothes_id || data.post_id || data.clothes_id;
         
         let statusDetail = `Post: ${data.reason || 'Reported Content'}`;
         let isMissing = false;
 
         if (reportedId) {
-            // Check 'wardrobe-plug-fyp/user/images' first (User side source)
             let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', reportedId));
-            
-            // Fallback checks
-            if (!postSnap.exists()) {
-                 postSnap = await getDoc(doc(db, 'clothes', reportedId));
-            }
-            if (!postSnap.exists()) {
-                 postSnap = await getDoc(doc(db, 'userImages', reportedId));
-            }
+            if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'clothes', reportedId));
+            if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'userImages', reportedId));
 
-            // If post doesn't exist, we just flag it visually
             if (!postSnap.exists()) {
                 isMissing = true;
                 statusDetail = "⚠️ Post Unavailable (Deleted?)";
@@ -147,7 +138,6 @@ export default function AdminHomeScreen({ navigation }) {
         };
       });
 
-      // --- Process Comments ---
       const formattedComments = commentSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -163,7 +153,6 @@ export default function AdminHomeScreen({ navigation }) {
       });
 
       const resolvedPosts = await Promise.all(postPromises);
-      
       const allReports = [...resolvedPosts, ...formattedComments];
       allReports.sort((a, b) => b.timestamp - a.timestamp);
 
@@ -173,8 +162,8 @@ export default function AdminHomeScreen({ navigation }) {
       setStats({
         pending: allReports.length,
         users: usersSnap.data().count,
-        listings: clothesSnap.data().count, // Renamed from swaps
-        resolved: resolvedSnap.data().count // New metric
+        listings: clothesSnap.data().count,
+        resolved: resolvedSnap.data().count
       });
 
     } catch (error) {
@@ -184,15 +173,7 @@ export default function AdminHomeScreen({ navigation }) {
     }
   };
 
-  // --- DYNAMIC STATS DATA ---
-  const statsData = [
-    { label: 'Pending', value: stats.pending, icon: 'alert-circle-outline', color: '#FF6B6B' },
-    { label: 'Users', value: stats.users, icon: 'people-outline', color: colors.dark }, 
-    { label: 'Listings', value: stats.listings, icon: 'shirt-outline', color: '#9abeaa' }, 
-    { label: 'Resolved', value: stats.resolved, icon: 'checkmark-done-circle-outline', color: '#FCE77D' },
-  ];
-
-  // --- NAVIGATION LOGIC ---
+  // --- INTERACTION LOGIC ---
   const handleViewItem = (item) => {
     if (item.reportType === 'comment') {
         navigation.navigate('ManageComments');
@@ -210,6 +191,79 @@ export default function AdminHomeScreen({ navigation }) {
     }
   };
 
+  const handleLogout = () => {
+    navigation.navigate('Welcome');
+  };
+
+  // --- STATS MODAL LOGIC (UPDATED WITH RELEVANT METRICS) ---
+  const handleStatPress = (stat) => {
+    let breakdown = [];
+    let description = "";
+
+    // Generate calculated business logic for insights
+    switch (stat.label) {
+        case 'Pending':
+            const postCount = reports.filter(r => r.reportType === 'post').length;
+            const commentCount = reports.filter(r => r.reportType === 'comment').length;
+            description = "Items currently awaiting moderator review.";
+            breakdown = [
+                { label: 'Reported Posts', value: postCount },
+                { label: 'Reported Comments', value: commentCount }
+            ];
+            break;
+            
+        case 'Users':
+            // Calculate engagement: How many listings does the average user have?
+            const avgListings = stats.users > 0 ? (stats.listings / stats.users).toFixed(1) : '0';
+            
+            description = "Community members currently registered on Swapism.";
+            breakdown = [
+                { label: 'Active Accounts', value: stats.users },
+                { label: 'Avg. Listings / User', value: avgListings }
+            ];
+            break;
+            
+        case 'Listings':
+            // Calculate safety: How many of the total listings are currently flagged?
+            const flaggedPosts = reports.filter(r => r.reportType === 'post').length;
+            
+            description = "Total clothing items currently available in the public feed.";
+            breakdown = [
+                { label: 'Active Inventory', value: stats.listings },
+                { label: 'Currently Flagged', value: flaggedPosts }
+            ];
+            break;
+            
+        case 'Resolved':
+            // Calculate efficiency: Percentage of total work done
+            const totalWorkload = stats.resolved + stats.pending;
+            const rate = totalWorkload > 0 
+                ? ((stats.resolved / totalWorkload) * 100).toFixed(0) + '%' 
+                : '0%';
+                
+            description = "Completed moderation actions taken by admins.";
+            breakdown = [
+                { label: 'Closed Cases', value: stats.resolved },
+                { label: 'Clearance Rate', value: rate }
+            ];
+            break;
+    }
+
+    setSelectedStatData({
+        ...stat,
+        description,
+        breakdown
+    });
+    setModalVisible(true);
+  };
+
+  const statsData = [
+    { label: 'Pending', value: stats.pending, icon: 'alert-circle-outline', color: '#FF6B6B' },
+    { label: 'Users', value: stats.users, icon: 'people-outline', color: colors.dark }, 
+    { label: 'Listings', value: stats.listings, icon: 'shirt-outline', color: '#9abeaa' }, 
+    { label: 'Resolved', value: stats.resolved, icon: 'checkmark-done-circle-outline', color: '#FCE77D' },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -218,8 +272,8 @@ export default function AdminHomeScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.logo}>Swapism Admin</Text>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerIcon}>
-            <Icon name="notifications-outline" size={24} color={colors.dark} />
+          <TouchableOpacity style={styles.headerIcon} onPress={handleLogout}>
+            <Icon name="log-out-outline" size={24} color={colors.dark} />
           </TouchableOpacity>
         </View>
       </View>
@@ -260,7 +314,12 @@ export default function AdminHomeScreen({ navigation }) {
         {/* --- STATS GRID --- */}
         <View style={styles.statsGrid}>
             {statsData.map((stat, index) => (
-                <View key={index} style={styles.statCard}>
+                <TouchableOpacity 
+                    key={index} 
+                    style={styles.statCard}
+                    onPress={() => handleStatPress(stat)}
+                    activeOpacity={0.7}
+                >
                     <View style={styles.statHeader}>
                         <Text style={styles.statValue}>
                             {loading && stat.value === 0 ? '...' : stat.value}
@@ -268,7 +327,8 @@ export default function AdminHomeScreen({ navigation }) {
                         <Icon name={stat.icon} size={20} color={stat.color} />
                     </View>
                     <Text style={styles.statLabel}>{stat.label}</Text>
-                </View>
+                    <Text style={styles.statActionText}>View Details →</Text>
+                </TouchableOpacity>
             ))}
         </View>
 
@@ -311,6 +371,57 @@ export default function AdminHomeScreen({ navigation }) {
         </View>
 
       </ScrollView>
+
+      {/* --- STAT DETAILS MODAL --- */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableOpacity 
+            style={styles.modalOverlay} 
+            activeOpacity={1} 
+            onPress={() => setModalVisible(false)}
+        >
+            <TouchableWithoutFeedback>
+                <View style={styles.modalContent}>
+                    {selectedStatData && (
+                        <>
+                            <View style={styles.modalHeader}>
+                                <View style={[styles.modalIconCircle, { backgroundColor: selectedStatData.color + '20' }]}>
+                                    <Icon name={selectedStatData.icon} size={28} color={selectedStatData.color} />
+                                </View>
+                                <View>
+                                    <Text style={styles.modalTitle}>{selectedStatData.label}</Text>
+                                    <Text style={styles.modalBigValue}>{selectedStatData.value}</Text>
+                                </View>
+                            </View>
+                            
+                            <Text style={styles.modalDescription}>{selectedStatData.description}</Text>
+                            
+                            <View style={styles.breakdownContainer}>
+                                <Text style={styles.breakdownHeader}>INSIGHTS</Text>
+                                {selectedStatData.breakdown.map((item, i) => (
+                                    <View key={i} style={styles.breakdownRow}>
+                                        <Text style={styles.breakdownLabel}>{item.label}</Text>
+                                        <Text style={styles.breakdownValue}>{item.value}</Text>
+                                    </View>
+                                ))}
+                            </View>
+
+                            <TouchableOpacity 
+                                style={styles.closeButton}
+                                onPress={() => setModalVisible(false)}
+                            >
+                                <Text style={styles.closeButtonText}>Close</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
+                </View>
+            </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
 
       {/* --- BOTTOM NAVBAR --- */}
       <View style={styles.bottomNav}>
@@ -460,6 +571,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.gray,
   },
+  statActionText: {
+    fontSize: 10,
+    color: '#9abeaa',
+    marginTop: 8,
+    fontWeight: '600'
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -568,5 +685,96 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
+  },
+  // --- MODAL STYLES ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    width: '85%',
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalIconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  modalTitle: {
+    fontFamily: fonts.header,
+    fontSize: 16,
+    color: colors.gray,
+  },
+  modalBigValue: {
+    fontFamily: fonts.header,
+    fontSize: 32,
+    fontWeight: '700',
+    color: colors.dark,
+  },
+  modalDescription: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  breakdownContainer: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  breakdownHeader: {
+    fontFamily: fonts.body,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#999',
+    marginBottom: 8,
+    letterSpacing: 1,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  breakdownLabel: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.dark,
+  },
+  breakdownValue: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  closeButton: {
+    backgroundColor: '#9abeaa',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontFamily: fonts.header,
+    fontWeight: '600',
+    fontSize: 16,
   },
 });
