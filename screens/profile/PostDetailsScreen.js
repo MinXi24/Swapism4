@@ -267,21 +267,32 @@ export default function PostDetailsScreen({ route, navigation }) {
     console.log('Share post');
   };
 
-  const handleSwapNow = () => {
-    Alert.alert(
-      'Request Swap',
-      `Do you want to request a swap for "${post.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Request Swap',
-          onPress: () => {
-            Alert.alert('Swap Request Sent', 'The owner will be notified of your swap request.');
-            // TODO: Implement actual swap request logic
-          }
+  const handleSwapNow = async () => {
+    if (!checkGuestAccess(navigation, 'initiate swaps')) return;
+
+    try {
+      const userDocRef = doc(db, 'users', post.ownerUid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.exists() ? userDoc.data() : {};
+      
+      navigation.navigate('Chat', {
+        user: {
+          id: post.ownerUid,
+          uid: post.ownerUid,
+          name: userData.username || post.userName,
+          userName: userData.username || post.userName,
+          photoURL: userData.photoURL || post.userPhotoURL,
+        },
+        swapRequest: {
+          theirItemId: post.id,
+          theirItemImage: post.url,
+          theirItemTitle: post.title,
         }
-      ]
-    );
+      });
+    } catch (error) {
+      console.error('Error opening chat:', error);
+      Alert.alert('Error', 'Failed to open chat. Please try again.');
+    }
   };
 
   const handleChangeSwapStatus = async () => {

@@ -5,6 +5,7 @@ import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import FavouritesScreen from '../screens/favourites/FavouritesScreen';
 import HomeScreen from '../screens/home/HomeScreen';
+import ChatScreen from '../screens/messages/ChatScreen';
 import MessagesScreen from '../screens/messages/MessagesScreen';
 import AddPostScreen from '../screens/profile/AddPostScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
@@ -31,6 +32,7 @@ export default function Navigation() {
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Swap" component={SwapScreen} />
         <Stack.Screen name="Messages" component={MessagesScreen} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="Favorites" component={FavouritesScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="UserProfile" component={UserProfileScreen} />

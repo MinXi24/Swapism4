@@ -81,6 +81,15 @@ export default function HomeScreen({ navigation }) {
           const userLiked = likesSnapshot.docs.some(
             doc => doc.data().userId === currentUser?.uid
           );
+
+          // Check if user favorited this post
+          const favoritesQuery = query(
+            collection(db, 'favorites'),
+            where('postId', '==', docSnapshot.id),
+            where('userId', '==', currentUser?.uid)
+          );
+          const favoritesSnapshot = await getDocs(favoritesQuery);
+          const userFavorited = !favoritesSnapshot.empty;
           
           // Load user profile picture
           let userPhotoURL = null;
@@ -105,6 +114,7 @@ export default function HomeScreen({ navigation }) {
             likeCount,
             commentCount,
             userLiked,
+            userFavorited,
             userPhotoURL,
             uploadedAt: postData.uploadedAt?.toDate?.() || new Date(),
           };
@@ -208,6 +218,40 @@ export default function HomeScreen({ navigation }) {
         setNotification(null);
       });
     }, 20000); // Changed from 10000 to 20000 (20 seconds)
+  };
+
+  const handleFavorite = async (post) => {
+    if (!checkGuestAccess(navigation, 'save posts')) return;
+
+    if (!currentUser) return;
+
+    try {
+      const favoritesQuery = query(
+        collection(db, 'favorites'),
+        where('postId', '==', post.id),
+        where('userId', '==', currentUser.uid)
+      );
+      const favoritesSnapshot = await getDocs(favoritesQuery);
+
+      if (!favoritesSnapshot.empty) {
+        // Remove from favorites
+        await deleteDoc(favoritesSnapshot.docs[0].ref);
+        showNotification('Removed from favourites');
+      } else {
+        // Add to favorites
+        await addDoc(collection(db, 'favorites'), {
+          postId: post.id,
+          userId: currentUser.uid,
+          createdAt: new Date(),
+        });
+        showNotification('Added to favourites');
+      }
+
+      loadPosts();
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Error', 'Failed to update favourites');
+    }
   };
 
   const handleLike = async (post) => {
@@ -394,8 +438,12 @@ export default function HomeScreen({ navigation }) {
             <Icon name="chatbubble-outline" size={26} color={colors.dark} />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity>
-          <Icon name="star-outline" size={26} color={colors.dark} />
+        <TouchableOpacity onPress={() => handleFavorite(item)}>
+          <Icon 
+            name={item.userFavorited ? 'star' : 'star-outline'} 
+            size={26} 
+            color={item.userFavorited ? '#ffd700' : colors.dark} 
+          />
         </TouchableOpacity>
       </View>
 

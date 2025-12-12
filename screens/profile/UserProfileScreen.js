@@ -3,20 +3,20 @@ import { getAuth } from 'firebase/auth';
 import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -202,9 +202,28 @@ export default function UserProfileScreen({ route, navigation }) {
     }
   };
 
-  const handleMessage = () => {
+  const handleMessage = async () => {
     if (!checkGuestAccess(navigation, 'send messages')) return;
-    navigation.navigate('Messages');
+    
+    try {
+      // Get user data for the chat
+      const userDocRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.exists() ? userDoc.data() : {};
+      
+      // Navigate directly to ChatScreen with user data
+      navigation.navigate('Chat', {
+        user: {
+          id: userId,
+          uid: userId,
+          name: userData.username || username,
+          userName: userData.username || username,
+          photoURL: userData.photoURL || userInfo.photoURL,
+        }
+      });
+    } catch (error) {
+      console.error('Error opening chat:', error);
+    }
   };
 
   const handleRateUser = () => {

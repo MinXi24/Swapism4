@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { getAuth } from 'firebase/auth';
+import { collection, doc, getDoc, getFirestore, onSnapshot, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 import {
-  FlatList,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    FlatList,
+    Image,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -15,29 +18,107 @@ import Input from '../../components/Input';
 import { useAuth } from '../../context/GuestContext';
 import { colors, fonts, spacing } from '../../lib/theme';
 
-// Sample message data - replace with your actual data
-const sampleMessages = [
-  {
-    id: 1,
-    name: 'Ben',
-    message: '2 new messages',
-    time: '10m',
-    avatar: 'https://via.placeholder.com/50/9abeaa/FFFFFF?text=B',
-    unread: true,
-  },
-  {
-    id: 2,
-    name: 'Jenny',
-    message: '1 new messages',
-    time: '4h',
-    avatar: 'https://via.placeholder.com/50/ffd75c/1e1e1e?text=J',
-    unread: true,
-  },
-];
-
 export default function MessagesScreen({ navigation }) {
   const { isGuest } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  const auth = getAuth();
+  const db = getFirestore();
+  const currentUser = auth.currentUser;
+  
+  // Load conversations in real-time
+  useEffect(() => {
+    if (!currentUser || isGuest) {
+      setLoading(false);
+      return;
+    }
+    
+    const messagesRef = collection(db, 'messages');
+    const q = query(
+      messagesRef,
+      where('participants', 'array-contains', currentUser.uid)
+    );
+    
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      try {
+        const conversationMap = new Map();
+        
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const otherUserId = data.participants.find(id => id !== currentUser.uid);
+          
+          if (!otherUserId) return;
+          
+          if (!conversationMap.has(otherUserId) || 
+              (data.createdAt && conversationMap.get(otherUserId).createdAt < data.createdAt)) {
+            conversationMap.set(otherUserId, {
+              id: otherUserId,
+              lastMessage: data.message,
+              lastMessageTime: data.createdAt,
+              senderId: data.senderId,
+            });
+          }
+        });
+        
+        const conversationsList = [];
+        for (const [userId, convData] of conversationMap) {
+          try {
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              conversationsList.push({
+                id: userId,
+                uid: userId,
+                name: userData.username || userData.displayName || 'User',
+                userName: userData.username || userData.displayName || 'User',
+                photoURL: userData.photoURL,
+                message: convData.lastMessage || 'No messages yet',
+                time: formatTime(convData.lastMessageTime),
+                avatar: userData.photoURL || 'https://via.placeholder.com/50/9abeaa/FFFFFF?text=' + (userData.username?.[0] || 'U'),
+                unread: convData.senderId !== currentUser.uid,
+              });
+            }
+          } catch (err) {
+            console.error('Error fetching user data:', err);
+          }
+        }
+        
+        conversationsList.sort((a, b) => {
+          const timeA = a.time || '';
+          const timeB = b.time || '';
+          return timeB.localeCompare(timeA);
+        });
+        
+        setConversations(conversationsList);
+      } catch (error) {
+        console.error('Error processing conversations:', error);
+      } finally {
+        setLoading(false);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [currentUser, isGuest]);
+  
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 60) return diffMins + 'm';
+    if (diffHours < 24) return diffHours + 'h';
+    if (diffDays < 7) return diffDays + 'd';
+    return date.toLocaleDateString();
+  };
 
   // If guest, show login prompt
   if (isGuest) {
@@ -74,12 +155,8 @@ export default function MessagesScreen({ navigation }) {
   }
 
   // Normal screen content for logged-in users
-  const [searchQuery2] = useState('');
-
-  const handleMessagePress = (message) => {
-    console.log('Open chat with:', message.name);
-    // Navigate to ChatScreen
-    navigation.navigate('Chat', { user: message });
+  const handleMessagePress = (conversation) => {
+    navigation.navigate('Chat', { user: conversation });
   };
 
   const renderMessageItem = ({ item }) => (
@@ -126,13 +203,21 @@ export default function MessagesScreen({ navigation }) {
 
       {/* Messages List */}
       <View style={styles.messagesContainer}>
-        <FlatList
-          data={sampleMessages}
-          renderItem={renderMessageItem}
-          keyExtractor={(item) => item.id.toString()}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-        />
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.accent} />
+          </View>
+        ) : (
+          <FlatList
+            data={conversations.filter(conv => 
+              conv.name.toLowerCase().includes(searchQuery.toLowerCase())
+            )}
+            renderItem={renderMessageItem}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
       </View>
 
       {/* Bottom Navigation */}
@@ -258,6 +343,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.light,
     fontFamily: fonts.header,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   bottomNav: {
     position: 'absolute',
