@@ -1,6 +1,6 @@
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Icon from '../assets/icons/icons';
-import { colors, spacing } from '../lib/theme';
+import { colors } from '../lib/theme';
 
 export default function BottomNavBar({ navigation, activeRoute }) {
   const navigateTo = (routeName) => {
@@ -79,19 +79,12 @@ export default function BottomNavBar({ navigation, activeRoute }) {
 
 const styles = StyleSheet.create({
   bottomNav: {
+    backgroundColor: 'white', // Ensure navbar is white
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: colors.secondary,
-    paddingVertical: 8,
-    paddingHorizontal: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.primary,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    height: 60,
+    // Removed borderTopWidth and borderTopColor to eliminate the line above the navbar
   },
   navItem: {
     alignItems: 'center',

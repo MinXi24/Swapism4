@@ -16,6 +16,18 @@ import {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
   where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -121,17 +133,28 @@ export default function HomeScreen({ navigation }) {
             doc => doc.data().userId === currentUser?.uid
           );
           
-          // Load user profile picture
+          // Load user profile picture and privacy settings
           let userPhotoURL = null;
+          let isPrivate = false;
+          let isFollowing = false;
+          
           if (postData.ownerUid) {
             try {
               const userDocRef = doc(db, 'users', postData.ownerUid);
               const userDoc = await getDoc(userDocRef);
               if (userDoc.exists()) {
-                userPhotoURL = userDoc.data().photoURL || null;
+                const userData = userDoc.data();
+                userPhotoURL = userData.photoURL || null;
+                isPrivate = userData.isPrivate || false;
+                
+                // Check if current user is following
+                if (currentUser) {
+                  const followers = userData.followers || [];
+                  isFollowing = followers.includes(currentUser.uid);
+                }
               }
             } catch (error) {
-              console.error('Error loading user photo:', error);
+              console.error('Error loading user data:', error);
             }
           }
           
@@ -142,13 +165,30 @@ export default function HomeScreen({ navigation }) {
             commentCount,
             userLiked,
             userPhotoURL,
+            isPrivate,
+            isFollowing,
             uploadedAt: postData.uploadedAt?.toDate?.() || new Date(),
           };
         })
       );
       
-      postsData.sort((a, b) => b.uploadedAt - a.uploadedAt);
-      setPosts(postsData);
+      // Filter out private posts from users the current user doesn't follow
+      const filteredPosts = postsData.filter(post => {
+        // Show post if it's not private
+        if (!post.isPrivate) return true;
+        
+        // Show post if it's the current user's post
+        if (currentUser && post.ownerUid === currentUser.uid) return true;
+        
+        // Show post if current user is following the owner
+        if (post.isFollowing) return true;
+        
+        // Hide private post
+        return false;
+      });
+      
+      filteredPosts.sort((a, b) => b.uploadedAt - a.uploadedAt);
+      setPosts(filteredPosts);
     } catch (error) {
       console.error('Error loading posts:', error);
     } finally {
@@ -158,45 +198,66 @@ export default function HomeScreen({ navigation }) {
 
   const loadSuggestedUsers = async () => {
     try {
-      // Get all users who have posted
-      const q = query(collection(db, 'wardrobe-plug-fyp/user/images'));
-      const querySnapshot = await getDocs(q);
+      if (!currentUser) {
+        setSuggestedUsers([]);
+        return;
+      }
+
+      // Get current user's following list
+      const currentUserDocRef = doc(db, 'users', currentUser.uid);
+      const currentUserDoc = await getDoc(currentUserDocRef);
+      const currentUserFollowing = currentUserDoc.exists() ? (currentUserDoc.data().following || []) : [];
       
-      // Extract unique users with their profile info
-      const usersMap = new Map();
+      // Get all users from Firebase
+      const usersQuery = query(collection(db, 'users'));
+      const usersSnapshot = await getDocs(usersQuery);
       
-      querySnapshot.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.ownerUid && data.ownerUid !== currentUser?.uid && !usersMap.has(data.ownerUid)) {
-          usersMap.set(data.ownerUid, {
-            uid: data.ownerUid,
-            userName: data.userName || 'User',
-          });
+      const suggestedUsersData = [];
+      
+      usersSnapshot.docs.forEach(userDoc => {
+        const userData = userDoc.data();
+        const userUid = userDoc.id;
+
+        // Skip current user and users already being followed
+        if (userUid === currentUser.uid || currentUserFollowing.includes(userUid)) {
+          return;
         }
+
+        // Exclude admin accounts (by role or username)
+        if ((userData.role && userData.role.toLowerCase() === 'admin') || (userData.username && userData.username.toLowerCase().includes('admin'))) {
+          return;
+        }
+
+        // Exclude deleted, inactive, or invalid accounts
+        if (userData.deleted === true || userData.active === false || !userData.username || typeof userData.username !== 'string' || userData.username.trim() === '') {
+          return;
+        }
+
+        const followers = userData.followers || [];
+        const following = userData.following || [];
+
+        // Calculate mutual following (how many people current user follows that this user also follows)
+        const mutualCount = following.filter(uid => currentUserFollowing.includes(uid)).length;
+
+        suggestedUsersData.push({
+          uid: userUid,
+          userName: userData.username,
+          photoURL: userData.photoURL || null,
+          followerCount: followers.length,
+          mutualCount: mutualCount,
+        });
       });
       
-      // Load profile pictures for suggested users
-      const usersWithPhotos = await Promise.all(
-        Array.from(usersMap.values()).map(async (user) => {
-          try {
-            const userDocRef = doc(db, 'users', user.uid);
-            const userDoc = await getDoc(userDocRef);
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              return {
-                ...user,
-                photoURL: userData.photoURL || null,
-              };
-            }
-          } catch (error) {
-            console.error('Error loading user photo:', error);
-          }
-          return user;
-        })
-      );
+      // Sort by: 1) mutual connections first, 2) then by follower count
+      suggestedUsersData.sort((a, b) => {
+        if (b.mutualCount !== a.mutualCount) {
+          return b.mutualCount - a.mutualCount;
+        }
+        return b.followerCount - a.followerCount;
+      });
       
-      // Take first 10 users with photos
-      setSuggestedUsers(usersWithPhotos.slice(0, 10));
+      // Take top 10 suggestions
+      setSuggestedUsers(suggestedUsersData.slice(0, 10));
     } catch (error) {
       console.error('Error loading suggested users:', error);
     }
@@ -519,6 +580,15 @@ export default function HomeScreen({ navigation }) {
         />
       </View>
 
+      {/* Search Bar */}
+      <TouchableOpacity
+        style={styles.searchBarContainer}
+        onPress={() => navigation.navigate('Search')}
+      >
+        <Icon name="search" size={20} color={colors.gray} />
+        <Text style={styles.searchPlaceholder}>Search for accounts or posts...</Text>
+      </TouchableOpacity>
+
       {/* Suggested Accounts Section */}
       {suggestedUsers.length > 0 && (
         <View style={styles.suggestedSection}>
@@ -832,6 +902,22 @@ const styles = StyleSheet.create({
   illustration: {
     width: '100%',
     height: 200,
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  searchPlaceholder: {
+    fontSize: 14,
+    color: colors.gray,
+    flex: 1,
   },
   suggestedSection: {
     backgroundColor: '#f5f3e4',

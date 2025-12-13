@@ -1,4 +1,3 @@
-
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
@@ -39,8 +38,7 @@ export default function ProfileScreen({ navigation }) {
     reviews: [],
   });
   const [showLocationModal, setShowLocationModal] = useState(false);
-  const [postalCode, setPostalCode] = useState('');
-  const [favoritePosts, setFavoritePosts] = useState([]);
+  const [postalCode, setPostalCode] = useState([]);
   const [discoverPosts, setDiscoverPosts] = useState([]);
 
   const auth = getAuth();
@@ -49,7 +47,6 @@ export default function ProfileScreen({ navigation }) {
 
   useEffect(() => {
     loadUserProfile();
-    loadFavoritePosts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -87,38 +84,6 @@ export default function ProfileScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
-    }
-  };
-
-  const loadFavoritePosts = async () => {
-    try {
-      const uid = user?.uid;
-      if (!uid) return;
-
-      const q = query(
-        collection(db, 'likes'),
-        where('userId', '==', uid)
-      );
-      const querySnapshot = await getDocs(q);
-      const likedPostIds = querySnapshot.docs.map(doc => doc.data().postId);
-
-      if (likedPostIds.length > 0) {
-        const postsPromises = likedPostIds.map(async (postId) => {
-          try {
-            const postDoc = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', postId));
-            if (postDoc.exists()) {
-              return { id: postDoc.id, ...postDoc.data() };
-            }
-          } catch (err) {
-            console.error('Error loading post:', err);
-          }
-          return null;
-        });
-        const posts = (await Promise.all(postsPromises)).filter(p => p !== null);
-        setFavoritePosts(posts);
-      }
-    } catch (error) {
-      console.error('Error loading favorite posts:', error);
     }
   };
 
@@ -397,7 +362,10 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.logo}>Profile</Text>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerIcon}>
+          <TouchableOpacity 
+            style={styles.headerIcon}
+            onPress={() => navigation.navigate('Settings')}
+          >
             <Icon name="menu-outline" size={28} color={colors.dark} />
           </TouchableOpacity>
         </View>
@@ -514,27 +482,32 @@ export default function ProfileScreen({ navigation }) {
             </View>
           ) : (
             (userInfo.reviews || []).map((review, index) => (
-              <View key={index} style={styles.reviewItem}>
-                {review.userPhoto ? (
-                  <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />
-                ) : (
-                  <Icon name="person-circle" size={40} color={colors.gray} />
-                )}
-                <View style={styles.reviewContent}>
-                  <Text style={styles.reviewAuthor}>{review.userName}</Text>
-                  <Text style={styles.reviewText}>{review.text}</Text>
-                  <View style={styles.reviewStars}>
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <Icon 
-                        key={star}
-                        name={star <= review.rating ? 'star' : 'star-outline'}
-                        size={14}
-                        color={colors.highlight}
-                      />
-                    ))}
+              <TouchableOpacity
+                key={index}
+                onPress={() => navigation.navigate('UserProfile', { userId: review.userId })}
+              >
+                <View style={styles.reviewItem}>
+                  {review.userPhoto ? (
+                    <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />
+                  ) : (
+                    <Icon name="person-circle" size={40} color={colors.gray} />
+                  )}
+                  <View style={styles.reviewContent}>
+                    <Text style={styles.reviewAuthor}>{review.userName}</Text>
+                    <Text style={styles.reviewText}>{review.text}</Text>
+                    <View style={styles.reviewStars}>
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <Icon
+                          key={star}
+                          name={star <= review.rating ? 'star' : 'star-outline'}
+                          size={16}
+                          color={colors.highlight}
+                        />
+                      ))}
+                    </View>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </View>
