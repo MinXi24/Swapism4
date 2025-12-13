@@ -1,9 +1,10 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { getAuth } from 'firebase/auth';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -366,8 +367,74 @@ export default function TryOnScreen({ route, navigation }) {
     }
   };
 
-  const navigateToPostDetails = (item) => {
-    navigation.navigate('PostDetails', { postId: item.id, post: item });
+  const navigateToPostDetails = async (item) => {
+    // Check if post is For Fun type
+    if (item.postType !== 'forFun') {
+      navigation.navigate('PostDetails', { postId: item.id, post: item });
+      return;
+    }
+
+    try {
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      
+      // Check if user owns the post
+      if (currentUser && item.ownerUid === currentUser.uid) {
+        navigation.navigate('PostDetails', { postId: item.id, post: item });
+        return;
+      }
+
+      // Check owner's privacy settings
+      const userDocRef = doc(firestore, 'users', item.ownerUid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (!userDoc.exists()) {
+        navigation.navigate('PostDetails', { postId: item.id, post: item });
+        return;
+      }
+
+      const userData = userDoc.data();
+      const isPrivate = userData.isPrivate || false;
+
+      // If account is public, navigate directly
+      if (!isPrivate) {
+        navigation.navigate('PostDetails', { postId: item.id, post: item });
+        return;
+      }
+
+      // Check if current user is following
+      if (currentUser) {
+        const followers = userData.followers || [];
+        const isFollowing = followers.includes(currentUser.uid);
+
+        if (isFollowing) {
+          navigation.navigate('PostDetails', { postId: item.id, post: item });
+          return;
+        }
+      }
+
+      // Private account and not following - show alert
+      Alert.alert(
+        'Private Account',
+        `This For Fun post is from a private account. You need to follow @${item.userName} to view their For Fun posts.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'View Profile',
+            onPress: () => {
+              navigation.navigate('UserProfile', { 
+                userId: item.ownerUid,
+                username: item.userName 
+              });
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error checking privacy:', error);
+      // On error, allow navigation
+      navigation.navigate('PostDetails', { postId: item.id, post: item });
+    }
   };
 
   // Gesture handlers for top overlay

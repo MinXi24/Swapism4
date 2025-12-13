@@ -1,7 +1,6 @@
-
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,7 +16,9 @@ import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function ActivityScreen({ navigation, route }) {
   const [activities, setActivities] = useState([]);
+  const [followRequests, setFollowRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [processingRequest, setProcessingRequest] = useState(null);
 
   const auth = getAuth();
   const db = getFirestore();
@@ -130,9 +131,106 @@ export default function ActivityScreen({ navigation, route }) {
     }
   };
 
+  const loadFollowRequests = async () => {
+    try {
+      const uid = user?.uid;
+      if (!uid) return;
+
+      const requestsQuery = query(
+        collection(db, 'followRequests'),
+        where('toUserId', '==', uid),
+        where('status', '==', 'pending')
+      );
+      const requestsSnapshot = await getDocs(requestsQuery);
+      
+      const requestsData = await Promise.all(
+        requestsSnapshot.docs.map(async (requestDoc) => {
+          const requestData = requestDoc.data();
+          
+          // Get requester's photo
+          let photoURL = null;
+          try {
+            const userDocRef = doc(db, 'users', requestData.fromUserId);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+              photoURL = userDoc.data().photoURL || null;
+            }
+          } catch (err) {
+            console.error('Error fetching user photo:', err);
+          }
+          
+          return {
+            id: requestDoc.id,
+            ...requestData,
+            photoURL,
+          };
+        })
+      );
+      
+      setFollowRequests(requestsData);
+    } catch (error) {
+      console.error('Error loading follow requests:', error);
+    }
+  };
+
+  const handleAcceptRequest = async (request) => {
+    try {
+      setProcessingRequest(request.id);
+      
+      const userDocRef = doc(db, 'users', user.uid);
+      const requesterDocRef = doc(db, 'users', request.fromUserId);
+      
+      // Add to followers/following
+      await updateDoc(userDocRef, {
+        followers: arrayUnion(request.fromUserId)
+      });
+      await updateDoc(requesterDocRef, {
+        following: arrayUnion(user.uid)
+      });
+      
+      // Update request status
+      await updateDoc(doc(db, 'followRequests', request.id), {
+        status: 'accepted'
+      });
+      
+      // Create notification for requester
+      await addDoc(collection(db, 'notifications'), {
+        userId: request.fromUserId,
+        type: 'follow_accepted',
+        message: `${user.displayName || 'Someone'} accepted your follow request`,
+        read: false,
+        createdAt: new Date(),
+      });
+      
+      // Reload follow requests
+      await loadFollowRequests();
+    } catch (error) {
+      console.error('Error accepting request:', error);
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const handleRejectRequest = async (request) => {
+    try {
+      setProcessingRequest(request.id);
+      
+      // Delete the request
+      await deleteDoc(doc(db, 'followRequests', request.id));
+      
+      // Reload follow requests
+      await loadFollowRequests();
+    } catch (error) {
+      console.error('Error rejecting request:', error);
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       loadActivities();
+      loadFollowRequests();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
@@ -176,7 +274,58 @@ export default function ActivityScreen({ navigation, route }) {
         </View>
       ) : (
         <ScrollView style={styles.content}>
-          {activities.length === 0 ? (
+          {/* Follow Requests Section */}
+          {followRequests.length > 0 && (
+            <View style={styles.requestsSection}>
+              <Text style={styles.sectionTitle}>Follow Requests</Text>
+              {followRequests.map(request => (
+                <View key={request.id} style={styles.requestOuterWrapper}>
+                  <View style={styles.requestItem}>
+                    <View style={styles.requestLeft}>
+                      {request.photoURL ? (
+                        <Image source={{ uri: request.photoURL }} style={styles.requestAvatar} />
+                      ) : (
+                        <Icon name="person-circle" size={50} color={colors.gray} />
+                      )}
+                      <View style={styles.requestInfo}>
+                        <Text style={styles.requestName}>{request.fromUserName}</Text>
+                        <Text style={styles.requestText}>wants to follow you</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity 
+                      onPress={() => navigation.navigate('UserProfile', { userId: request.fromUserId })}
+                      style={styles.arrowButton}
+                    >
+                      <Icon name="chevron-forward" size={24} color={colors.gray} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.requestActions}>
+                    <TouchableOpacity 
+                      style={[styles.requestButton, styles.acceptButton]}
+                      onPress={() => handleAcceptRequest(request)}
+                      disabled={processingRequest === request.id}
+                    >
+                      {processingRequest === request.id ? (
+                        <ActivityIndicator size="small" color={colors.light} />
+                      ) : (
+                        <Text style={styles.acceptButtonText}>Accept</Text>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.requestButton, styles.rejectButton]}
+                      onPress={() => handleRejectRequest(request)}
+                      disabled={processingRequest === request.id}
+                    >
+                      <Text style={styles.rejectButtonText}>Reject</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Activities Section */}
+          {activities.length === 0 && followRequests.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="heart-outline" size={64} color={colors.gray} />
               <Text style={styles.emptyText}>No activity yet</Text>
@@ -184,8 +333,10 @@ export default function ActivityScreen({ navigation, route }) {
                 When someone likes or comments on your posts, you&apos;ll see them here
               </Text>
             </View>
-          ) : (
-            activities.map(activity => (
+          ) : activities.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Recent Activity</Text>
+              {activities.map(activity => (
               <TouchableOpacity 
                 key={activity.id} 
                 style={styles.activityItem}
@@ -238,8 +389,9 @@ export default function ActivityScreen({ navigation, route }) {
                 </View>
                 <Icon name="chevron-forward" size={20} color={colors.gray} />
               </TouchableOpacity>
-            ))
-          )}
+              ))}
+            </>
+          ) : null}
         </ScrollView>
       )}
     </View>
@@ -316,8 +468,93 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: colors.gray,
-    marginTop: spacing.sm,
     textAlign: 'center',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: fonts.semiBold,
+    color: colors.dark,
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+    marginHorizontal: spacing.lg,
+  },
+  requestsSection: {
+    backgroundColor: colors.light,
+    paddingBottom: spacing.md,
+  },
+  requestItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    backgroundColor: 'white',
+    borderRadius: 8,
+    marginBottom: spacing.sm,
+  },
+  requestLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  requestAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: spacing.md,
+  },
+  requestInfo: {
+    flex: 1,
+  },
+  requestName: {
+    fontSize: 16,
+    fontFamily: fonts.semiBold,
+    color: colors.dark,
+    marginBottom: 2,
+  },
+  requestText: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.gray,
+  },
+  requestOuterWrapper: {
+    backgroundColor: '#F5F3E4',
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  arrowButton: {
+    padding: spacing.xs,
+  },
+  requestButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptButton: {
+    backgroundColor: colors.accent,
+  },
+  acceptButtonText: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.dark,
+  },
+  rejectButton: {
+    backgroundColor: '#FFD75C',
+  },
+  rejectButtonText: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.dark,
   },
   activityItem: {
     flexDirection: 'row',

@@ -226,6 +226,16 @@ export default function SignUpScreen({ navigation }) {
           </View>
         </View>
       </ScrollView>
+
+      {/* Bottom Box - Added background color #F5F3E4 */}
+      <View style={[styles.bottomBox, {backgroundColor: '#F5F3E4'}]}>
+        {/* Description */}
+        <Text style={styles.description}>
+          By signing up, you agree to our {' '}
+          <Text style={styles.link}>Terms of Service</Text> and {' '}
+          <Text style={styles.link}>Privacy Policy</Text>
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -387,5 +397,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  bottomBox: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.gray,
+  },
+  description: {
+    fontFamily: fonts.sub,
+    fontSize: 12,
+    color: colors.dark,
+    textAlign: 'center',
+  },
+  link: {
+    color: '#ff6b6b',
+    fontWeight: 'bold',
   },
 });

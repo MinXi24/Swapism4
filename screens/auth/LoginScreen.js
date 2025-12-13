@@ -95,7 +95,7 @@ export default function LoginScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={colors.secondary} barStyle="dark-content" />
       
-      <View style={styles.content}>
+      <View style={[styles.content, {backgroundColor: '#F5F3E4', borderBottomLeftRadius: 30, borderBottomRightRadius: 30}]}> 
         {/* Back Button */}
         <TouchableOpacity 
           style={styles.backButton}
