@@ -28,6 +28,7 @@ import {
 
 
 
+
   where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -652,7 +653,7 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.headerIcon} 
             onPress={() => {
-              navigation.navigate('Activity');
+              navigation.navigate('PostActivity');
             }}
           >
             <Icon 

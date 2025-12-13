@@ -1,19 +1,70 @@
-import { getAuth } from 'firebase/auth';
+import { deleteUser, getAuth } from 'firebase/auth';
+import { deleteDoc, doc, getFirestore } from 'firebase/firestore';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function SettingsScreen({ navigation }) {
   const auth = getAuth();
+  const db = getFirestore();
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete this account?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const user = auth.currentUser;
+              
+              if (user) {
+                // Delete user document from Firestore
+                try {
+                  await deleteDoc(doc(db, 'users', user.uid));
+                } catch (error) {
+                  console.log('Error deleting user document:', error);
+                }
+                
+                // Delete user from Firebase Authentication
+                await deleteUser(user);
+                
+                // Navigate to Welcome screen
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Welcome' }],
+                });
+                
+                Alert.alert('Account Deleted', 'Your account has been successfully deleted.');
+              }
+            } catch (error) {
+              console.error('Error deleting account:', error);
+              
+              let errorMessage = 'Failed to delete account. Please try again.';
+              
+              if (error.code === 'auth/requires-recent-login') {
+                errorMessage = 'For security reasons, please log out and log back in before deleting your account.';
+              }
+              
+              Alert.alert('Error', errorMessage);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -43,10 +94,10 @@ export default function SettingsScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={colors.light} barStyle="dark-content" />
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color={colors.dark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
@@ -79,6 +130,17 @@ export default function SettingsScreen({ navigation }) {
             </View>
             <Icon name="chevron-forward" size={20} color={colors.gray} />
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('RecentlyDeleted')}
+          >
+            <View style={styles.menuLeft}>
+              <Icon name="trash-outline" size={24} color={colors.dark} />
+              <Text style={styles.menuText}>Recently Deleted</Text>
+            </View>
+            <Icon name="chevron-forward" size={20} color={colors.gray} />
+          </TouchableOpacity>
         </View>
 
         {/* Privacy & Settings Section */}
@@ -96,7 +158,7 @@ export default function SettingsScreen({ navigation }) {
 
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => {/* Navigate to Blocked */}}
+            onPress={() => navigation.navigate('BlockedUsers')}
           >
             <View style={styles.menuLeft}>
               <Icon name="ban-outline" size={24} color={colors.dark} />
@@ -107,11 +169,11 @@ export default function SettingsScreen({ navigation }) {
 
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => {/* Navigate to Comment Settings */}}
+            onPress={handleDeleteAccount}
           >
             <View style={styles.menuLeft}>
-              <Icon name="chatbubble-outline" size={24} color={colors.dark} />
-              <Text style={styles.menuText}>Comment</Text>
+              <Icon name="trash-outline" size={24} color="#FF3B30" />
+              <Text style={[styles.menuText, { color: '#FF3B30' }]}>Delete Account</Text>
             </View>
             <Icon name="chevron-forward" size={20} color={colors.gray} />
           </TouchableOpacity>
@@ -171,15 +233,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: colors.lightGray,
+    borderBottomColor: '#dbdbdb',
+  },
+  backButton: {
+    padding: 4,
   },
   headerTitle: {
     fontSize: 20,
     fontFamily: fonts.semiBold,
+    fontWeight: '600',
     color: colors.dark,
   },
   content: {
