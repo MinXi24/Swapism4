@@ -1,4 +1,4 @@
-import { getAuth, listUsers } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
-import { colors, fonts, spacing } from '../../lib/theme';
+import { colors, spacing } from '../../lib/theme';
 
 
 export default function SearchScreen({ navigation }) {
