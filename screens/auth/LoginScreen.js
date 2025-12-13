@@ -233,11 +233,10 @@ const styles = StyleSheet.create({
   },
   illustrationContainer: {
     alignItems: 'center',
-    marginBottom: -10,
+    marginBottom: spacing.md,
   },
-  // --- CONFLICT REMOVED HERE ---
   illustration: {
-    width: 240,
+    width: 340,
     height: 160,
   },
   formContainer: {
@@ -247,22 +246,23 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   loginButton: {
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
     paddingVertical: spacing.sm,
   },
   linksContainer: {
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.lg,
     paddingHorizontal: spacing.sm,
-    gap: 4,
+    gap: 8,
   },
   forgotPassword: {
     fontFamily: fonts.sub,
     fontSize: 14,
     color: '#ff6b6b',
+    textDecorationLine: 'underline',
   },
   signUpLink: {
     fontFamily: fonts.sub,
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   dividerLine: {
     flex: 1,

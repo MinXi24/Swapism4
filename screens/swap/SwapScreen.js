@@ -1,4 +1,4 @@
-import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   FlatList,
@@ -50,18 +50,53 @@ export default function SwapScreen({ navigation }) {
       );
       
       const querySnapshot = await getDocs(q);
-      const items = querySnapshot.docs.map(doc => {
-        const data = doc.data();
+      
+      // Fetch items with user data
+      const itemsPromises = querySnapshot.docs.map(async (docSnapshot) => {
+        const data = docSnapshot.data();
+        
+        // Fetch user data to get their rating
+        let userRating = 0;
+        let userName = 'User';
+        let userReviewCount = 0;
+        
+        if (data.ownerUid) {
+          try {
+            console.log('Fetching user for ownerUid:', data.ownerUid);
+            const userDocRef = doc(db, 'users', data.ownerUid);
+            const userDocSnap = await getDoc(userDocRef);
+            
+            console.log('User doc exists?', userDocSnap.exists());
+            
+            if (userDocSnap.exists()) {
+              const userData = userDocSnap.data();
+              console.log('Found user data:', userData);
+              userRating = userData.rating || 0;
+              userName = userData.username || userData.displayName || 'User';
+              userReviewCount = userData.reviewCount || 0;
+              console.log('Set userRating:', userRating, 'userName:', userName, 'reviewCount:', userReviewCount);
+            } else {
+              console.log('No user document found for uid:', data.ownerUid);
+            }
+          } catch (userError) {
+            console.error('Error fetching user data:', userError);
+          }
+        }
+        
         return {
-          id: doc.id,
+          id: docSnapshot.id,
           title: data.title || data.description || 'Item',
           image: { uri: data.url },
-          rating: data.rating || 0,
-          reviews: data.reviewCount || 0,
+          rating: userRating,
+          reviews: userReviewCount,
           datePosted: data.uploadedAt?.toDate?.() || new Date(),
+          userName: userName,
+          userRating: userRating,
           ...data
         };
       });
+      
+      const items = await Promise.all(itemsPromises);
       
       setAllItems(items);
       const sorted = applySorting(items, selectedSort);
