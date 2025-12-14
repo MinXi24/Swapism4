@@ -602,14 +602,14 @@ export default function UserProfileScreen({ route, navigation }) {
                 <Text style={styles.statNumber}>{stats.posts}</Text>
                 <Text style={styles.statLabel}>posts</Text>
               </View>
-              <View style={styles.statItem}>
+              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'followers' })}>
                 <Text style={styles.statNumber}>{stats.followers}</Text>
                 <Text style={styles.statLabel}>followers</Text>
-              </View>
-              <View style={styles.statItem}>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'following' })}>
                 <Text style={styles.statNumber}>{stats.following}</Text>
                 <Text style={styles.statLabel}>following</Text>
-              </View>
+              </TouchableOpacity>
             </View>
           </View>
 

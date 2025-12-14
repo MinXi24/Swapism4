@@ -23,11 +23,6 @@ import {
 
 
 
-
-
-
-
-
   where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -103,99 +98,152 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   const loadPosts = async () => {
-    try {
-      setLoading(true);
-      const q = query(
-        collection(db, 'wardrobe-plug-fyp/user/images'),
-        where('postType', '==', 'forFun')
-      );
-      const querySnapshot = await getDocs(q);
-      
-      const postsData = await Promise.all(
-        querySnapshot.docs.map(async (docSnapshot) => {
-          const postData = docSnapshot.data();
+  try {
+    setLoading(true);
+    const q = query(
+      collection(db, 'wardrobe-plug-fyp/user/images'),
+      where('postType', '==', 'forFun')
+    );
+    const querySnapshot = await getDocs(q);
+
+    const postsData = await Promise.all(
+      querySnapshot.docs.map(async (docSnapshot) => {
+        const postData = docSnapshot.data();
+
+        // FIXED: If no ownerUid, immediately mark as invalid
+        if (!postData.ownerUid) {
+          return null;
+        }
+
+        // Check if owner is deleted, inactive, or invalid
+        let ownerIsInvalid = false;
+        try {
+          const userDocRef = doc(db, 'users', postData.ownerUid);
+          const userDoc = await getDoc(userDocRef);
           
-          const likesQuery = query(
-            collection(db, 'likes'),
-            where('postId', '==', docSnapshot.id)
-          );
-          const likesSnapshot = await getDocs(likesQuery);
-          const likeCount = likesSnapshot.size;
-          
-          const commentsQuery = query(
-            collection(db, 'comments'),
-            where('postId', '==', docSnapshot.id)
-          );
-          const commentsSnapshot = await getDocs(commentsQuery);
-          const commentCount = commentsSnapshot.size;
-          
-          const userLiked = likesSnapshot.docs.some(
-            doc => doc.data().userId === currentUser?.uid
-          );
-          
-          // Load user profile picture and privacy settings
-          let userPhotoURL = null;
-          let isPrivate = false;
-          let isFollowing = false;
-          
-          if (postData.ownerUid) {
-            try {
-              const userDocRef = doc(db, 'users', postData.ownerUid);
-              const userDoc = await getDoc(userDocRef);
-              if (userDoc.exists()) {
-                const userData = userDoc.data();
-                userPhotoURL = userData.photoURL || null;
-                isPrivate = userData.isPrivate || false;
-                
-                // Check if current user is following
-                if (currentUser) {
-                  const followers = userData.followers || [];
-                  isFollowing = followers.includes(currentUser.uid);
-                }
-              }
-            } catch (error) {
-              console.error('Error loading user data:', error);
+          if (!userDoc.exists()) {
+            // User document doesn't exist = deleted user
+            ownerIsInvalid = true;
+          } else {
+            const userData = userDoc.data();
+            // Check all invalid conditions
+            if (
+              userData.deleted === true ||
+              userData.active === false ||
+              !userData.username ||
+              typeof userData.username !== 'string' ||
+              userData.username.trim() === '' ||
+              (userData.role && userData.role.toLowerCase() === 'admin') ||
+              (userData.username && userData.username.toLowerCase().includes('admin'))
+            ) {
+              ownerIsInvalid = true;
             }
           }
-          
-          return {
-            id: docSnapshot.id,
-            ...postData,
-            likeCount,
-            commentCount,
-            userLiked,
-            userPhotoURL,
-            isPrivate,
-            isFollowing,
-            uploadedAt: postData.uploadedAt?.toDate?.() || new Date(),
-          };
-        })
-      );
-      
-      // Filter out private posts from users the current user doesn't follow
-      const filteredPosts = postsData.filter(post => {
-        // Show post if it's not private
-        if (!post.isPrivate) return true;
-        
-        // Show post if it's the current user's post
-        if (currentUser && post.ownerUid === currentUser.uid) return true;
-        
-        // Show post if current user is following the owner
-        if (post.isFollowing) return true;
-        
-        // Hide private post
-        return false;
-      });
-      
-      filteredPosts.sort((a, b) => b.uploadedAt - a.uploadedAt);
-      setPosts(filteredPosts);
-    } catch (error) {
-      console.error('Error loading posts:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+        } catch (error) {
+          console.error('Error checking user validity:', error);
+          ownerIsInvalid = true;
+        }
 
+        // FIXED: Return null for invalid owners - STOP HERE!
+        if (ownerIsInvalid) {
+          console.log(`Filtering out post ${docSnapshot.id} from invalid user ${postData.ownerUid}`);
+          return null;
+        }
+
+        // If we reach here, owner is valid - now fetch additional user data
+        let userPhotoURL = null;
+        let isPrivate = false;
+        let isFollowing = false;
+        let userData = null;
+
+        try {
+          const userDocRef = doc(db, 'users', postData.ownerUid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            userData = userDoc.data();
+            
+            // EXTRA SAFETY CHECK: Re-validate user data
+            if (
+              userData.deleted === true ||
+              userData.active === false ||
+              !userData.username ||
+              typeof userData.username !== 'string' ||
+              userData.username.trim() === ''
+            ) {
+              console.log(`User ${postData.ownerUid} failed second validation check`);
+              return null;
+            }
+            
+            userPhotoURL = userData.photoURL || null;
+            isPrivate = userData.isPrivate || false;
+
+            // Check if current user is following
+            if (currentUser) {
+              const followers = userData.followers || [];
+              isFollowing = followers.includes(currentUser.uid);
+            }
+          } else {
+            // User doc doesn't exist
+            console.log(`User document ${postData.ownerUid} doesn't exist on second check`);
+            return null;
+          }
+        } catch (error) {
+          console.error('Error loading user profile:', error);
+          return null; // If we can't load user data, don't show the post
+        }
+
+        // Continue with likes and comments only AFTER confirming user is valid
+        const likesQuery = query(
+          collection(db, 'likes'),
+          where('postId', '==', docSnapshot.id)
+        );
+        const likesSnapshot = await getDocs(likesQuery);
+        const likeCount = likesSnapshot.size;
+
+        const commentsQuery = query(
+          collection(db, 'comments'),
+          where('postId', '==', docSnapshot.id)
+        );
+        const commentsSnapshot = await getDocs(commentsQuery);
+        const commentCount = commentsSnapshot.size;
+
+        const userLiked = likesSnapshot.docs.some(
+          doc => doc.data().userId === currentUser?.uid
+        );
+
+        return {
+          id: docSnapshot.id,
+          ...postData,
+          likeCount,
+          commentCount,
+          userLiked,
+          userPhotoURL,
+          isPrivate,
+          isFollowing,
+          uploadedAt: postData.uploadedAt?.toDate?.() || new Date(),
+        };
+      })
+    );
+
+    // Remove nulls (posts from deleted/inactive/invalid owners)
+    const filteredPosts = postsData.filter(Boolean);
+
+    // Filter out private posts from users the current user doesn't follow
+    const visiblePosts = filteredPosts.filter(post => {
+      if (!post.isPrivate) return true;
+      if (currentUser && post.ownerUid === currentUser.uid) return true;
+      if (post.isFollowing) return true;
+      return false;
+    });
+
+    visiblePosts.sort((a, b) => b.uploadedAt - a.uploadedAt);
+    setPosts(visiblePosts);
+  } catch (error) {
+    console.error('Error loading posts:', error);
+  } finally {
+    setLoading(false);
+  }
+};
   const loadSuggestedUsers = async () => {
     try {
       if (!currentUser) {
