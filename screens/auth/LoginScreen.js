@@ -15,7 +15,7 @@ import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 // Firebase imports
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 // --- NEW IMPORTS START ---
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
 // --- NEW IMPORTS END ---
@@ -88,7 +88,48 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleForgotPassword = () => {
-    Alert.alert('Forgot Password', 'Password reset feature coming soon!');
+    Alert.prompt(
+      'Forgot Password',
+      'Enter your email address to receive a password reset link:',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Send Reset Link',
+          onPress: async (emailInput) => {
+            if (!emailInput || !emailInput.trim()) {
+              Alert.alert('Error', 'Please enter your email address');
+              return;
+            }
+
+            try {
+              await sendPasswordResetEmail(auth, emailInput.trim());
+              Alert.alert(
+                'Success', 
+                'Password reset email sent! Please check your inbox and follow the instructions to reset your password.',
+                [{ text: 'OK' }]
+              );
+            } catch (error) {
+              let errorMessage = error.message;
+              
+              if (error.code === 'auth/user-not-found') {
+                errorMessage = 'No account found with this email address.';
+              } else if (error.code === 'auth/invalid-email') {
+                errorMessage = 'Please enter a valid email address.';
+              } else if (error.code === 'auth/too-many-requests') {
+                errorMessage = 'Too many attempts. Please try again later.';
+              }
+
+              Alert.alert('Error', errorMessage);
+            }
+          }
+        }
+      ],
+      'plain-text',
+      email
+    );
   };
 
   return (

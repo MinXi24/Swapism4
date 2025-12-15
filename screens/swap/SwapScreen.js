@@ -21,7 +21,9 @@ export default function SwapScreen({ navigation }) {
   const [allItems, setAllItems] = useState([]);
   const [filteredItems, setFilteredItems] = useState([]);
   const [showSortModal, setShowSortModal] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [selectedSort, setSelectedSort] = useState('Newest to Oldest');
+  const [selectedSizes, setSelectedSizes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const db = getFirestore();
@@ -32,6 +34,8 @@ export default function SwapScreen({ navigation }) {
     'Highest to Lowest Rating',
     'Lowest to Highest Rating',
   ];
+
+  const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
   useEffect(() => {
     loadSwapItems();
@@ -110,17 +114,30 @@ export default function SwapScreen({ navigation }) {
 
   const handleSearch = (query) => {
     setSearchQuery(query);
+    applyFilters(query, selectedSizes);
+  };
+
+  const applyFilters = (query, sizes) => {
+    let filtered = [...allItems];
     
-    if (query.trim() === '') {
-      const sorted = applySorting(allItems, selectedSort);
-      setFilteredItems(sorted);
-    } else {
-      const filtered = allItems.filter(item =>
+    // Filter by search query
+    if (query.trim() !== '') {
+      filtered = filtered.filter(item =>
         item.title.toLowerCase().includes(query.toLowerCase())
       );
-      const sorted = applySorting(filtered, selectedSort);
-      setFilteredItems(sorted);
     }
+    
+    // Filter by sizes
+    if (sizes.length > 0) {
+      filtered = filtered.filter(item => {
+        // Check multiple possible property names for size
+        const itemSize = item.size || item.Size || item.clothingSize || item.apparelSize;
+        return itemSize && sizes.includes(itemSize);
+      });
+    }
+    
+    const sorted = applySorting(filtered, selectedSort);
+    setFilteredItems(sorted);
   };
 
   const applySorting = (items, sortType) => {
@@ -148,8 +165,23 @@ export default function SwapScreen({ navigation }) {
   };
 
   const handleFilter = () => {
-    console.log('Filter pressed');
-    // Add filter modal logic here
+    setShowFilterModal(true);
+  };
+
+  const toggleSizeFilter = (size) => {
+    let newSizes;
+    if (selectedSizes.includes(size)) {
+      newSizes = selectedSizes.filter(s => s !== size);
+    } else {
+      newSizes = [...selectedSizes, size];
+    }
+    setSelectedSizes(newSizes);
+    applyFilters(searchQuery, newSizes);
+  };
+
+  const clearFilters = () => {
+    setSelectedSizes([]);
+    applyFilters(searchQuery, []);
   };
 
   const handleHistory = () => {
@@ -222,6 +254,11 @@ export default function SwapScreen({ navigation }) {
         <TouchableOpacity style={styles.filterButton} onPress={handleFilter}>
           <Icon name="filter-outline" size={20} color={colors.dark} />
           <Text style={styles.filterText}>Filter</Text>
+          {selectedSizes.length > 0 && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>{selectedSizes.length}</Text>
+            </View>
+          )}
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.sortButton} onPress={() => setShowSortModal(true)}>
@@ -257,8 +294,16 @@ export default function SwapScreen({ navigation }) {
         animationType="slide"
         onRequestClose={() => setShowSortModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSortModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalContent}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Sort By</Text>
               <TouchableOpacity onPress={() => setShowSortModal(false)}>
@@ -269,8 +314,68 @@ export default function SwapScreen({ navigation }) {
             <View style={styles.sortOptionsContainer}>
               {sortOptions.map(option => renderSortOption(option))}
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Filter Modal */}
+      <Modal
+        visible={showFilterModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFilterModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalContent}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter by Size</Text>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                <Icon name="close-outline" size={24} color={colors.dark} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.filterOptionsContainer}>
+              <View style={styles.sizeGrid}>
+                {sizeOptions.map(size => (
+                  <TouchableOpacity
+                    key={size}
+                    style={[
+                      styles.sizeOption,
+                      selectedSizes.includes(size) && styles.sizeOptionSelected
+                    ]}
+                    onPress={() => toggleSizeFilter(size)}
+                  >
+                    <Text
+                      style={[
+                        styles.sizeOptionText,
+                        selectedSizes.includes(size) && styles.sizeOptionTextSelected
+                      ]}
+                    >
+                      {size}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
+              {selectedSizes.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearButton}
+                  onPress={clearFilters}
+                >
+                  <Text style={styles.clearButtonText}>Clear All Filters</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -397,10 +502,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#DAD3A1',
+    backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: 30,
+    maxHeight: '70%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -408,7 +514,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.primary,
+    borderBottomColor: '#E0E0E0',
   },
   modalTitle: {
     fontFamily: fonts.header,
@@ -427,10 +533,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: 8,
     marginBottom: spacing.sm,
-    backgroundColor: '#DAD3A1',
+    backgroundColor: '#F5F5F5',
   },
   sortOptionSelected: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.secondary,
+    borderWidth: 2,
+    borderColor: colors.accent,
   },
   sortOptionText: {
     fontFamily: fonts.body,
@@ -440,5 +548,67 @@ const styles = StyleSheet.create({
   sortOptionTextSelected: {
     fontWeight: 'bold',
     color: colors.accent,
+  },
+  filterBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  filterBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  filterOptionsContainer: {
+    padding: spacing.md,
+  },
+  sizeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  sizeOption: {
+    width: 80,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+  },
+  sizeOptionSelected: {
+    backgroundColor: colors.secondary,
+    borderColor: colors.accent,
+  },
+  sizeOptionText: {
+    fontFamily: fonts.header,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  sizeOptionTextSelected: {
+    color: colors.accent,
+    fontWeight: 'bold',
+  },
+  clearButton: {
+    backgroundColor: '#FF3B30',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  clearButtonText: {
+    fontFamily: fonts.header,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

@@ -29,9 +29,6 @@ import {
 
 
 
-
-
-
   where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -118,58 +115,30 @@ export default function HomeScreen({ navigation }) {
       const postsData = await Promise.all(
         querySnapshot.docs.map(async (docSnapshot) => {
           const postData = docSnapshot.data();
-
-          // Check if owner is deleted, inactive, or missing
-          let ownerIsInvalid = false;
-          if (postData.ownerUid) {
-            try {
-              const userDocRef = doc(db, 'users', postData.ownerUid);
-              const userDoc = await getDoc(userDocRef);
-              if (!userDoc.exists()) {
-                ownerIsInvalid = true;
-              } else {
-                const userData = userDoc.data();
-                if (
-                  userData.deleted === true ||
-                  userData.active === false ||
-                  !userData.username ||
-                  typeof userData.username !== 'string' ||
-                  userData.username.trim() === '' ||
-                  (userData.role && userData.role.toLowerCase() === 'admin') ||
-                  (userData.username && userData.username.toLowerCase().includes('admin'))
-                ) {
-                  ownerIsInvalid = true;
-                }
-              }
-            } catch (error) {
-              ownerIsInvalid = true;
-            }
-          }
-          if (ownerIsInvalid) return null;
-
+          
           const likesQuery = query(
             collection(db, 'likes'),
             where('postId', '==', docSnapshot.id)
           );
           const likesSnapshot = await getDocs(likesQuery);
           const likeCount = likesSnapshot.size;
-
+          
           const commentsQuery = query(
             collection(db, 'comments'),
             where('postId', '==', docSnapshot.id)
           );
           const commentsSnapshot = await getDocs(commentsQuery);
           const commentCount = commentsSnapshot.size;
-
+          
           const userLiked = likesSnapshot.docs.some(
             doc => doc.data().userId === currentUser?.uid
           );
-
+          
           // Load user profile picture and privacy settings
           let userPhotoURL = null;
           let isPrivate = false;
           let isFollowing = false;
-
+          
           if (postData.ownerUid) {
             try {
               const userDocRef = doc(db, 'users', postData.ownerUid);
@@ -178,7 +147,7 @@ export default function HomeScreen({ navigation }) {
                 const userData = userDoc.data();
                 userPhotoURL = userData.photoURL || null;
                 isPrivate = userData.isPrivate || false;
-
+                
                 // Check if current user is following
                 if (currentUser) {
                   const followers = userData.followers || [];
@@ -186,10 +155,10 @@ export default function HomeScreen({ navigation }) {
                 }
               }
             } catch (error) {
-              // Already handled above
+              console.error('Error loading user data:', error);
             }
           }
-
+          
           return {
             id: docSnapshot.id,
             ...postData,
@@ -203,20 +172,24 @@ export default function HomeScreen({ navigation }) {
           };
         })
       );
-
-      // Remove nulls (posts from deleted/inactive/invalid owners)
-      const filteredPosts = postsData.filter(Boolean);
-
+      
       // Filter out private posts from users the current user doesn't follow
-      const visiblePosts = filteredPosts.filter(post => {
+      const filteredPosts = postsData.filter(post => {
+        // Show post if it's not private
         if (!post.isPrivate) return true;
+        
+        // Show post if it's the current user's post
         if (currentUser && post.ownerUid === currentUser.uid) return true;
+        
+        // Show post if current user is following the owner
         if (post.isFollowing) return true;
+        
+        // Hide private post
         return false;
       });
-
-      visiblePosts.sort((a, b) => b.uploadedAt - a.uploadedAt);
-      setPosts(visiblePosts);
+      
+      filteredPosts.sort((a, b) => b.uploadedAt - a.uploadedAt);
+      setPosts(filteredPosts);
     } catch (error) {
       console.error('Error loading posts:', error);
     } finally {

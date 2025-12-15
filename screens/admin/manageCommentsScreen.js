@@ -167,7 +167,7 @@ export default function ManageCommentsScreen({ navigation }) {
                 <Text style={styles.commentText}>
                     <Text style={styles.boldUsername}>{item.targetOwnerName || 'Unknown'} </Text>
                     {'\n'}
-                    <Text style={styles.flaggedText}>"{item.targetContent}"</Text>
+                    <Text style={styles.flaggedText}>&quot;{item.targetContent}&quot;</Text>
                 </Text>
                 
                 <View style={styles.metaRow}>
