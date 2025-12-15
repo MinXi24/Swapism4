@@ -9,26 +9,7 @@ import {
   getDocs,
   getFirestore,
   query,
-  serverTimestamp // <--- ADDED THIS IMPORT
-  ,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  serverTimestamp,
   where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -106,6 +87,14 @@ export default function HomeScreen({ navigation }) {
   const loadPosts = async () => {
     try {
       setLoading(true);
+
+      // 1. [NEW] Fetch Blocked Users List First
+      let blockedIds = [];
+      if (currentUser) {
+        const blockedSnap = await getDocs(collection(db, 'users', currentUser.uid, 'blocked_users'));
+        blockedIds = blockedSnap.docs.map(doc => doc.id);
+      }
+
       const q = query(
         collection(db, 'wardrobe-plug-fyp/user/images'),
         where('postType', '==', 'forFun')
@@ -173,8 +162,11 @@ export default function HomeScreen({ navigation }) {
         })
       );
       
-      // Filter out private posts from users the current user doesn't follow
+      // Filter out private posts AND BLOCKED USERS
       const filteredPosts = postsData.filter(post => {
+        // [NEW] Hide post if the owner is blocked
+        if (blockedIds.includes(post.ownerUid)) return false;
+
         // Show post if it's not private
         if (!post.isPrivate) return true;
         
@@ -204,6 +196,11 @@ export default function HomeScreen({ navigation }) {
         return;
       }
 
+      // [NEW] Fetch Blocked Users for Suggestions too
+      let blockedIds = [];
+      const blockedSnap = await getDocs(collection(db, 'users', currentUser.uid, 'blocked_users'));
+      blockedIds = blockedSnap.docs.map(doc => doc.id);
+
       // Get current user's following list
       const currentUserDocRef = doc(db, 'users', currentUser.uid);
       const currentUserDoc = await getDoc(currentUserDocRef);
@@ -218,6 +215,11 @@ export default function HomeScreen({ navigation }) {
       usersSnapshot.docs.forEach(userDoc => {
         const userData = userDoc.data();
         const userUid = userDoc.id;
+
+        // [NEW] Skip Blocked Users
+        if (blockedIds.includes(userUid)) {
+            return;
+        }
 
         // Skip current user and users already being followed
         if (userUid === currentUser.uid || currentUserFollowing.includes(userUid)) {

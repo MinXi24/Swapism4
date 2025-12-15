@@ -44,8 +44,6 @@ export default function ManageAccountScreen({ navigation, route }) {
 
   // --- STATE ---
   const [viewMode, setViewMode] = useState(paramReport ? 'detail' : 'list');
-  // if a report was passed from Home page, start in detail view
-  // otherwise start in the "list" view
   const [currentReport, setCurrentReport] = useState(paramReport || null);
   
   // List State
@@ -91,22 +89,22 @@ export default function ManageAccountScreen({ navigation, route }) {
   // --- DATA FETCHING ---
   const fetchReportsList = async () => {
     try {
-      const q = query(
-        collection(db, 'report'), 
-        where('status', '==', 'pending')
-      );
-      
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Client-side sort (Newest first)
-      data.sort((a, b) => {
+      // Fetch both Posts (report) and Users (reported_users)
+      const postsQuery = query(collection(db, 'report'), where('status', '==', 'pending'));
+      const usersQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
+
+      const [postSnap, userSnap] = await Promise.all([ getDocs(postsQuery), getDocs(usersQuery) ]);
+
+      const posts = postSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'post' }));
+      const users = userSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'user' }));
+
+      const allData = [...posts, ...users].sort((a, b) => {
           const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(0);
           const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(0);
           return dateB - dateA;
       });
 
-      setReportsList(data);
+      setReportsList(allData);
     } catch (error) {
       console.error('Error fetching list:', error);
     } finally {
@@ -118,24 +116,34 @@ export default function ManageAccountScreen({ navigation, route }) {
   const fetchUserDetails = async (reportData) => {
     setLoadingUser(true);
     try {
-        const targetId = reportData.reported_clothes_id || reportData.post_id || reportData.clothes_id;
+        let ownerId = reportData.reported_user_id; 
         
-        let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId));
-        if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'clothes', targetId));
-        if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'userImages', targetId));
+        // If Post Report and no ownerId, find it from the post
+        if (reportData.reportType !== 'user') {
+            const targetId = reportData.reported_clothes_id || reportData.post_id || reportData.clothes_id;
+            
+            if (targetId) {
+                let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId));
+                if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'clothes', targetId));
+                if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'userImages', targetId));
 
-        if (!postSnap.exists()) {
-            setUserInfo(prev => ({ ...prev, username: 'Post Deleted', bio: 'Item removed.' }));
-            return;
+                if (postSnap.exists()) {
+                    const postData = postSnap.data();
+                    if (!ownerId) {
+                        ownerId = postData.ownerUid || postData.userId || postData.uid;
+                    }
+                } else {
+                    if (!ownerId) {
+                        setUserInfo(prev => ({ ...prev, username: 'Post Deleted / Unknown User', bio: 'Item removed.' }));
+                        return;
+                    }
+                }
+            }
         }
-
-        const postData = postSnap.data();
-        const ownerId = postData.ownerUid || postData.userId || postData.uid;
 
         if (ownerId) {
             let userSnap = await getDoc(doc(db, 'users', ownerId));
-            if (!userSnap.exists()) userSnap = await getDoc(doc(db, 'profiles', ownerId));
-
+            
             if (userSnap.exists()) {
                 const userData = userSnap.data();
                 setUserInfo({
@@ -150,6 +158,8 @@ export default function ManageAccountScreen({ navigation, route }) {
                     photoURL: userData.photoURL || null,
                     ownerUid: ownerId
                 });
+            } else {
+                 setUserInfo(prev => ({ ...prev, username: 'User Not Found', bio: 'Account might be deleted.' }));
             }
         }
     } catch (error) {
@@ -172,55 +182,90 @@ export default function ManageAccountScreen({ navigation, route }) {
 
   const handleBack = () => {
       if (viewMode === 'detail' && !paramReport) {
-          // if we are in profile view, just flip the switch back to "list" view.
           setViewMode('list');
           setCurrentReport(null);
       } else {
-          // if we are in list view, go back to previous screen.
           navigation.goBack();
       }
   };
 
-  const handleDeletePost = async () => {
+  const handleReportAction = async () => {
     if (!currentReport) return;
+    
+    const isUserReport = currentReport.reportType === 'user';
     const targetId = currentReport.reported_clothes_id || currentReport.post_id || currentReport.clothes_id;
+    // Determine which collection the REPORT lives in
+    const collectionName = isUserReport ? 'reported_users' : 'report';
 
     Alert.alert(
-      "Confirm Deletion",
-      "Permanently delete post and resolve report?",
+      "Take Action",
+      isUserReport ? "Decide on this User Report" : "Decide on this Post Report",
       [
         { text: "Cancel", style: "cancel" },
+        // OPTION 1: DISMISS (Keep Content)
         { 
-            text: "Delete", 
+            text: "Dismiss (Ignore)", 
+            onPress: async () => {
+                try {
+                    await updateDoc(doc(db, collectionName, currentReport.id), {
+                        status: 'resolved',
+                        resolution: 'dismissed', 
+                        resolved_at: new Date()
+                    });
+                    
+                    finalizeAction("Report dismissed.");
+                } catch (e) {
+                    Alert.alert("Error", "Could not dismiss report.");
+                }
+            } 
+        },
+        // OPTION 2: DELETE / BAN
+        { 
+            text: isUserReport ? "BAN USER" : "DELETE POST", 
             style: "destructive", 
             onPress: async () => {
                 try {
-                    if (targetId) {
-                        await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId)).catch(()=>{});
-                        await deleteDoc(doc(db, 'clothes', targetId)).catch(()=>{});
-                        await deleteDoc(doc(db, 'userImages', targetId)).catch(()=>{});
+                    if (isUserReport) {
+                        // --- BAN USER LOGIC REMOVED PER REQUEST ---
+                        // Does NOTHING to the user document.
+                        // It only updates the report status below.
+                        console.log("Ban selected, but logic disabled. User remains active.");
+                    } else {
+                        // --- DELETE POST LOGIC (Kept Active) ---
+                        if (targetId) {
+                            await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId)).catch(()=>{});
+                            await deleteDoc(doc(db, 'clothes', targetId)).catch(()=>{});
+                            await deleteDoc(doc(db, 'userImages', targetId)).catch(()=>{});
+                        }
                     }
                     
-                    await updateDoc(doc(db, 'report', currentReport.id), {
+                    // Resolve the report ticket
+                    await updateDoc(doc(db, collectionName, currentReport.id), {
                         status: 'resolved',
+                        resolution: isUserReport ? 'banned_simulated' : 'deleted',
                         resolved_at: new Date()
                     });
 
-                    setReportsList(prev => prev.filter(r => r.id !== currentReport.id));
-                    
-                    Alert.alert("Success", "Post deleted.", [
-                        { text: "OK", onPress: () => {
-                            if (paramReport) navigation.goBack();
-                            else setViewMode('list'); 
-                        }}
-                    ]);
+                    finalizeAction(isUserReport ? "User report resolved (No Ban)." : "Post permanently deleted.");
                 } catch (error) {
-                    Alert.alert("Error", "Could not delete post.");
+                    console.error(error);
+                    Alert.alert("Error", "Could not complete action.");
                 }
             } 
         }
       ]
     );
+  };
+
+  const finalizeAction = (message) => {
+      setReportsList(prev => prev.filter(r => r.id !== currentReport.id));
+      
+      Alert.alert("Success", message, [
+          { text: "OK", onPress: () => {
+              if (paramReport) navigation.goBack();
+              else setViewMode('list'); 
+          }}
+      ]);
   };
 
   const handleNavigation = (tab) => {
@@ -232,31 +277,105 @@ export default function ManageAccountScreen({ navigation, route }) {
   };
 
   // --- RENDER HELPERS ---
+  
+  // 1. User Detail View (Simplified Card)
+  const renderUserDetail = () => (
+    <View style={styles.adminPostView}>
+        <View style={[styles.postHeader, {borderBottomWidth: 0, marginBottom: 5}]}>
+            <Text style={{fontSize: 18, fontWeight: 'bold', color: ALERT_RED}}>USER REPORT</Text>
+            <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={handleReportAction}>
+                <Icon name="hammer-outline" size={24} color={colors.dark} />
+            </TouchableOpacity>
+        </View>
+
+        <View style={styles.userReportCard}>
+            <Icon name="person-circle" size={60} color={colors.gray} />
+            <Text style={{fontSize: 20, fontWeight:'bold', marginTop:10, color: colors.dark}}>{userInfo.username}</Text>
+            <Text style={{color:colors.gray, marginBottom: 20}}>{userInfo.ownerUid}</Text>
+            
+            <View style={{width:'100%', padding: 15, backgroundColor:'#FFEBEE', borderRadius:8}}>
+                <Text style={{color:ALERT_RED, fontWeight:'bold', marginBottom:5, fontSize: 12}}>REASON FOR REPORT:</Text>
+                <Text style={{fontSize:16, color: colors.dark}}>{currentReport?.reason || "Inappropriate Behavior"}</Text>
+            </View>
+        </View>
+    </View>
+  );
+
+  // 2. Post Detail View (Original Layout with Image)
+  const renderPostDetail = () => (
+    <View style={styles.adminPostView}>
+        <View style={styles.postHeader}>
+            <View style={styles.smallAvatar}>
+                {userInfo.photoURL ? (
+                    <Image source={{ uri: userInfo.photoURL }} style={{ width: 30, height: 30, borderRadius: 15 }} /> 
+                ) : (
+                    <Icon name="person" size={16} color="#fff"/>
+                )}
+            </View>
+            <Text style={styles.postUsername}>{userInfo.username}</Text>
+            <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={handleReportAction}>
+                <Icon name="hammer-outline" size={24} color={colors.dark} />
+            </TouchableOpacity>
+        </View>
+        
+        {currentReport?.snapshot_image_url ? (
+            <Image source={{ uri: currentReport.snapshot_image_url }} style={styles.postImage} resizeMode="cover" />
+        ) : (
+            <View style={[styles.postImage, styles.postImagePlaceholder]}>
+                <Text style={{color:colors.gray}}>Image Unavailable</Text>
+            </View>
+        )}
+        
+        <View style={styles.postFooter}>
+            <View style={{marginTop: 10, padding: 8, backgroundColor: '#FFEBEE', borderRadius: 4}}>
+                <Text style={{color: '#D32F2F', fontSize: 12, fontWeight:'bold'}}>
+                    REPORT REASON: {currentReport?.reason}
+                </Text>
+            </View>
+            {currentReport?.snapshot_description && (
+                <Text style={styles.captionText}>
+                    <Text style={{fontWeight: 'bold'}}>Caption: </Text>
+                    {currentReport.snapshot_description}
+                </Text>
+            )}
+        </View>
+    </View>
+  );
+
+  // 3. List Item Renderer
   const renderListItem = ({ item }) => (
     <View style={styles.reportCard}>
         <View style={styles.cardHeader}>
             <View style={{flexDirection:'row', alignItems:'center', gap: 6}}>
-                <Icon name="alert-circle" size={16} color={ALERT_RED} />
-                <Text style={styles.flaggedLabel}>{item.reason}</Text>
+                <Icon name={item.reportType === 'user' ? 'person' : 'alert-circle'} size={16} color={ALERT_RED} />
+                <Text style={styles.flaggedLabel}>
+                    {item.reportType === 'user' ? 'User Report' : (item.reason || "Reported")}
+                </Text>
             </View>
             <Text style={styles.dateText}>
                 {item.created_at?.toDate ? item.created_at.toDate().toLocaleDateString() : ''}
             </Text>
         </View>
         <View style={styles.cardContent}>
-            {item.snapshot_image_url ? (
-                <Image source={{ uri: item.snapshot_image_url }} style={styles.thumbnail} resizeMode="cover" />
-            ) : (
-                <View style={[styles.thumbnail, styles.placeholderThumb]}>
-                    <Icon name="image" size={20} color={colors.gray}/>
-                </View>
+            {/* Show thumbnail only if it's a post report with an image */}
+            {item.reportType !== 'user' && (
+                item.snapshot_image_url ? (
+                    <Image source={{ uri: item.snapshot_image_url }} style={styles.thumbnail} resizeMode="cover" />
+                ) : (
+                    <View style={[styles.thumbnail, styles.placeholderThumb]}>
+                        <Icon name="image" size={20} color={colors.gray}/>
+                    </View>
+                )
             )}
+            
             <View style={styles.textDetails}>
                  <Text style={styles.descriptionText} numberOfLines={2}>
-                    <Text style={{fontWeight: 'bold'}}>Caption: </Text>
-                    {item.snapshot_description || "No description"}
+                    <Text style={{fontWeight: 'bold'}}>{item.reportType === 'user' ? 'Subject: ' : 'User: '}</Text>
+                    {item.reported_user_name || "Unknown"}
                  </Text>
-                 <Text style={styles.idText}>ID: {item.reported_clothes_id?.slice(0,8)}...</Text>
+                 <Text style={[styles.idText, {marginTop: 2}]}>
+                    Reason: {item.reason}
+                 </Text>
             </View>
             <TouchableOpacity style={styles.reviewButton} onPress={() => handleReviewItem(item)}>
                 <Text style={styles.reviewButtonText}>Review</Text>
@@ -289,7 +408,6 @@ export default function ManageAccountScreen({ navigation, route }) {
       {/* --- BODY CONTENT --- */}
       {viewMode === 'list' ? (
         // ---------------- LIST VIEW ----------------
-        // if viewmode is 'list', the app renders this flatlist
         loadingList ? (
             <View style={styles.centerContainer}>
                 <ActivityIndicator size="large" color={THEME_GREEN} />
@@ -320,7 +438,6 @@ export default function ManageAccountScreen({ navigation, route }) {
         )
       ) : (
         // ---------------- DETAIL VIEW (PROFILE) ----------------
-        // if view mode is 'detail', the app hides the list and renders this scrollview instead
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             <View style={styles.profileSection}>
               {loadingUser ? (
@@ -366,46 +483,15 @@ export default function ManageAccountScreen({ navigation, route }) {
             <View style={styles.tabsContainer}>
                 <View style={[styles.tab, styles.activeTab]}>
                     <Icon name="alert-circle-outline" size={20} color={colors.dark} />
-                    <Text style={{fontFamily: fonts.header, fontWeight:'700', marginLeft: 5}}>Reported Content</Text>
+                    <Text style={{fontFamily: fonts.header, fontWeight:'700', marginLeft: 5}}>
+                        {currentReport?.reportType === 'user' ? 'Report Details' : 'Reported Content'}
+                    </Text>
                 </View>
             </View>
 
             <View style={styles.postsContainer}>
-                <View style={styles.adminPostView}>
-                    <View style={styles.postHeader}>
-                        <View style={styles.smallAvatar}>
-                            {userInfo.photoURL ? (
-                                <Image source={{ uri: userInfo.photoURL }} style={{ width: 30, height: 30, borderRadius: 15 }} /> 
-                            ) : (
-                                <Icon name="person" size={16} color="#fff"/>
-                            )}
-                        </View>
-                        <Text style={styles.postUsername}>{userInfo.username}</Text>
-                        <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={handleDeletePost}>
-                            <Icon name="trash-outline" size={20} color={ALERT_RED} />
-                        </TouchableOpacity>
-                    </View>
-                    
-                    {currentReport?.snapshot_image_url ? (
-                        <Image source={{ uri: currentReport.snapshot_image_url }} style={styles.postImage} resizeMode="cover" />
-                    ) : (
-                        <View style={[styles.postImage, styles.postImagePlaceholder]}>
-                            <Text style={{color:colors.gray}}>Image Unavailable</Text>
-                        </View>
-                    )}
-                    
-                    <View style={styles.postFooter}>
-                        <View style={{marginTop: 10, padding: 8, backgroundColor: '#FFEBEE', borderRadius: 4}}>
-                            <Text style={{color: '#D32F2F', fontSize: 12, fontWeight:'bold'}}>
-                                REASON: {currentReport?.reason}
-                            </Text>
-                        </View>
-                        <Text style={styles.captionText}>
-                            <Text style={{fontWeight: 'bold'}}>Caption: </Text>
-                            {currentReport?.snapshot_description || "No description"}
-                        </Text>
-                    </View>
-                </View>
+                {/* Dynamically choose layout based on report type */}
+                {currentReport?.reportType === 'user' ? renderUserDetail() : renderPostDetail()}
             </View>
         </ScrollView>
       )}
@@ -681,6 +767,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 14,
     color: colors.dark,
+  },
+  
+  // --- USER REPORT CARD STYLES (NEW) ---
+  userReportCard: {
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#eee',
+    padding: 20,
+    alignItems: 'center',
+    marginHorizontal: 4,
   },
 
   // --- EMPTY STATE ---

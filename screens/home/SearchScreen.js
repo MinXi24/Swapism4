@@ -15,7 +15,6 @@ import {
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
 
-
 export default function SearchScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('Accounts'); // 'Accounts', 'For Fun', 'For Swap'
@@ -35,9 +34,14 @@ export default function SearchScreen({ navigation }) {
 
     setLoading(true);
     try {
+      // 1. [NEW] Fetch the list of users I have blocked
+      let blockedUserIds = [];
+      if (currentUser) {
+        const blockedSnap = await getDocs(collection(db, 'users', currentUser.uid, 'blocked_users'));
+        blockedUserIds = blockedSnap.docs.map(doc => doc.id);
+      }
+
       if (activeTab === 'Accounts') {
-        // Get authenticated user UIDs (client-side workaround: filter by currentUser only, or use a cloud function for full list)
-        // Here, we only show the current user and users in Firestore for demo purposes
         const usersQuery = collection(db, 'users');
         const usersSnapshot = await getDocs(usersQuery);
 
@@ -45,11 +49,20 @@ export default function SearchScreen({ navigation }) {
         usersSnapshot.docs.forEach(doc => {
           const userData = doc.data();
           const username = userData.username || '';
-          // Only show if not deleted/inactive and not admin
+          
+          // --- FILTERING LOGIC ---
+          
+          // 1. Filter out Blocked Users [NEW]
+          if (blockedUserIds.includes(doc.id)) {
+            return; 
+          }
+
+          // 2. Only show if not deleted/inactive and not admin
           if ((userData.deleted === true || userData.active === false) || (userData.role && userData.role.toLowerCase() === 'admin') || (userData.username && userData.username.toLowerCase().includes('admin'))) {
             return;
           }
-          // Only show if matches search and is current user or not (simulate auth check)
+          
+          // 3. Match Search Text
           if (username.toLowerCase().includes(searchText.toLowerCase()) && (doc.id === currentUser?.uid || doc.id)) {
             results.push({
               type: 'account',
@@ -84,6 +97,12 @@ export default function SearchScreen({ navigation }) {
         const results = [];
         postsSnapshot.docs.forEach(doc => {
           const postData = doc.data();
+          
+          // [NEW] Filter out posts from blocked users
+          if (blockedUserIds.includes(postData.ownerUid)) {
+             return;
+          }
+
           const title = postData.title || '';
           const description = postData.description || '';
           const category = postData.category || postData.postType || '';

@@ -1,17 +1,23 @@
 import { getAuth } from 'firebase/auth';
-import { doc, getDoc, getFirestore, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  getFirestore
+} from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
@@ -31,36 +37,22 @@ export default function BlockedUsersScreen({ navigation }) {
   const loadBlockedUsers = async () => {
     try {
       setLoading(true);
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const userDoc = await getDoc(userDocRef);
+      if (!currentUser) return;
+
+      // [UPDATED] Fetch from subcollection instead of array
+      const q = collection(db, 'users', currentUser.uid, 'blocked_users');
+      const snapshot = await getDocs(q);
       
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const blockedUserIds = userData.blockedUsers || [];
-        
-        if (blockedUserIds.length === 0) {
-          setBlockedUsers([]);
-          setLoading(false);
-          return;
-        }
+      const users = snapshot.docs.map(doc => ({
+        uid: doc.id, // The doc ID is the blocked user's ID
+        ...doc.data(),
+        // Map fields to match your UI expectation
+        username: doc.data().blocked_user_name, 
+        photoURL: doc.data().blocked_user_photo
+      }));
 
-        // Fetch details for each blocked user
-        const usersPromises = blockedUserIds.map(async (userId) => {
-          const blockedUserDocRef = doc(db, 'users', userId);
-          const blockedUserDoc = await getDoc(blockedUserDocRef);
-          
-          if (blockedUserDoc.exists()) {
-            return {
-              uid: userId,
-              ...blockedUserDoc.data()
-            };
-          }
-          return null;
-        });
-
-        const users = await Promise.all(usersPromises);
-        setBlockedUsers(users.filter(user => user !== null));
-      }
+      setBlockedUsers(users);
+      
     } catch (error) {
       console.error('Error loading blocked users:', error);
       Alert.alert('Error', 'Failed to load blocked users');
@@ -80,25 +72,13 @@ export default function BlockedUsersScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const userDocRef = doc(db, 'users', currentUser.uid);
-              const userDoc = await getDoc(userDocRef);
-              
-              if (userDoc.exists()) {
-                const userData = userDoc.data();
-                const blockedUsers = userData.blockedUsers || [];
-                
-                // Remove user from blocked list
-                const updatedBlockedUsers = blockedUsers.filter(id => id !== userId);
-                
-                await updateDoc(userDocRef, {
-                  blockedUsers: updatedBlockedUsers
-                });
+              // [UPDATED] Delete doc from subcollection
+              await deleteDoc(doc(db, 'users', currentUser.uid, 'blocked_users', userId));
 
-                // Update local state
-                setBlockedUsers(prev => prev.filter(user => user.uid !== userId));
-                
-                Alert.alert('Success', `${username} has been unblocked`);
-              }
+              // Update local state
+              setBlockedUsers(prev => prev.filter(user => user.uid !== userId));
+              
+              Alert.alert('Success', `${username} has been unblocked`);
             } catch (error) {
               console.error('Error unblocking user:', error);
               Alert.alert('Error', 'Failed to unblock user');
@@ -132,6 +112,7 @@ export default function BlockedUsersScreen({ navigation }) {
         </View>
         <View style={styles.userDetails}>
           <Text style={styles.username}>{item.username || item.displayName || 'User'}</Text>
+          {/* Bio might not be saved in the block doc, so checking if it exists */}
           {item.bio && <Text style={styles.bio} numberOfLines={1}>{item.bio}</Text>}
         </View>
       </TouchableOpacity>
