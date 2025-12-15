@@ -3,21 +3,22 @@ import { getAuth } from 'firebase/auth';
 import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-    ActionSheetIOS,
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 import Icon from '../../assets/icons/icons';
@@ -108,6 +109,34 @@ export default function UserProfileScreen({ route, navigation }) {
     Alert.alert('Block', 'User has been blocked.');
   };
 
+  const openMapWithLocation = async () => {
+    const location = userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location;
+    if (!location) return;
+
+    const encodedLocation = encodeURIComponent(location);
+    
+    // Try different map apps in order of preference
+    const urls = [
+      `comgooglemaps://?q=${encodedLocation}`, // Google Maps iOS
+      `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`, // Google Maps web (works on Android and iOS)
+      `maps://maps.apple.com/?q=${encodedLocation}`, // Apple Maps
+    ];
+
+    for (const url of urls) {
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (error) {
+        console.log(`Cannot open ${url}`);
+      }
+    }
+
+    Alert.alert('Error', 'No map app available');
+  };
+
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
@@ -150,13 +179,16 @@ export default function UserProfileScreen({ route, navigation }) {
       
       if (userDoc.exists()) {
         const userData = userDoc.data();
+        // Filter reviews to exclude deleted/inactive users (client-side filtering)
+        // Note: This should ideally be handled by a Cloud Function when a user is deleted
+        const validReviews = (userData.reviews || []).filter(review => review.userId && review.userName);
         setUserInfo({
           bio: userData.bio || '',
           location: userData.location || '',
           area: userData.area || '',
           rating: userData.rating || 0,
-          reviewCount: userData.reviewCount || 0,
-          reviews: userData.reviews || [],
+          reviewCount: validReviews.length,
+          reviews: validReviews,
           photoURL: userData.photoURL || null,
           username: userData.username || username || 'User',
         });
@@ -627,12 +659,13 @@ export default function UserProfileScreen({ route, navigation }) {
           
           {/* Location */}
           {(userInfo.location || userInfo.area) && (
-            <View style={styles.locationContainer}>
+            <TouchableOpacity style={styles.locationContainer} onPress={openMapWithLocation}>
               <Icon name="location-outline" size={16} color={colors.dark} />
               <Text style={styles.locationText}>
                 {userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location}
               </Text>
-            </View>
+              <Icon name="open-outline" size={14} color={colors.gray} style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
           )}
 
           {/* Action Buttons */}
