@@ -180,7 +180,7 @@ export default function MessagesScreen({ navigation }) {
         <View style={styles.emptyContainer}>
           <Icon name="chatbubbles-outline" size={64} color={colors.gray} />
           <Text style={styles.emptyText}>No messages yet</Text>
-          <Text style={styles.emptySubtext}>Start a conversation from a user's profile</Text>
+          <Text style={styles.emptySubtext}>Start a conversation from a user&apos;s profile</Text>
         </View>
       ) : (
         <View style={styles.messagesContainer}>
