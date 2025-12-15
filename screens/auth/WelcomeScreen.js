@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   Image,
@@ -46,7 +45,7 @@ export default function WelcomeScreen({ navigation }) {
       </View>
 
       {/* Bottom Content Box */}
-      <View style={styles.bottomBox}>
+      <View style={[styles.bottomBox, {backgroundColor: '#F5F3E4'}]}>
         {/* Description */}
         <Text style={styles.descriptionText}>Discover, swap, and try clothes virtually</Text>
 
@@ -91,13 +90,15 @@ const styles = StyleSheet.create({
   },
   illustration: {
     width: '100%',
-    height: '100%',
+    height: '90%',
+    marginTop: 70,
+    marginLeft: 15,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
   logoContainer: {
     position: 'absolute',
-    top: 0,
+    top: -20,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
     color: colors.dark,
   },
   bottomBox: {
-    backgroundColor: colors.light,
+    backgroundColor: colors.secondary,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingHorizontal: spacing.lg,

@@ -7,6 +7,8 @@ import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import FavouritesScreen from '../screens/favourites/FavouritesScreen';
 import HomeScreen from '../screens/home/HomeScreen';
+import PostActivityScreen from '../screens/home/PostActivityScreen';
+import SearchScreen from '../screens/home/SearchScreen';
 import MessagesScreen from '../screens/messages/MessagesScreen';
 import AddPostScreen from '../screens/profile/AddPostScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
@@ -15,6 +17,10 @@ import ProfileScreen from '../screens/profile/ProfileScreen';
 import TryOnScreen from '../screens/profile/TryOnScreen';
 import UserProfileScreen from '../screens/profile/UserProfileScreen';
 import ActivityScreen from '../screens/settings/ActivityScreen';
+import BlockedUsersScreen from '../screens/settings/BlockedUsersScreen';
+import PrivacyScreen from '../screens/settings/PrivacyScreen';
+import RecentlyDeletedScreen from '../screens/settings/RecentlyDeletedScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
 import ItemDetailsScreen from '../screens/swap/ItemDetailsScreen';
 import SwapScreen from '../screens/swap/SwapScreen';
 
@@ -33,6 +39,7 @@ export default function Navigation() {
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="Swap" component={SwapScreen} />
       <Stack.Screen name="ItemDetails" component={ItemDetailsScreen} />
       <Stack.Screen name="Messages" component={MessagesScreen} />
@@ -44,6 +51,11 @@ export default function Navigation() {
       <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
       <Stack.Screen name="TryOnScreen" component={TryOnScreen} />
       <Stack.Screen name="Activity" component={ActivityScreen} />
+      <Stack.Screen name="PostActivity" component={PostActivityScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Privacy" component={PrivacyScreen} />
+      <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
+      <Stack.Screen name="RecentlyDeleted" component={RecentlyDeletedScreen} />
       <Stack.Screen name="AdminHome" component={AdminHomeScreen} />
       <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
       <Stack.Screen name="ManageComments" component={ManageCommentsScreen} />

@@ -1,8 +1,9 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { addDoc, arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   Image,
@@ -18,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import { colors, fonts, spacing } from '../../lib/theme';
@@ -40,12 +42,71 @@ export default function UserProfileScreen({ route, navigation }) {
     reviewCount: 0,
     reviews: [],
     photoURL: null,
+    username: username || '',
   });
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [followRequestStatus, setFollowRequestStatus] = useState(null); // null, 'pending', 'accepted', 'rejected'
+  const [isPrivateAccount, setIsPrivateAccount] = useState(false);
+  const [mutualFollowers, setMutualFollowers] = useState([]);
+  const [showAllMutuals, setShowAllMutuals] = useState(false);
+
+  // Show menu for report/block
+  const [androidMenuVisible, setAndroidMenuVisible] = useState(false);
+  const showMenu = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Report User', 'Block User'],
+          destructiveButtonIndex: 2,
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) handleReport();
+          if (buttonIndex === 2) handleBlock();
+        }
+      );
+    } else {
+      setAndroidMenuVisible(true);
+    }
+  };
+  // Android custom modal for report/block
+  const renderAndroidMenu = () => (
+    <Modal
+      visible={androidMenuVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setAndroidMenuVisible(false)}
+    >
+      <TouchableOpacity
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}
+        activeOpacity={1}
+        onPress={() => setAndroidMenuVisible(false)}
+      >
+        <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 }}>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleReport(); }} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Report User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleBlock(); }} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Block User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setAndroidMenuVisible(false)} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#333', fontSize: 16, textAlign: 'center' }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  const handleReport = () => {
+    Alert.alert('Report', 'User has been reported.');
+  };
+  const handleBlock = () => {
+    Alert.alert('Block', 'User has been blocked.');
+  };
 
   const db = getFirestore();
   const auth = getAuth();
@@ -71,7 +132,7 @@ export default function UserProfileScreen({ route, navigation }) {
       await addDoc(collection(db, 'notifications'), {
         userId: userId,
         type: 'profile_view',
-        message: `${viewerName} viewed your profile`,
+        message: `${viewerName} requested to follow`,
         viewerId: currentUser.uid,
         viewerName: viewerName,
         read: false,
@@ -97,7 +158,11 @@ export default function UserProfileScreen({ route, navigation }) {
           reviewCount: userData.reviewCount || 0,
           reviews: userData.reviews || [],
           photoURL: userData.photoURL || null,
+          username: userData.username || username || 'User',
         });
+        
+        // Load privacy setting
+        setIsPrivateAccount(userData.isPrivate || false);
         
         // Load followers and following counts
         const followers = userData.followers || [];
@@ -111,6 +176,49 @@ export default function UserProfileScreen({ route, navigation }) {
         // Check if current user is following this user
         if (currentUser) {
           setIsFollowing(followers.includes(currentUser.uid));
+          
+          // Load mutual followers
+          const currentUserDocRef = doc(db, 'users', currentUser.uid);
+          const currentUserDoc = await getDoc(currentUserDocRef);
+          if (currentUserDoc.exists()) {
+            const currentUserFollowing = currentUserDoc.data().following || [];
+            // Find mutual followers (people that both current user and viewed user follow)
+            const mutuals = followers.filter(followerId => currentUserFollowing.includes(followerId));
+            
+            // Load mutual user details
+            const mutualDetails = await Promise.all(
+              mutuals.map(async (mutualId) => {
+                const mutualDocRef = doc(db, 'users', mutualId);
+                const mutualDoc = await getDoc(mutualDocRef);
+                if (mutualDoc.exists()) {
+                  const mutualData = mutualDoc.data();
+                  return {
+                    uid: mutualId,
+                    username: mutualData.username || 'User',
+                    photoURL: mutualData.photoURL || null,
+                  };
+                }
+                return null;
+              })
+            );
+            
+            setMutualFollowers(mutualDetails.filter(m => m !== null));
+          }
+          
+          // Check follow request status
+          const requestQuery = query(
+            collection(db, 'followRequests'),
+            where('fromUserId', '==', currentUser.uid),
+            where('toUserId', '==', userId)
+          );
+          const requestSnapshot = await getDocs(requestQuery);
+          
+          if (!requestSnapshot.empty) {
+            const requestData = requestSnapshot.docs[0].data();
+            setFollowRequestStatus(requestData.status);
+          } else {
+            setFollowRequestStatus(null);
+          }
         }
       }
     } catch (error) {
@@ -190,7 +298,19 @@ export default function UserProfileScreen({ route, navigation }) {
                   following: arrayRemove(userId)
                 });
                 
+                // Delete any follow requests
+                const requestQuery = query(
+                  collection(db, 'followRequests'),
+                  where('fromUserId', '==', currentUser.uid),
+                  where('toUserId', '==', userId)
+                );
+                const requestSnapshot = await getDocs(requestQuery);
+                requestSnapshot.docs.forEach(async (docSnapshot) => {
+                  await deleteDoc(doc(db, 'followRequests', docSnapshot.id));
+                });
+                
                 setIsFollowing(false);
+                setFollowRequestStatus(null);
                 setStats(prev => ({ ...prev, followers: prev.followers - 1 }));
               } catch (error) {
                 console.error('Error unfollowing:', error);
@@ -202,28 +322,101 @@ export default function UserProfileScreen({ route, navigation }) {
           }
         ]
       );
+    } else if (followRequestStatus === 'pending') {
+      // Cancel request
+      Alert.alert(
+        'Cancel Request',
+        'Do you want to cancel your follow request?',
+        [
+          { text: 'No', style: 'cancel' },
+          {
+            text: 'Yes',
+            onPress: async () => {
+              try {
+                setFollowLoading(true);
+                const requestQuery = query(
+                  collection(db, 'followRequests'),
+                  where('fromUserId', '==', currentUser.uid),
+                  where('toUserId', '==', userId)
+                );
+                const requestSnapshot = await getDocs(requestQuery);
+                
+                requestSnapshot.docs.forEach(async (docSnapshot) => {
+                  await deleteDoc(doc(db, 'followRequests', docSnapshot.id));
+                });
+                
+                setFollowRequestStatus(null);
+              } catch (error) {
+                console.error('Error canceling request:', error);
+                Alert.alert('Error', 'Failed to cancel request. Please try again.');
+              } finally {
+                setFollowLoading(false);
+              }
+            }
+          }
+        ]
+      );
     } else {
-      // Follow
+      // Follow or Request
       try {
         setFollowLoading(true);
-        const userDocRef = doc(db, 'users', userId);
-        const currentUserDocRef = doc(db, 'users', currentUser.uid);
         
-        // Add to target user's followers
-        await updateDoc(userDocRef, {
-          followers: arrayUnion(currentUser.uid)
-        });
-        
-        // Add to current user's following
-        await updateDoc(currentUserDocRef, {
-          following: arrayUnion(userId)
-        });
-        
-        setIsFollowing(true);
-        setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
+        if (isPrivateAccount) {
+          // Send follow request
+          // Get current user's username
+          let requesterName = currentUser.displayName || 'User';
+          try {
+            const requesterDocRef = doc(db, 'users', currentUser.uid);
+            const requesterDoc = await getDoc(requesterDocRef);
+            if (requesterDoc.exists()) {
+              requesterName = requesterDoc.data().username || requesterName;
+            }
+          } catch (err) {
+            console.error('Error fetching requester name:', err);
+          }
+          
+          await addDoc(collection(db, 'followRequests'), {
+            fromUserId: currentUser.uid,
+            fromUserName: requesterName,
+            toUserId: userId,
+            status: 'pending',
+            createdAt: new Date(),
+          });
+          
+          // Create notification
+          await addDoc(collection(db, 'notifications'), {
+            userId: userId,
+            type: 'follow_request',
+            message: `${requesterName} requested to follow you`,
+            fromUserId: currentUser.uid,
+            fromUserName: requesterName,
+            read: false,
+            createdAt: new Date(),
+          });
+          
+          setFollowRequestStatus('pending');
+          Alert.alert('Request Sent', 'Your follow request has been sent');
+        } else {
+          // Public account - follow directly
+          const userDocRef = doc(db, 'users', userId);
+          const currentUserDocRef = doc(db, 'users', currentUser.uid);
+          
+          // Add to target user's followers
+          await updateDoc(userDocRef, {
+            followers: arrayUnion(currentUser.uid)
+          });
+          
+          // Add to current user's following
+          await updateDoc(currentUserDocRef, {
+            following: arrayUnion(userId)
+          });
+          
+          setIsFollowing(true);
+          setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
+        }
       } catch (error) {
-        console.error('Error following:', error);
-        Alert.alert('Error', 'Failed to follow. Please try again.');
+        console.error('Error following/requesting:', error);
+        Alert.alert('Error', 'Failed to follow/request. Please try again.');
       } finally {
         setFollowLoading(false);
       }
@@ -354,9 +547,15 @@ export default function UserProfileScreen({ route, navigation }) {
     );
   };
 
+  // Filter posts based on privacy and follow status
   const forFunPosts = userPosts.filter(post => post.postType === 'forFun');
   const forSwapPosts = userPosts.filter(post => post.postType === 'forSwap');
-  const displayPosts = activeTab === 'forFun' ? forFunPosts : forSwapPosts;
+  
+  // Show For Fun posts only if account is public OR user is following OR it's the current user's profile
+  const canViewForFunPosts = !isPrivateAccount || isFollowing || userId === currentUser?.uid;
+  const displayPosts = activeTab === 'forFun' 
+    ? (canViewForFunPosts ? forFunPosts : []) 
+    : forSwapPosts;
 
   if (loading) {
     return (
@@ -372,13 +571,18 @@ export default function UserProfileScreen({ route, navigation }) {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
           <Icon name="arrow-back" size={24} color={colors.dark} />
         </TouchableOpacity>
-        <Text style={styles.logo}>{username}</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerCenter} pointerEvents="none">
+          <Text style={styles.logo} numberOfLines={1}>{userInfo.username}</Text>
+        </View>
+        <TouchableOpacity onPress={showMenu} style={styles.headerRight}>
+          <Icon name="ellipsis-vertical" size={24} color={colors.dark} />
+        </TouchableOpacity>
       </View>
 
+      {Platform.OS === 'android' && renderAndroidMenu()}
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Info */}
         <View style={styles.profileSection}>
@@ -409,7 +613,7 @@ export default function UserProfileScreen({ route, navigation }) {
             </View>
           </View>
 
-          <Text style={styles.userName}>{username}</Text>
+          <Text style={styles.userName}>{userInfo.username}</Text>
           
           {/* Bio */}
           <Text style={styles.userBio}>{userInfo.bio}</Text>
@@ -435,7 +639,13 @@ export default function UserProfileScreen({ route, navigation }) {
                 <ActivityIndicator size="small" color={colors.dark} />
               ) : (
                 <Text style={styles.actionButtonText}>
-                  {isFollowing ? 'Following' : 'Follow'}
+                  {isFollowing 
+                    ? 'Following' 
+                    : followRequestStatus === 'pending' 
+                      ? 'Requested' 
+                      : isPrivateAccount 
+                        ? 'Request' 
+                        : 'Follow'}
                 </Text>
               )}
             </TouchableOpacity>
@@ -446,6 +656,74 @@ export default function UserProfileScreen({ route, navigation }) {
               <Text style={styles.actionButtonText}>Message</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Mutual Followers Section */}
+          {mutualFollowers.length > 0 && (
+            <View style={styles.mutualFollowersSection}>
+              <TouchableOpacity 
+                onPress={() => setShowAllMutuals(!showAllMutuals)}
+                style={styles.mutualFollowersHeader}
+              >
+                <View style={styles.mutualAvatarsRow}>
+                  {mutualFollowers.slice(0, showAllMutuals ? mutualFollowers.length : 1).map((mutual, index) => (
+                    <TouchableOpacity
+                      key={mutual.uid}
+                      onPress={() => navigation.navigate('UserProfile', { userId: mutual.uid, username: mutual.username })}
+                      style={[styles.mutualAvatar, index > 0 && { marginLeft: -8 }]}
+                    >
+                      {mutual.photoURL ? (
+                        <Image source={{ uri: mutual.photoURL }} style={styles.mutualAvatarImage} />
+                      ) : (
+                        <View style={styles.mutualAvatarPlaceholder}>
+                          <Icon name="person" size={16} color={colors.gray} />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.mutualFollowersText}>
+                  Followed by{' '}
+                  <Text style={styles.mutualFollowersName}>
+                    {mutualFollowers[0].username}
+                  </Text>
+                  {mutualFollowers.length > 1 && (
+                    <Text>
+                      {' '}and {mutualFollowers.length - 1} other{mutualFollowers.length > 2 ? 's' : ''} you follow
+                    </Text>
+                  )}
+                </Text>
+                {mutualFollowers.length > 1 && (
+                  <Icon 
+                    name={showAllMutuals ? 'chevron-up' : 'chevron-down'} 
+                    size={18} 
+                    color={colors.gray} 
+                  />
+                )}
+              </TouchableOpacity>
+
+              {/* Expanded mutual followers list */}
+              {showAllMutuals && mutualFollowers.length > 1 && (
+                <View style={styles.mutualFollowersList}>
+                  {mutualFollowers.slice(1).map((mutual) => (
+                    <TouchableOpacity
+                      key={mutual.uid}
+                      style={styles.mutualFollowerItem}
+                      onPress={() => navigation.navigate('UserProfile', { userId: mutual.uid, username: mutual.username })}
+                    >
+                      {mutual.photoURL ? (
+                        <Image source={{ uri: mutual.photoURL }} style={styles.mutualFollowerItemImage} />
+                      ) : (
+                        <View style={styles.mutualFollowerItemPlaceholder}>
+                          <Icon name="person" size={20} color={colors.gray} />
+                        </View>
+                      )}
+                      <Text style={styles.mutualFollowerItemName}>{mutual.username}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Rating Section */}
@@ -529,9 +807,17 @@ export default function UserProfileScreen({ route, navigation }) {
         <View style={styles.postsContainer}>
           {displayPosts.length === 0 ? (
             <View style={styles.emptyState}>
-              <Icon name="images-outline" size={64} color={colors.gray} />
-              <Text style={styles.emptyStateText}>No {activeTab === 'forFun' ? 'Fun' : 'Swap'} Posts</Text>
-              <Text style={styles.emptyStateSubtext}>This user hasn&apos;t posted anything yet</Text>
+              <Icon name={activeTab === 'forFun' && !canViewForFunPosts ? 'lock-closed-outline' : 'images-outline'} size={64} color={colors.gray} />
+              <Text style={styles.emptyStateText}>
+                {activeTab === 'forFun' && !canViewForFunPosts 
+                  ? 'This Account is Private'
+                  : `No ${activeTab === 'forFun' ? 'Fun' : 'Swap'} Posts`}
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                {activeTab === 'forFun' && !canViewForFunPosts 
+                  ? 'Follow this account to see their For Fun posts'
+                  : 'This user hasn\'t posted anything yet'}
+              </Text>
             </View>
           ) : (
             <View style={styles.postsGrid}>
@@ -631,6 +917,51 @@ export default function UserProfileScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    position: 'relative',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    marginBottom: 4,
+  },
+  headerLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    height: 56,
+    width: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  headerRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    height: 56,
+    width: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  headerCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 56,
+    marginHorizontal: 56,
+  },
+  logo: {
+    fontFamily: fonts.header,
+    fontSize: 20,
+    color: colors.dark,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    maxWidth: '100%',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.secondary,
@@ -639,22 +970,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#dbdbdb',
-  },
-  logo: {
-    fontFamily: fonts.header,
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.dark,
-  },
+
   profileSection: {
     backgroundColor: '#fff',
     paddingVertical: spacing.lg,
@@ -745,6 +1061,79 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
+    color: colors.dark,
+  },
+  mutualFollowersSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  mutualFollowersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  mutualAvatarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mutualAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  mutualAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  mutualAvatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mutualFollowersText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.gray,
+    marginLeft: spacing.xs,
+  },
+  mutualFollowersName: {
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  mutualFollowersList: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  mutualFollowerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
+  mutualFollowerItemImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  mutualFollowerItemPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mutualFollowerItemName: {
+    fontSize: 14,
+    fontWeight: '500',
     color: colors.dark,
   },
   ratingSection: {
@@ -844,7 +1233,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -853,14 +1242,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   modalContent: {
     backgroundColor: '#fff',
     borderRadius: 20,
-    padding: spacing.lg,
+    paddingVertical: spacing.xl * 1.5,
+    paddingHorizontal: spacing.xl * 2,
     paddingBottom: spacing.xl * 2,
-    width: '90%',
+    width: '100%',
+    maxWidth: 750,
+    minWidth: 350,
     maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   modalHeader: {
     flexDirection: 'row',

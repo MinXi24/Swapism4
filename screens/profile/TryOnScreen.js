@@ -1,9 +1,10 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { getAuth } from 'firebase/auth';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -15,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { captureRef } from 'react-native-view-shot';
 import Icon from '../../assets/icons/icons';
 import { config } from '../../config';
 import { firestore } from '../../firebaseConfig';
@@ -45,6 +47,7 @@ export default function TryOnScreen({ route, navigation }) {
     bottomTranslateX: 0,
     bottomTranslateY: 0,
   });
+  const viewShotRef = useRef(null);
   
   // Gesture state for top overlay
   const topScale = useRef(new Animated.Value(1)).current;
@@ -56,7 +59,8 @@ export default function TryOnScreen({ route, navigation }) {
   const bottomTranslateX = useRef(new Animated.Value(0)).current;
   const bottomTranslateY = useRef(new Animated.Value(0)).current;
 
-  const REMOVE_BG_API_KEY = config?.REMOVE_BG_API_KEY || '';
+  const CLIPDROP_API_KEY = config?.CLIPDROP_API_KEY || '';
+  const CLIPDROP_API_URL = config?.CLIPDROP_API_URL || '';
 
   // Separate items into tops and bottoms
   const tops = allItems.filter(i => 
@@ -77,51 +81,66 @@ export default function TryOnScreen({ route, navigation }) {
     i.description?.toLowerCase().includes('bottom')
   );
 
-  // Remove background function
+  // Background Removal using ClipDrop (Free)
   const removeBackground = useCallback(async (imageUrl, itemId) => {
-    if (processedImages[itemId] || !REMOVE_BG_API_KEY) {
-      return processedImages[itemId] || imageUrl;
+    // Check if already processed in memory
+    if (processedImages[itemId]) {
+      return processedImages[itemId];
     }
 
     setLoadingBg(prev => ({ ...prev, [itemId]: true }));
 
     try {
-      const formData = new FormData();
-      formData.append('image_url', imageUrl);
-      formData.append('size', 'auto');
+      console.log("Starting background removal for:", itemId);
 
-      const response = await fetch('https://api.remove.bg/v1.0/removebg', {
-        method: 'POST',
+      // Remove background with ClipDrop
+      const formData = new FormData();
+      formData.append("image_file", {
+        uri: imageUrl,
+        name: "photo.jpg",
+        type: "image/jpeg",
+      });
+
+      console.log("Sending to ClipDrop API...");
+      const res = await fetch(CLIPDROP_API_URL, {
+        method: "POST",
         headers: {
-          'X-Api-Key': REMOVE_BG_API_KEY,
+          "x-api-key": CLIPDROP_API_KEY,
         },
         body: formData,
       });
 
-      if (response.ok) {
-        const blob = await response.blob();
-        const base64data = await blobToBase64(blob);
-        setProcessedImages(prev => ({ ...prev, [itemId]: base64data }));
-        setLoadingBg(prev => ({ ...prev, [itemId]: false }));
-        return base64data;
-      } else {
-        throw new Error('Failed to remove background');
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.log("ClipDrop API error:", errorText);
+        throw new Error(`ClipDrop failed: ${res.status}`);
       }
-    } catch (error) {
-      console.error('Error removing background:', error);
+
+      console.log("ClipDrop success! Converting to base64...");
+
+      // Convert response to base64
+      const arrayBuffer = await res.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      let binary = '';
+      uint8Array.forEach(byte => binary += String.fromCharCode(byte));
+      const base64Image = btoa(binary);
+      const bgRemovedBase64 = `data:image/png;base64,${base64Image}`;
+
+      console.log("Background removed successfully!");
+
+      // Store in memory cache
+      setProcessedImages(prev => ({ ...prev, [itemId]: bgRemovedBase64 }));
       setLoadingBg(prev => ({ ...prev, [itemId]: false }));
+
+      return bgRemovedBase64;
+
+    } catch (error) {
+      console.error("BG removal error:", error);
+      setLoadingBg(prev => ({ ...prev, [itemId]: false }));
+      // Return original image if background removal fails
       return imageUrl;
     }
-  }, [processedImages, REMOVE_BG_API_KEY]);
-
-  const blobToBase64 = async (blob) => {
-    const fileReader = new FileReader();
-    return new Promise((resolve, reject) => {
-      fileReader.onloadend = () => resolve(fileReader.result);
-      fileReader.onerror = reject;
-      fileReader.readAsDataURL(blob);
-    });
-  };
+  }, [processedImages, CLIPDROP_API_KEY, CLIPDROP_API_URL]);
 
   const requestCameraPermission = async () => {
     const response = await requestPermission();
@@ -181,16 +200,16 @@ export default function TryOnScreen({ route, navigation }) {
 
   // Load backgrounds when items change
   useEffect(() => {
-    if (selectedTop && !processedImages[selectedTop.id] && !loadingBg[selectedTop.id] && REMOVE_BG_API_KEY) {
+    if (selectedTop && !processedImages[selectedTop.id] && !loadingBg[selectedTop.id]) {
       removeBackground(selectedTop.url, selectedTop.id);
     }
-  }, [selectedTop, loadingBg, processedImages, removeBackground, REMOVE_BG_API_KEY]);
+  }, [selectedTop, loadingBg, processedImages, removeBackground]);
 
   useEffect(() => {
-    if (selectedBottom && !processedImages[selectedBottom.id] && !loadingBg[selectedBottom.id] && REMOVE_BG_API_KEY) {
+    if (selectedBottom && !processedImages[selectedBottom.id] && !loadingBg[selectedBottom.id]) {
       removeBackground(selectedBottom.url, selectedBottom.id);
     }
-  }, [selectedBottom, loadingBg, processedImages, removeBackground, REMOVE_BG_API_KEY]);
+  }, [selectedBottom, loadingBg, processedImages, removeBackground]);
 
   // Updated fetchAISuggestions to suggest both tops and bottoms from 'for swap' posts only
   const fetchAISuggestions = useCallback(async () => {
@@ -206,29 +225,31 @@ export default function TryOnScreen({ route, navigation }) {
       }
 
       const postsRef = collection(firestore, 'wardrobe-plug-fyp', 'user', 'images');
-      const q = query(
-        postsRef, 
-        where('ownerUid', '!=', currentUserId),
-        where('category', '==', 'for swap')
-      );
-      const snapshot = await getDocs(q);
+      // Get all posts and filter client-side
+      const snapshot = await getDocs(postsRef);
 
       const suggestions = [];
       snapshot.forEach(doc => {
         const data = doc.data();
-        // Only include items from 'for swap' category
-        if (data.url && data.category === 'for swap') {
+        // Check if category field exists and equals 'for swap' (case insensitive)
+        const category = data.category || data.postType || '';
+        const isForSwap = category.toLowerCase().includes('swap') || category === 'forSwap';
+        
+        // Filter out current user's posts and only include 'for swap' items with tops/bottoms
+        if (data.url && isForSwap && data.ownerUid !== currentUserId) {
           suggestions.push({
             id: doc.id,
             url: data.url,
             title: data.title || '',
             ownerUid: data.ownerUid,
             userName: data.userName || 'Unknown User',
-            clothingType: data.clothingType,
-            category: data.category,
+            clothingType: data.clothingType || 'other',
+            category: category,
           });
         }
       });
+      
+      console.log(`Found ${suggestions.length} swap items for AI suggestions`);
 
       // Shuffle and take top 5 suggestions
       const shuffled = suggestions.sort(() => 0.5 - Math.random());
@@ -239,7 +260,7 @@ export default function TryOnScreen({ route, navigation }) {
     } finally {
       setLoadingSuggestions(false);
     }
-  }, [selectedTop, selectedBottom]);
+  }, []);
 
   // Fetch AI suggestions based on selected item
   useEffect(() => {
@@ -253,47 +274,34 @@ export default function TryOnScreen({ route, navigation }) {
   };
 
   const capturePhoto = async () => {
-    if (!cameraRef.current) return;
+    if (!viewShotRef.current) return;
     
     try {
-      // Save current transform values
-      setCapturedTransforms({
-        topScale: topScale._value,
-        topTranslateX: topTranslateX._value,
-        topTranslateY: topTranslateY._value,
-        bottomScale: bottomScale._value,
-        bottomTranslateX: bottomTranslateX._value,
-        bottomTranslateY: bottomTranslateY._value,
+      // Capture the entire view including camera and overlays
+      const uri = await captureRef(viewShotRef, {
+        format: 'png',
+        quality: 1,
+        result: 'tmpfile',
       });
       
-      const photo = await cameraRef.current.takePictureAsync();
-      setCapturedPhoto(photo.uri);
+      setCapturedPhoto(uri);
       setShowPreview(true);
+      // Keep camera active so background doesn't turn black
     } catch (error) {
       console.error('Error capturing photo:', error);
       alert('Failed to capture photo');
     }
   };
 
-  // Save photo to gallery - the photo is captured with overlay visible
-  const savePhotoToGallery = async () => {
+  // Navigate to post screen with captured photo
+  const navigateToPost = () => {
     if (!capturedPhoto) return;
 
-    try {
-      const permission = await requestMediaPermission();
-      if (!permission.granted) {
-        alert('Permission to access media library is required');
-        return;
-      }
-
-      await MediaLibrary.saveToLibraryAsync(capturedPhoto);
-      alert('Photo saved to gallery!');
-      setShowPreview(false);
-      setCapturedPhoto(null);
-    } catch (error) {
-      console.error('Error saving photo:', error);
-      alert('Failed to save photo');
-    }
+    navigation.navigate('AddPost', {
+      capturedImage: capturedPhoto,
+    });
+    setShowPreview(false);
+    setCapturedPhoto(null);
   };
 
   const discardPhoto = () => {
@@ -316,7 +324,7 @@ export default function TryOnScreen({ route, navigation }) {
     }
 
     // Auto-remove background for the clicked item
-    if (!processedImages[item.id] && REMOVE_BG_API_KEY) {
+    if (!processedImages[item.id] && CLIPDROP_API_KEY) {
       removeBackground(item.url, item.id);
     }
 
@@ -352,12 +360,81 @@ export default function TryOnScreen({ route, navigation }) {
 
   const navigateToUserProfile = (item) => {
     if (item.ownerUid) {
-      navigation.navigate('UserProfile', { userId: item.ownerUid });
+      navigation.navigate('UserProfile', { 
+        userId: item.ownerUid,
+        username: item.userName || 'User'
+      });
     }
   };
 
-  const navigateToPostDetails = (item) => {
-    navigation.navigate('PostDetails', { postId: item.id, post: item });
+  const navigateToPostDetails = async (item) => {
+    // Check if post is For Fun type
+    if (item.postType !== 'forFun') {
+      navigation.navigate('PostDetails', { postId: item.id, post: item });
+      return;
+    }
+
+    try {
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      
+      // Check if user owns the post
+      if (currentUser && item.ownerUid === currentUser.uid) {
+        navigation.navigate('PostDetails', { postId: item.id, post: item });
+        return;
+      }
+
+      // Check owner's privacy settings
+      const userDocRef = doc(firestore, 'users', item.ownerUid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (!userDoc.exists()) {
+        navigation.navigate('PostDetails', { postId: item.id, post: item });
+        return;
+      }
+
+      const userData = userDoc.data();
+      const isPrivate = userData.isPrivate || false;
+
+      // If account is public, navigate directly
+      if (!isPrivate) {
+        navigation.navigate('PostDetails', { postId: item.id, post: item });
+        return;
+      }
+
+      // Check if current user is following
+      if (currentUser) {
+        const followers = userData.followers || [];
+        const isFollowing = followers.includes(currentUser.uid);
+
+        if (isFollowing) {
+          navigation.navigate('PostDetails', { postId: item.id, post: item });
+          return;
+        }
+      }
+
+      // Private account and not following - show alert
+      Alert.alert(
+        'Private Account',
+        `This For Fun post is from a private account. You need to follow @${item.userName} to view their For Fun posts.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'View Profile',
+            onPress: () => {
+              navigation.navigate('UserProfile', { 
+                userId: item.ownerUid,
+                username: item.userName 
+              });
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error checking privacy:', error);
+      // On error, allow navigation
+      navigation.navigate('PostDetails', { postId: item.id, post: item });
+    }
   };
 
   // Gesture handlers for top overlay
@@ -396,7 +473,7 @@ export default function TryOnScreen({ route, navigation }) {
     return (
       <GestureHandlerRootView style={styles.container}>
         <SafeAreaView style={styles.container}>
-          <View style={styles.cameraContainer}>
+          <View style={styles.cameraContainer} ref={viewShotRef} collapsable={false}>
             <CameraView
               ref={cameraRef}
               style={styles.camera}
@@ -410,7 +487,16 @@ export default function TryOnScreen({ route, navigation }) {
                 >
                   <Icon name="close" size={28} color="#fff" />
                 </TouchableOpacity>
-                <Text style={styles.cameraTitle}>Virtual Mirror</Text>
+                <View style={styles.cameraTitleContainer}>
+                  <Text style={styles.cameraTitle}>Virtual Mirror</Text>
+                  <TouchableOpacity
+                    style={styles.turnOffCameraButton}
+                    onPress={toggleCamera}
+                  >
+                    <Icon name="camera-reverse-outline" size={18} color="#fff" />
+                    <Text style={styles.turnOffCameraText}>Turn Off Camera</Text>
+                  </TouchableOpacity>
+                </View>
                 <View style={{ width: 40 }} />
               </View>
 
@@ -530,16 +616,7 @@ export default function TryOnScreen({ route, navigation }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Bottom Controls */}
-              <View style={styles.cameraFooter}>
-                <TouchableOpacity
-                  style={styles.toggleCameraButton}
-                  onPress={toggleCamera}
-                >
-                  <Icon name="camera-reverse-outline" size={24} color="#fff" />
-                  <Text style={styles.toggleCameraText}>Turn Off Camera</Text>
-                </TouchableOpacity>
-              </View>
+
             </CameraView>
           </View>
 
@@ -548,53 +625,15 @@ export default function TryOnScreen({ route, navigation }) {
             <View style={styles.previewModal}>
               <View style={styles.previewContainer}>
                 <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
-                
-                {/* Overlay the clothes on the preview */}
-                <View style={styles.previewOverlay}>
-                  {selectedTop && (
-                    <Image 
-                      source={{ uri: processedImages[selectedTop.id] || selectedTop.url }} 
-                      style={[
-                        styles.previewClothes, 
-                        { 
-                          top: '15%',
-                          transform: [
-                            { scale: capturedTransforms.topScale },
-                            { translateX: capturedTransforms.topTranslateX },
-                            { translateY: capturedTransforms.topTranslateY },
-                          ]
-                        }
-                      ]}
-                      resizeMode="contain"
-                    />
-                  )}
-                  {selectedBottom && (
-                    <Image 
-                      source={{ uri: processedImages[selectedBottom.id] || selectedBottom.url }} 
-                      style={[
-                        styles.previewClothes, 
-                        { 
-                          bottom: '15%',
-                          transform: [
-                            { scale: capturedTransforms.bottomScale },
-                            { translateX: capturedTransforms.bottomTranslateX },
-                            { translateY: capturedTransforms.bottomTranslateY },
-                          ]
-                        }
-                      ]}
-                      resizeMode="contain"
-                    />
-                  )}
-                </View>
 
                 <View style={styles.previewActions}>
                   <TouchableOpacity style={styles.discardButton} onPress={discardPhoto}>
                     <Icon name="close-circle" size={24} color="#fff" />
-                    <Text style={styles.previewButtonText}>Retake</Text>
+                    <Text style={styles.previewButtonText}>Cancel</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.saveButton} onPress={savePhotoToGallery}>
-                    <Icon name="checkmark-circle" size={24} color="#fff" />
-                    <Text style={styles.previewButtonText}>Save</Text>
+                  <TouchableOpacity style={styles.saveButton} onPress={navigateToPost}>
+                    <Icon name="send" size={24} color="#fff" />
+                    <Text style={styles.previewButtonText}>Post</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -755,21 +794,23 @@ export default function TryOnScreen({ route, navigation }) {
               style={styles.suggestionsScroll}
             >
               {suggestedItems.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.suggestionItem}
-                  onPress={() => handleSuggestionClick(item)}
-                >
-                  <Image source={{ uri: item.url }} style={styles.suggestionImage} />
-                  <View style={styles.suggestionInfo}>
-                    <TouchableOpacity onPress={() => navigateToUserProfile(item)}>
-                      <Text style={styles.suggestionUsername}>@{item.userName}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => navigateToPostDetails(item)}>
-                      <Text style={styles.suggestionViewPost}>View Post</Text>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
+                <View key={item.id} style={styles.suggestionItem}>
+                  <TouchableOpacity onPress={() => handleSuggestionClick(item)}>
+                    <Image source={{ uri: item.url }} style={styles.suggestionImage} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.suggestionUsernameContainer}
+                    onPress={() => navigateToUserProfile(item)}
+                  >
+                    <Text style={styles.suggestionUsername}>@{item.userName}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.suggestionViewPostContainer}
+                    onPress={() => navigateToPostDetails(item)}
+                  >
+                    <Text style={styles.suggestionViewPost}>View Post</Text>
+                  </TouchableOpacity>
+                </View>
               ))}
             </ScrollView>
           )}
@@ -872,27 +913,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
+    marginBottom: spacing.xs,
   },
-  cameraFooter: {
-    position: 'absolute',
-    bottom: 40,
-    left: 0,
-    right: 0,
+  cameraTitleContainer: {
     alignItems: 'center',
-    zIndex: 10,
   },
-  toggleCameraButton: {
+  turnOffCameraButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 30,
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginTop: 4,
   },
-  toggleCameraText: {
-    fontSize: 16,
-    fontWeight: '600',
+  turnOffCameraText: {
+    fontSize: 12,
+    fontWeight: '500',
     color: '#fff',
   },
   cameraToggleSection: {
@@ -1194,37 +1232,50 @@ const styles = StyleSheet.create({
   },
   suggestionItem: {
     marginRight: spacing.md,
-    alignItems: 'center',
-    width: 100,
+    width: 110,
+    flexDirection: 'column',
   },
   suggestionImage: {
-    width: 100,
-    height: 100,
+    width: 110,
+    height: 110,
     borderRadius: 8,
     backgroundColor: colors.lightGray,
   },
-  suggestionInfo: {
-    marginTop: spacing.xs,
-    width: 100,
+  suggestionUsernameContainer: {
+    width: '100%',
+    height: 36,
+    paddingVertical: 6,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
   },
   suggestionUsername: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.accent,
     textAlign: 'center',
-    numberOfLines: 1,
-    width: 100,
+    numberOfLines: 2,
+  },
+  suggestionViewPostContainer: {
+    width: '100%',
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.lightGray,
+    borderRadius: 6,
+    marginTop: 6,
   },
   suggestionViewPost: {
-    fontSize: 10,
-    color: colors.gray,
+    fontSize: 11,
+    color: colors.dark,
     textAlign: 'center',
-    marginTop: 2,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    textDecorationLine: 'underline',
+    fontWeight: '500',
+  },
+  suggestionInfo: {
+    marginTop: spacing.xs,
     width: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   previewModal: {
     position: 'absolute',
@@ -1239,11 +1290,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 40,
   },
   previewImage: {
-    width: '100%',
-    height: '100%',
+    width: '90%',
+    height: '80%',
     resizeMode: 'contain',
+    backgroundColor: '#000',
   },
   previewOverlay: {
     position: 'absolute',

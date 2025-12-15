@@ -110,7 +110,7 @@ export default function SignUpScreen({ navigation }) {
       <ScrollView style={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Icon name="arrow-back" size={24} color={colors.dark} />
           </TouchableOpacity>
         </View>
@@ -226,6 +226,16 @@ export default function SignUpScreen({ navigation }) {
           </View>
         </View>
       </ScrollView>
+
+      {/* Bottom Box - Added background color #F5F3E4 */}
+      <View style={[styles.bottomBox, {backgroundColor: '#F5F3E4'}]}>
+        {/* Description */}
+        <Text style={styles.description}>
+          By signing up, you agree to our {' '}
+          <Text style={styles.link}>Terms of Service</Text> and {' '}
+          <Text style={styles.link}>Privacy Policy</Text>
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -241,16 +251,17 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   header: {
-    paddingTop: spacing.sm,
-    paddingBottom: 4,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   backButton: {
     padding: spacing.sm,
-    marginBottom: 0,
+    marginBottom: -8,
   },
   logoContainer: {
     alignItems: 'center',
     marginBottom: 0,
+    marginTop: -8,
   },
   logoBackground: {
     backgroundColor: colors.accent,
@@ -386,5 +397,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  bottomBox: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.gray,
+  },
+  description: {
+    fontFamily: fonts.sub,
+    fontSize: 12,
+    color: colors.dark,
+    textAlign: 'center',
+  },
+  link: {
+    color: '#ff6b6b',
+    fontWeight: 'bold',
   },
 });

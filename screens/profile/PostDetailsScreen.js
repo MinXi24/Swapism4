@@ -516,7 +516,13 @@ export default function PostDetailsScreen({ route, navigation }) {
               )}
             </View>
             <View style={styles.userDetails}>
-              <Text style={styles.userName}>{activePost.userName || 'User'}</Text>
+              <TouchableOpacity onPress={() => {
+                if (activePost.ownerUid) {
+                  navigation.navigate('UserProfile', { userId: activePost.ownerUid });
+                }
+              }}>
+                <Text style={styles.userName}>{activePost.userName || 'User'}</Text>
+              </TouchableOpacity>
               <Text style={styles.postDate}>
                 {activePost.uploadedAt?.toDate?.().toLocaleDateString() || 'Recently'}
               </Text>
