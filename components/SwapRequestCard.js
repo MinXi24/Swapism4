@@ -58,6 +58,19 @@ export const SwapRequestCard = ({
             status === 'accepted' && styles.acceptedBadge,
             status === 'rejected' && styles.rejectedBadge
           ]}>
+            <Icon 
+              name={
+                status === 'accepted' ? 'checkmark-circle-outline' :
+                status === 'rejected' ? 'close-circle-outline' :
+                'time-outline'
+              }
+              size={16}
+              color={
+                status === 'accepted' ? '#4caf50' :
+                status === 'rejected' ? '#f44336' :
+                colors.dark
+              }
+            />
             <Text style={[
               styles.statusText,
               status === 'accepted' && styles.acceptedText,
@@ -84,11 +97,7 @@ export const SwapRequestCard = ({
             <Icon 
               name="swap-horizontal" 
               size={28} 
-              color={
-                status === 'accepted' ? '#4caf50' : 
-                status === 'rejected' ? '#f44336' : 
-                colors.dark
-              } 
+              color={colors.dark} 
             />
           </View>
           
@@ -104,27 +113,27 @@ export const SwapRequestCard = ({
           </View>
         </View>
 
-        {/* Action Buttons (only for receiver and pending status) */}
-        {isReceiver && isPending && (
-          <View style={styles.swapActions}>
-            <TouchableOpacity 
-              style={styles.acceptButton}
-              onPress={() => onAccept(message.id)}
-            >
-              <Text style={styles.acceptButtonText}>Accept</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.rejectButton}
-              onPress={() => onReject(message.id)}
-            >
-              <Text style={styles.rejectButtonText}>Reject</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Timestamp */}
         <Text style={styles.swapTime}>{formatTime(message.createdAt)}</Text>
       </View>
+
+      {/* Action Buttons (only for receiver and pending status) */}
+      {isReceiver && isPending && (
+        <View style={styles.swapActions}>
+          <TouchableOpacity 
+            style={styles.acceptButton}
+            onPress={() => onAccept(message.id)}
+          >
+            <Icon name="checkmark" size={24} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.rejectButton}
+            onPress={() => onReject(message.id)}
+          >
+            <Icon name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -142,16 +151,22 @@ const styles = StyleSheet.create({
   swapCard: {
     maxWidth: '85%',
     borderRadius: 20,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     overflow: 'hidden',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   mySwapCard: {
     backgroundColor: '#9abeaa',
     borderBottomRightRadius: 6,
   },
   theirSwapCard: {
-    backgroundColor: '#9abeaa',
+    backgroundColor: colors.secondary,
     borderBottomLeftRadius: 6,
   },
   statusContainer: {
@@ -165,18 +180,22 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderRadius: 8,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
   pendingBadge: {
-    backgroundColor: colors.secondary,
+    backgroundColor: '#fff',
   },
   acceptedBadge: {
-    backgroundColor: colors.secondary,
+    backgroundColor: '#fff',
   },
   rejectedBadge: {
-    backgroundColor: colors.secondary,
+    backgroundColor: '#fff',
   },
   statusText: {
     fontSize: 13,
+    fontFamily: fonts.header,
     color: colors.dark,
     letterSpacing: 0.3,
     fontWeight: 'bold',
@@ -191,7 +210,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     gap: spacing.md,
   },
   itemWrapper: {
@@ -213,43 +232,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   iconWrapper: {
-    backgroundColor: colors.secondary,
-    borderRadius: 50,
-    padding: spacing.sm,
+    // No background or padding, just the icon
   },
   swapActions: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.md,
     marginTop: spacing.sm,
+    width: '85%',
   },
   acceptButton: {
     flex: 1,
-    backgroundColor: '#fff',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderRadius: 25,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
     elevation: 3,
   },
   acceptButtonText: {
-    color: '#4caf50',
+    color: '#fff',
     fontFamily: fonts.bold,
     fontSize: 14,
     letterSpacing: 0.5,
   },
   rejectButton: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    backgroundColor: '#f44336',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderRadius: 25,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    justifyContent: 'center',
   },
   rejectButtonText: {
     color: '#fff',
@@ -258,7 +281,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   swapTime: {
-    fontSize: 10,
+    fontSize: 11,
     color: colors.gray,
     fontFamily: fonts.regular,
     marginTop: spacing.xs,
