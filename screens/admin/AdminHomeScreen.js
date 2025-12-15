@@ -18,9 +18,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import {
   collection,
-  doc,
   getCountFromServer,
-  getDoc,
   getDocs,
   getFirestore,
   query,
@@ -54,7 +52,7 @@ export default function AdminHomeScreen({ navigation }) {
 
   const db = getFirestore();
 
-  // --- FETCH REPORTS & STATS LOGIC ---
+  // --- FETCH REPORTS LOGIC (SIMPLIFIED) ---
   useFocusEffect(
     useCallback(() => {
       loadReports();
@@ -65,22 +63,23 @@ export default function AdminHomeScreen({ navigation }) {
     try {
       setLoading(true);
       
-      // 1. Prepare Queries
+      // 1. Define Queries (Pending Status Only)
       const postsQuery = query(collection(db, 'report'), where('status', '==', 'pending'));
       const commentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'pending'));
       const usersReportQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
-      const resolvedQuery = query(collection(db, 'report'), where('status', '==', 'resolved'));
       
+      // 2. Define Stats Queries
       const usersColl = collection(db, 'users');
-      const clothesColl = collection(db, 'clothes');
+      const clothesColl = collection(db, 'clothes'); // Just counting total items
+      const resolvedQuery = query(collection(db, 'report'), where('status', '==', 'resolved'));
 
-      // 3. Run EVERYTHING in parallel
+      // 3. Run all fetches in parallel (Fastest method)
       const [
-        postSnapshot, 
-        commentSnapshot,
-        userReportSnapshot,
-        usersSnap,
-        clothesSnap,
+        postSnap, 
+        commentSnap,
+        userReportSnap,
+        totalUsersSnap,
+        totalClothesSnap,
         resolvedSnap
       ] = await Promise.all([
         getDocs(postsQuery),
@@ -91,103 +90,84 @@ export default function AdminHomeScreen({ navigation }) {
         getCountFromServer(resolvedQuery)
       ]);
       
-      // 4. Process Reports List (Pending only)
+      // 4. Process Lists (Direct Mapping - No Extra Fetches)
       
-      // --- Process Posts ---
-      const postPromises = postSnapshot.docs.map(async (docSnapshot) => {
-        const data = docSnapshot.data();
-        const reportedId = data.reported_clothes_id || data.post_id || data.clothes_id;
-        
-        let targetUserId = data.reported_user_id; 
-        let statusDetail = `Post: ${data.reason || 'Reported Content'}`;
-        let isMissing = false;
-
-        if (reportedId) {
-            let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', reportedId));
-            if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'clothes', reportedId));
-            if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'userImages', reportedId));
-
-            if (!postSnap.exists()) {
-                isMissing = true;
-                statusDetail = "⚠️ Post Unavailable (Deleted?)";
-            } else {
-                const postData = postSnap.data();
-                if (!targetUserId) targetUserId = postData.ownerUid || postData.uid || postData.userId;
-                if (postData.status === 'deleted' || postData.isDeleted === true) {
-                    isMissing = true;
-                    statusDetail = "⚠️ Post Marked Deleted";
-                }
-            }
-        }
-
-        return {
-            id: docSnapshot.id,
-            ...data,
-            reported_user_id: targetUserId, 
-            reportType: 'post',
-            name: data.reporter_user_id ? `User...${data.reporter_user_id.slice(-4)}` : 'Anonymous',
-            detail: statusDetail,
-            timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
-            icon: isMissing ? 'alert' : 'alert-circle',
-            iconColor: isMissing ? '#999' : '#FF6B6B' 
-        };
-      });
-
-      // --- Process Comments ---
-      const formattedComments = commentSnapshot.docs.map(doc => {
+      // A. Post Reports
+      const formattedPosts = postSnap.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
-            reported_user_id: data.reported_user_id || data.authorId || data.userId, 
+            reportType: 'post',
+            // Display Info
+            name: 'Reported Post', // Generic name until reviewed
+            detail: `Reason: ${data.reason || 'Flagged Content'}`,
+            timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
+            icon: 'alert-circle',
+            iconColor: '#FF6B6B' 
+        };
+      });
+
+      // B. Comment Reports
+      const formattedComments = commentSnap.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
             reportType: 'comment',
-            name: data.reporterName || 'Unknown Reporter',
-            detail: `Comment: "${data.targetContent}"`, 
+            // Display Info
+            name: data.targetOwnerName || 'Unknown User',
+            detail: `Comment: "${data.targetContent || 'Hidden'}"`, 
             timestamp: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(0),
             icon: 'chatbubble-ellipses',
             iconColor: '#FDD835'
         };
       });
 
-      // --- Process User Reports ---
-      const formattedUserReports = userReportSnapshot.docs.map(doc => {
+      // C. User Reports
+      const formattedUserReports = userReportSnap.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
-            reported_user_id: data.reported_user_id, 
             reportType: 'user', 
-            name: data.reporter_username || 'Reporter',
-            detail: `Reported User: ${data.reported_user_name || 'Unknown'}`, 
+            // Display Info
+            name: data.reported_user_name || 'Reported User',
+            detail: `Reason: ${data.reason || 'User Behavior'}`, 
             timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
             icon: 'person-remove', 
             iconColor: '#FF6B6B'
         };
       });
 
-      const resolvedPosts = await Promise.all(postPromises);
-      const allReports = [...resolvedPosts, ...formattedComments, ...formattedUserReports];
-      allReports.sort((a, b) => b.timestamp - a.timestamp);
+      // 5. Combine & Sort
+      const allReports = [...formattedPosts, ...formattedComments, ...formattedUserReports];
+      allReports.sort((a, b) => b.timestamp - a.timestamp); // Newest first
 
       setReports(allReports);
 
+      // 6. Update Stats
+      // Note: We calculate "Pending" by adding the actual list sizes to ensure they tally perfectly.
+      const totalPending = postSnap.size + commentSnap.size + userReportSnap.size;
+
       setStats({
-        pending: allReports.length,
-        users: usersSnap.data().count,
-        listings: clothesSnap.data().count,
+        pending: totalPending,
+        users: totalUsersSnap.data().count,
+        listings: totalClothesSnap.data().count,
         resolved: resolvedSnap.data().count
       });
 
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading admin data:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleViewItem = (item) => {
+    // Navigate based on type
     if (item.reportType === 'comment') {
-        navigation.navigate('ManageComments');
+        navigation.navigate('ManageComments'); 
     } else {
         navigation.navigate('ManageAccount', { report: item });
     }
@@ -206,6 +186,7 @@ export default function AdminHomeScreen({ navigation }) {
     navigation.navigate('Welcome');
   };
 
+  // --- STATS & MODAL LOGIC ---
   const handleStatPress = (stat) => {
     let breakdown = [];
     let description = "";
@@ -225,30 +206,23 @@ export default function AdminHomeScreen({ navigation }) {
             break;
             
         case 'Users':
-            const avgListings = stats.users > 0 ? (stats.listings / stats.users).toFixed(1) : '0';
-            description = "Community members currently registered on Swapism.";
+            description = "Total registered users.";
             breakdown = [
-                { label: 'Active Accounts', value: stats.users },
-                { label: 'Avg. Listings / User', value: avgListings }
+                { label: 'Total Accounts', value: stats.users },
             ];
             break;
             
         case 'Listings':
-            const flaggedPosts = reports.filter(r => r.reportType === 'post').length;
-            description = "Total clothing items currently available in the public feed.";
+            description = "Total active wardrobe items.";
             breakdown = [
-                { label: 'Active Inventory', value: stats.listings },
-                { label: 'Currently Flagged', value: flaggedPosts }
+                { label: 'Active Items', value: stats.listings },
             ];
             break;
             
         case 'Resolved':
-            const totalWorkload = stats.resolved + stats.pending;
-            const rate = totalWorkload > 0 ? ((stats.resolved / totalWorkload) * 100).toFixed(0) + '%' : '0%';
-            description = "Completed moderation actions taken by admins.";
+            description = "Total closed cases.";
             breakdown = [
-                { label: 'Closed Cases', value: stats.resolved },
-                { label: 'Clearance Rate', value: rate }
+                { label: 'Cases Closed', value: stats.resolved },
             ];
             break;
     }
@@ -264,7 +238,7 @@ export default function AdminHomeScreen({ navigation }) {
     { label: 'Resolved', value: stats.resolved, icon: 'checkmark-done-circle-outline', color: '#FCE77D' },
   ];
 
-  // --- FILTERING LOGIC ---
+  // --- FILTERING ---
   const filteredReports = reports.filter(item => {
       const searchLower = searchQuery.toLowerCase();
       return (

@@ -290,8 +290,7 @@ export default function ManageAccountScreen({ navigation, route }) {
 
         <View style={styles.userReportCard}>
             <Icon name="person-circle" size={60} color={colors.gray} />
-            <Text style={{fontSize: 20, fontWeight:'bold', marginTop:10, color: colors.dark}}>{userInfo.username}</Text>
-            <Text style={{color:colors.gray, marginBottom: 20}}>{userInfo.ownerUid}</Text>
+            <Text style={{fontSize: 20, fontWeight:'bold', marginTop:10, marginBottom:20, color: colors.dark}}>{userInfo.username}</Text>
             
             <View style={{width:'100%', padding: 15, backgroundColor:'#FFEBEE', borderRadius:8}}>
                 <Text style={{color:ALERT_RED, fontWeight:'bold', marginBottom:5, fontSize: 12}}>REASON FOR REPORT:</Text>
