@@ -21,7 +21,11 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Modal,
+  Alert,
+  Linking,
+  Clipboard
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { ItemPickerModal } from '../../components/ItemPickerModal';
@@ -36,6 +40,8 @@ export default function ChatScreen({ route, navigation }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [postalCode, setPostalCode] = useState('');
   const flatListRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -120,6 +126,72 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
+  const handleSendLocation = async () => {
+    if (postalCode.length !== 6 || !/^\d{6}$/.test(postalCode)) {
+      Alert.alert('Invalid Postal Code', 'Please enter a valid 6-digit Singapore postal code.');
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'messages'), {
+        senderId: currentUser.uid,
+        receiverId: otherUserId,
+        text: postalCode,
+        createdAt: serverTimestamp(),
+        participants: [currentUser.uid, otherUserId],
+        read: false,
+        type: 'location',
+      });
+
+      setShowLocationModal(false);
+      setPostalCode('');
+      await loadMessages();
+    } catch (error) {
+      console.error('Error sending location:', error);
+      Alert.alert('Error', 'Failed to send location. Please try again.');
+    }
+  };
+
+  const openInMapApp = (postalCode) => {
+    const location = `Singapore ${postalCode}`;
+    const encodedLocation = encodeURIComponent(location);
+    
+    const mapOptions = [
+      {
+        name: 'Google Maps',
+        url: `comgooglemaps://?daddr=${encodedLocation}`,
+      },
+      {
+        name: 'Apple Maps',
+        url: `maps://?daddr=${encodedLocation}`,
+      }
+    ];
+
+    const buttons = mapOptions.map(option => ({
+      text: option.name,
+      onPress: async () => {
+        try {
+          await Linking.openURL(option.url);
+        } catch (error) {
+          Alert.alert('App Not Available', `${option.name} is not installed or cannot be opened. Please install the app to use this option.`);
+        }
+      }
+    }));
+
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert(
+      'Choose Map App',
+      `Navigate to ${location}`,
+      buttons
+    );
+  };
+
+  const copyToClipboard = (text) => {
+    Clipboard.setString(text);
+    Alert.alert('Copied', 'Postal code copied to clipboard!');
+  };
+
 
 
   const formatTime = (date) => {
@@ -189,6 +261,52 @@ export default function ChatScreen({ route, navigation }) {
           onReject={handleRejectSwap}
           formatTime={formatTime}
         />
+      );
+    }
+    
+    // Render location message
+    if (item.type === 'location') {
+      return (
+        <View style={[
+          styles.messageContainer,
+          isMyMessage ? styles.myMessage : styles.theirMessage
+        ]}>
+          {!isMyMessage && user?.photoURL && (
+            <Image source={{ uri: user.photoURL }} style={styles.messageAvatar} />
+          )}
+          <View style={[
+            styles.locationBubble,
+            isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
+          ]}>
+            <View style={styles.locationHeader}>
+              <Icon name="location" size={20} color={isMyMessage ? '#fff' : colors.accent} />
+              <Text style={styles.locationTitle}>Location Shared</Text>
+            </View>
+            <Text style={styles.locationText}>Postal Code: {item.text}</Text>
+            <View style={styles.locationButtons}>
+              <TouchableOpacity
+                style={styles.locationButton}
+                onPress={() => copyToClipboard(item.text)}
+              >
+                <Icon name="copy-outline" size={16} color={colors.accent} />
+                <Text style={styles.locationButtonText}>Copy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationButton}
+                onPress={() => openInMapApp(item.text)}
+              >
+                <Icon name="map-outline" size={16} color={colors.accent} />
+                <Text style={styles.locationButtonText}>Open in Map</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[
+              styles.messageTime,
+              isMyMessage ? styles.myMessageTime : styles.theirMessageTime
+            ]}>
+              {formatTime(item.createdAt)}
+            </Text>
+          </View>
+        </View>
       );
     }
     
@@ -283,8 +401,8 @@ export default function ChatScreen({ route, navigation }) {
               multiline
               maxLength={500}
             />
-            <TouchableOpacity style={styles.iconButton}>
-              <Icon name="image-outline" size={24} color={colors.gray} />
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowLocationModal(true)}>
+              <Icon name="location-outline" size={24} color={colors.accent} />
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -295,6 +413,46 @@ export default function ChatScreen({ route, navigation }) {
             <Icon name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        {/* Location Modal */}
+        <Modal
+          visible={showLocationModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowLocationModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Send Your Location</Text>
+              <Text style={styles.modalSubtitle}>Enter your postal code</Text>
+              <TextInput
+                value={postalCode}
+                onChangeText={setPostalCode}
+                placeholder="e.g. 123456"
+                keyboardType="number-pad"
+                maxLength={6}
+                style={styles.modalInput}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => {
+                    setShowLocationModal(false);
+                    setPostalCode('');
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalSendButton}
+                  onPress={handleSendLocation}
+                >
+                  <Text style={styles.modalSendText}>Send Location</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Item Picker Modal */}
         <ItemPickerModal
@@ -452,6 +610,107 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: colors.gray,
+  },
+  locationBubble: {
+    padding: spacing.md,
+    borderRadius: 12,
+    maxWidth: '75%',
+    backgroundColor: '#f0f0f0',
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  locationTitle: {
+    fontFamily: fonts.header,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    marginLeft: spacing.sm,
+  },
+  locationText: {
+    fontFamily: fonts.sub,
+    fontSize: 16,
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  locationButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    gap: 4,
+  },
+  locationButtonText: {
+    fontSize: 12,
+    color: colors.accent,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: spacing.lg,
+    width: '80%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.gray,
+    marginBottom: spacing.md,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: spacing.md,
+    fontSize: 16,
+    marginBottom: spacing.md,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.md,
+  },
+  modalCancelButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  modalCancelText: {
+    color: colors.gray,
+    fontSize: 16,
+  },
+  modalSendButton: {
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+  },
+  modalSendText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   emptyContainer: {
     flex: 1,

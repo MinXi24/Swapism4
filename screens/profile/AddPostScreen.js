@@ -22,6 +22,7 @@ const CLOUDINARY_CLOUD_NAME = 'dblq6cttn';
 const CLOUDINARY_UPLOAD_PRESET = 'myPreset';
 
 export default function AddPostScreen({ navigation, route }) {
+  const [selectedImages, setSelectedImages] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [processedImage, setProcessedImage] = useState(null);
   const [title, setTitle] = useState('');
@@ -35,9 +36,18 @@ export default function AddPostScreen({ navigation, route }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [selectedSize, setSelectedSize] = useState('');
+  const [selectedCondition, setSelectedCondition] = useState('');
+  const [additionalDetails, setAdditionalDetails] = useState('');
+  const [showConditionDropdown, setShowConditionDropdown] = useState(false);
 
   const db = getFirestore();
   const auth = getAuth();
+
+  const sizes = ['XS', 'S', 'M', 'L', 'XL'];
+  const conditions = ['Brand new', 'Wore it once', 'Wore it 2-5 times', 'Wore it more than 5 times', 'Well-worn'];
+
+  const isSwapPost = postType === 'forSwap' || postType === 'both';
 
   useEffect(() => {
     requestPermission();
@@ -92,12 +102,19 @@ export default function AddPostScreen({ navigation, route }) {
       });
 
       if (!result.canceled) {
-        setSelectedImage(result.assets[0]);
-        setProcessedImage(null);
-        
-        // Auto remove background for swap items
-        if (postType === 'forSwap' || postType === 'both') {
-          await removeBackground(result.assets[0].uri);
+        // Add to existing images array, up to 2 images
+        if (selectedImages.length < 2) {
+          const newImages = [...selectedImages, result.assets[0]];
+          setSelectedImages(newImages);
+          setSelectedImage(result.assets[0]); // Keep for backward compatibility
+          setProcessedImage(null);
+          
+          // Auto remove background for swap items (only first image)
+          if ((postType === 'forSwap' || postType === 'both') && selectedImages.length === 0) {
+            await removeBackground(result.assets[0].uri);
+          }
+        } else {
+          Alert.alert('Limit Reached', 'You can only add up to 2 images per post');
         }
       }
     } catch (error) {
@@ -110,18 +127,25 @@ export default function AddPostScreen({ navigation, route }) {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        allowsEditing: selectedImages.length > 0 ? false : true,
+        allowsMultipleSelection: true,
+        selectionLimit: 2,
         aspect: [4, 3],
         quality: 1,
       });
 
       if (!result.canceled) {
-        setSelectedImage(result.assets[0]);
-        setProcessedImage(null);
-        
-        // Auto remove background for swap items
-        if (postType === 'forSwap' || postType === 'both') {
-          await removeBackground(result.assets[0].uri);
+        if (result.assets.length > 0) {
+          // Support up to 2 images
+          const images = result.assets.slice(0, 2);
+          setSelectedImages(images);
+          setSelectedImage(images[0]); // Keep for backward compatibility
+          setProcessedImage(null);
+          
+          // Auto remove background for swap items (only first image)
+          if (postType === 'forSwap' || postType === 'both') {
+            await removeBackground(images[0].uri);
+          }
         }
       }
     } catch (error) {
@@ -374,7 +398,7 @@ export default function AddPostScreen({ navigation, route }) {
   };
 
   const handlePost = async () => {
-    if (!selectedImage) {
+    if (!selectedImage && selectedImages.length === 0) {
       Alert.alert('No Image', 'Please select an image to upload');
       return;
     }
@@ -389,10 +413,21 @@ export default function AddPostScreen({ navigation, route }) {
     try {
       console.log('Starting upload process...');
       
-      // Use processed image (with bg removed) if available, otherwise use original
-      const imageToUpload = processedImage?.uri || selectedImage.uri;
-      const imageUrl = await uploadToCloudinary(imageToUpload);
-      console.log('Image uploaded, URL:', imageUrl);
+      // Upload all selected images
+      const imageUrls = [];
+      const imagesToUpload = selectedImages.length > 0 ? selectedImages : [selectedImage];
+      
+      for (let i = 0; i < imagesToUpload.length; i++) {
+        const img = imagesToUpload[i];
+        // Use processed image (with bg removed) for first image if available
+        const imageToUpload = (i === 0 && processedImage?.uri) ? processedImage.uri : img.uri;
+        const imageUrl = await uploadToCloudinary(imageToUpload);
+        imageUrls.push(imageUrl);
+        console.log(`Image ${i + 1} uploaded, URL:`, imageUrl);
+      }
+      
+      const imageUrl = imageUrls[0]; // Primary image for backward compatibility
+      console.log('All images uploaded');
 
       const uid = auth.currentUser.uid;
       
@@ -415,6 +450,7 @@ export default function AddPostScreen({ navigation, route }) {
           ownerUid: uid,
           userName: userName,
           url: imageUrl,
+          imageUrls: imageUrls,
           title: title.trim(),
           description: description.trim(),
           taggedUsers: taggedUsers.map(u => ({ uid: u.uid, username: u.username })),
@@ -429,6 +465,7 @@ export default function AddPostScreen({ navigation, route }) {
           ownerUid: uid,
           userName: userName,
           url: imageUrl,
+          imageUrls: imageUrls,
           title: title.trim(),
           description: description.trim(),
           taggedUsers: taggedUsers.map(u => ({ uid: u.uid, username: u.username })),
@@ -436,16 +473,20 @@ export default function AddPostScreen({ navigation, route }) {
           swapStatus: 'available',
           clothingType: clothingType,
           backgroundRemoved: !!processedImage,
+          size: selectedSize || 'N/A',
+          condition: selectedCondition || 'N/A',
+          additionalDetails: additionalDetails.trim() || 'N/A',
           uploadedAt: new Date(),
         });
 
         // Create notifications for tagged users (use the fun post for notifications)
         await createTagNotifications(funPostRef.id, imageUrl);
       } else {
-        const postRef = await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
+        const postData = {
           ownerUid: uid,
           userName: userName,
           url: imageUrl,
+          imageUrls: imageUrls, // Store all image URLs
           title: title.trim(),
           description: description.trim(),
           taggedUsers: taggedUsers.map(u => ({ uid: u.uid, username: u.username })),
@@ -454,7 +495,16 @@ export default function AddPostScreen({ navigation, route }) {
           clothingType: clothingType,
           backgroundRemoved: !!processedImage,
           uploadedAt: new Date(),
-        });
+        };
+
+        // Add swap details only for forSwap posts
+        if (postType === 'forSwap') {
+          postData.size = selectedSize || 'N/A';
+          postData.condition = selectedCondition || 'N/A';
+          postData.additionalDetails = additionalDetails.trim() || 'N/A';
+        }
+
+        const postRef = await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), postData);
 
         // Create notifications for tagged users
         await createTagNotifications(postRef.id, imageUrl);
@@ -469,6 +519,7 @@ export default function AddPostScreen({ navigation, route }) {
         }
       ]);
       
+      setSelectedImages([]);
       setSelectedImage(null);
       setProcessedImage(null);
       setTitle('');
@@ -476,6 +527,9 @@ export default function AddPostScreen({ navigation, route }) {
       setTaggedUsers([]);
       setPostType('forFun');
       setClothingType('other');
+      setSelectedSize('');
+      setSelectedCondition('');
+      setAdditionalDetails('');
     } catch (error) {
       console.error('Upload error:', error);
       Alert.alert('Error', `Failed to upload post: ${error.message}`);
@@ -496,19 +550,51 @@ export default function AddPostScreen({ navigation, route }) {
         </View>
 
         <View style={styles.uploadSection}>
-          <TouchableOpacity style={styles.imagePicker} onPress={showImagePickerOptions}>
-            {(processedImage || selectedImage) ? (
-              <Image 
-                source={{ uri: processedImage?.uri || selectedImage.uri }} 
-                style={styles.selectedImage} 
-              />
-            ) : (
+          {selectedImages.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll}>
+              {selectedImages.map((img, index) => (
+                <View key={index} style={styles.imageContainer}>
+                  <Image 
+                    source={{ uri: index === 0 && processedImage?.uri ? processedImage.uri : img.uri }} 
+                    style={styles.multipleImage} 
+                  />
+                  <TouchableOpacity
+                    style={styles.removeImageButton}
+                    onPress={() => {
+                      const newImages = selectedImages.filter((_, i) => i !== index);
+                      setSelectedImages(newImages);
+                      if (newImages.length > 0) {
+                        setSelectedImage(newImages[0]);
+                      } else {
+                        setSelectedImage(null);
+                        setProcessedImage(null);
+                      }
+                    }}
+                  >
+                    <Icon name="close-circle" size={24} color="#fff" />
+                  </TouchableOpacity>
+                  {index === 0 && (
+                    <View style={styles.primaryBadge}>
+                      <Text style={styles.primaryBadgeText}>Main</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+              {selectedImages.length < 2 && (
+                <TouchableOpacity style={styles.addMoreButton} onPress={showImagePickerOptions}>
+                  <Icon name="add-circle-outline" size={48} color={colors.accent} />
+                  <Text style={styles.addMoreText}>Add Photo</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          ) : (
+            <TouchableOpacity style={styles.imagePicker} onPress={showImagePickerOptions}>
               <View style={styles.imagePickerPlaceholder}>
                 <Icon name="camera" size={48} color={colors.gray} />
-                <Text style={styles.imagePickerText}>Tap to take photo or select from gallery</Text>
+                <Text style={styles.imagePickerText}>Tap to add photos (up to 2)</Text>
               </View>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
 
           {removingBg && (
             <View style={styles.processingBadge}>
@@ -703,6 +789,89 @@ export default function AddPostScreen({ navigation, route }) {
             </View>
           </View>
 
+          {/* Size and Condition Section - Only for Swap Posts */}
+          {isSwapPost && (
+            <>
+              {/* Size Selection */}
+              <View style={styles.postTypeSection}>
+                <Text style={styles.sectionLabel}>Size</Text>
+                <Text style={styles.sectionHint}>Select the clothing size</Text>
+                <View style={styles.sizeButtonsRow}>
+                  {sizes.map((size) => (
+                    <TouchableOpacity
+                      key={size}
+                      style={[
+                        styles.sizeButton,
+                        selectedSize === size && styles.sizeButtonActive
+                      ]}
+                      onPress={() => setSelectedSize(size)}
+                    >
+                      <Text style={[
+                        styles.sizeButtonText,
+                        selectedSize === size && styles.sizeButtonTextActive
+                      ]}>
+                        {size}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Condition Selection */}
+              <View style={styles.postTypeSection}>
+                <Text style={styles.sectionLabel}>Condition</Text>
+                <Text style={styles.sectionHint}>How often have you worn this?</Text>
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setShowConditionDropdown(!showConditionDropdown)}
+                >
+                  <Text style={styles.dropdownButtonText}>
+                    {selectedCondition || 'Select condition'}
+                  </Text>
+                  <Icon 
+                    name={showConditionDropdown ? 'chevron-up' : 'chevron-down'} 
+                    size={20} 
+                    color={colors.dark} 
+                  />
+                </TouchableOpacity>
+                {showConditionDropdown && (
+                  <View style={styles.dropdownList}>
+                    {conditions.map((condition) => (
+                      <TouchableOpacity
+                        key={condition}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setSelectedCondition(condition);
+                          setShowConditionDropdown(false);
+                        }}
+                      >
+                        <Text style={styles.dropdownItemText}>{condition}</Text>
+                        {selectedCondition === condition && (
+                          <Icon name="checkmark" size={20} color={colors.accent} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Additional Details */}
+              <View style={styles.postTypeSection}>
+                <Text style={styles.sectionLabel}>Additional Details (Optional)</Text>
+                <Text style={styles.sectionHint}>Any extra information about the item</Text>
+                <TextInput
+                  style={styles.detailsInput}
+                  placeholder="E.g., Brand, fabric, defects, etc."
+                  value={additionalDetails}
+                  onChangeText={setAdditionalDetails}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+            </>
+          )}
+
           <TouchableOpacity 
             style={styles.tagButton}
             onPress={handleTagPeople}
@@ -862,6 +1031,57 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  imagesScroll: {
+    marginBottom: spacing.md,
+  },
+  imageContainer: {
+    position: 'relative',
+    marginRight: spacing.sm,
+  },
+  multipleImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+  },
+  primaryBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: colors.accent,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  primaryBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  addMoreButton: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f8f4',
+  },
+  addMoreText: {
+    marginTop: spacing.xs,
+    fontSize: 12,
+    color: colors.accent,
+    fontWeight: '600',
   },
   processingBadge: {
     flexDirection: 'row',
@@ -1095,5 +1315,75 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     color: colors.gray,
     fontSize: 14,
+  },
+  sizeButtonsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  sizeButton: {
+    flex: 1,
+    backgroundColor: colors.secondary,
+    borderRadius: 8,
+    padding: spacing.md,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  sizeButtonActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  sizeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  sizeButtonTextActive: {
+    color: '#fff',
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    borderRadius: 8,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  dropdownButtonText: {
+    fontSize: 16,
+    color: colors.dark,
+  },
+  dropdownList: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginTop: spacing.sm,
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  dropdownItemText: {
+    fontSize: 16,
+    color: colors.dark,
+  },
+  detailsInput: {
+    backgroundColor: colors.secondary,
+    borderRadius: 8,
+    padding: spacing.md,
+    fontSize: 16,
+    color: colors.dark,
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
 });
