@@ -71,6 +71,10 @@ export default function LoginScreen({ navigation }) {
         errorMessage = "Incorrect password!";
       } else if (error.code === 'auth/invalid-email') {
         errorMessage = "Please enter a valid email address.";
+      } else if (error.code === 'auth/invalid-credential') {
+        errorMessage = "Invalid email or password. Please check your credentials and try again. If you forgot your password, use 'Forgot Password' to reset it.";
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = "This account has been disabled. Please contact support for assistance.";
       }
 
       Alert.alert('Login Failed', errorMessage);

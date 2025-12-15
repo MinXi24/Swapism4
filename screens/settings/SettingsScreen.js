@@ -1,14 +1,14 @@
 import { deleteUser, getAuth } from 'firebase/auth';
 import { deleteDoc, doc, getFirestore } from 'firebase/firestore';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
@@ -185,7 +185,7 @@ export default function SettingsScreen({ navigation }) {
           
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => {/* Navigate to About */}}
+            onPress={() => navigation.navigate('About')}
           >
             <View style={styles.menuLeft}>
               <Icon name="information-circle-outline" size={24} color={colors.dark} />
