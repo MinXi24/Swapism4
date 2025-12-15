@@ -3,21 +3,21 @@ import { getAuth } from 'firebase/auth';
 import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-  ActionSheetIOS,
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActionSheetIOS,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 import Icon from '../../assets/icons/icons';
@@ -424,7 +424,14 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleMessage = () => {
-    navigation.navigate('Messages');
+    navigation.navigate('Chat', { 
+      user: {
+        id: userId,
+        uid: userId,
+        name: userInfo.username,
+        photoURL: userInfo.photoURL
+      }
+    });
   };
 
   const handleRateUser = () => {
@@ -602,14 +609,14 @@ export default function UserProfileScreen({ route, navigation }) {
                 <Text style={styles.statNumber}>{stats.posts}</Text>
                 <Text style={styles.statLabel}>posts</Text>
               </View>
-              <View style={styles.statItem}>
+              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'followers' })}>
                 <Text style={styles.statNumber}>{stats.followers}</Text>
                 <Text style={styles.statLabel}>followers</Text>
-              </View>
-              <View style={styles.statItem}>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'following' })}>
                 <Text style={styles.statNumber}>{stats.following}</Text>
                 <Text style={styles.statLabel}>following</Text>
-              </View>
+              </TouchableOpacity>
             </View>
           </View>
 
