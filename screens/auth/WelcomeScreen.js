@@ -92,6 +92,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '90%',
     marginTop: 70,
+    marginLeft: 15,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },

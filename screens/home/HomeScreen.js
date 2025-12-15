@@ -1,16 +1,16 @@
 ﻿import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    getFirestore,
-    query,
-    serverTimestamp // <--- ADDED THIS IMPORT
-    ,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  serverTimestamp // <--- ADDED THIS IMPORT
+  ,
 
 
 
@@ -30,25 +30,33 @@ import {
 
 
 
-    where
+
+
+
+
+
+  where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    FlatList,
-    Image,
-    PanResponder,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  Image,
+  PanResponder,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+  Modal,
+  TextInput,
+  Linking
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -61,6 +69,85 @@ export default function HomeScreen({ navigation }) {
   const [notificationAnim] = useState(new Animated.Value(-100));
   const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [postalCode, setPostalCode] = useState('');
+  const [userArea, setUserArea] = useState('');
+  // Singapore postal code districts mapping (same as ProfileScreen)
+  const postalDistricts = {
+    '01': 'Raffles Place, Cecil, Marina',
+    '02': 'Anson, Tanjong Pagar',
+    '03': 'Queenstown, Tiong Bahru',
+    '04': 'Telok Blangah, Harbourfront',
+    '05': 'Pasir Panjang, Hong Leong Garden',
+    '06': 'High Street, Beach Road',
+    '07': 'Middle Road, Golden Mile',
+    '08': 'Little India',
+    '09': 'Orchard, Cairnhill, River Valley',
+    '10': 'Ardmore, Bukit Timah, Holland Road',
+    '11': 'Watten Estate, Novena, Thomson',
+    '12': 'Balestier, Toa Payoh',
+    '13': 'Macpherson, Braddell',
+    '14': 'Geylang, Eunos',
+    '15': 'Katong, Joo Chiat, Amber Road',
+    '16': 'Upper East Coast, Eastwood',
+    '17': 'Loyang, Changi',
+    '18': 'Tampines, Pasir Ris',
+    '19': 'Serangoon Garden, Hougang',
+    '20': 'Bishan, Ang Mo Kio',
+    '21': 'Upper Bukit Timah, Clementi Park',
+    '22': 'Jurong',
+    '23': 'Hillview, Dairy Farm, Bukit Panjang',
+    '24': 'Lim Chu Kang, Tengah',
+    '25': 'Kranji, Woodgrove, Woodlands',
+    '26': 'Upper Thomson, Springleaf',
+    '27': 'Yishun, Sembawang',
+    '28': 'Seletar',
+    // ... (add more as needed)
+  };
+
+  const handleSaveLocation = () => {
+    if (postalCode.length === 6 && /^\d{6}$/.test(postalCode)) {
+      const district = postalCode.substring(0, 2);
+      const area = postalDistricts[district];
+      if (area) {
+        setUserArea(area);
+        setShowLocationModal(false);
+        setPostalCode('');
+        Alert.alert('Location Set', `Your area is: ${area}`);
+      } else {
+        Alert.alert('Postal code not recognized. Please check and try again.');
+      }
+    } else {
+      Alert.alert('Please enter a valid 6-digit Singapore postal code');
+    }
+  };
+
+  // For other users to open the location in map apps
+  const openMapWithLocation = async (area) => {
+    if (!area) return;
+    const location = `Singapore, ${area}`;
+    const encodedLocation = encodeURIComponent(location);
+    // Citymapper deep link: https://citymapper.com/directions?endaddress=Singapore,%20AREA
+    const urls = [
+      `citymapper://directions?endaddress=${encodedLocation}`,
+      `comgooglemaps://?q=${encodedLocation}`,
+      `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`,
+      `maps://maps.apple.com/?q=${encodedLocation}`,
+      `https://citymapper.com/directions?endaddress=${encodedLocation}`
+    ];
+    for (const url of urls) {
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (_error) {
+        // continue
+      }
+    }
+    Alert.alert('Error', 'No map app available');
+  };
 
   const db = getFirestore();
   const auth = getAuth();
@@ -116,6 +203,34 @@ export default function HomeScreen({ navigation }) {
       const postsData = await Promise.all(
         querySnapshot.docs.map(async (docSnapshot) => {
           const postData = docSnapshot.data();
+
+          // Check if owner is deleted, inactive, or invalid
+          let ownerIsInvalid = false;
+          if (postData.ownerUid) {
+            try {
+              const userDocRef = doc(db, 'users', postData.ownerUid);
+              const userDoc = await getDoc(userDocRef);
+              if (!userDoc.exists()) {
+                ownerIsInvalid = true;
+              } else {
+                const userData = userDoc.data();
+                if (
+                  userData.deleted === true ||
+                  userData.active === false ||
+                  !userData.username ||
+                  typeof userData.username !== 'string' ||
+                  userData.username.trim() === '' ||
+                  (userData.role && userData.role.toLowerCase() === 'admin') ||
+                  (userData.username && userData.username.toLowerCase().includes('admin'))
+                ) {
+                  ownerIsInvalid = true;
+                }
+              }
+            } catch (_error) {
+              ownerIsInvalid = true;
+            }
+          }
+          if (ownerIsInvalid) return null;
           
           const likesQuery = query(
             collection(db, 'likes'),
@@ -134,18 +249,6 @@ export default function HomeScreen({ navigation }) {
           const userLiked = likesSnapshot.docs.some(
             doc => doc.data().userId === currentUser?.uid
           );
-          
-          // Check if user favorited this post
-          let userFavorited = false;
-          if (currentUser) {
-            const favoritesQuery = query(
-              collection(db, 'favorites'),
-              where('postId', '==', docSnapshot.id),
-              where('userId', '==', currentUser.uid)
-            );
-            const favoritesSnapshot = await getDocs(favoritesQuery);
-            userFavorited = !favoritesSnapshot.empty;
-          }
           
           // Load user profile picture and privacy settings
           let userPhotoURL = null;
@@ -167,8 +270,8 @@ export default function HomeScreen({ navigation }) {
                   isFollowing = followers.includes(currentUser.uid);
                 }
               }
-            } catch (error) {
-              console.error('Error loading user data:', error);
+            } catch (_error) {
+              // Already handled above
             }
           }
           
@@ -178,7 +281,6 @@ export default function HomeScreen({ navigation }) {
             likeCount,
             commentCount,
             userLiked,
-            userFavorited,
             userPhotoURL,
             isPrivate,
             isFollowing,
@@ -187,8 +289,11 @@ export default function HomeScreen({ navigation }) {
         })
       );
       
+      // Remove nulls (posts from deleted/inactive/invalid owners)
+      const validPosts = postsData.filter(Boolean);
+
       // Filter out private posts from users the current user doesn't follow
-      const filteredPosts = postsData.filter(post => {
+      const filteredPosts = validPosts.filter(post => {
         // Show post if it's not private
         if (!post.isPrivate) return true;
         
@@ -723,6 +828,8 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
+
+
       {/* Suggested Accounts Section */}
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -738,7 +845,32 @@ export default function HomeScreen({ navigation }) {
       ) : (
         <FlatList
           data={posts}
-          renderItem={renderPost}
+          renderItem={(itemProps) => {
+            // Pass userArea to each post for navigation
+            return (
+              <View>
+                {renderPost({ ...itemProps })}
+                {userArea ? (
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 16, marginTop: 4 }}
+                    onPress={() => {
+                      Alert.alert(
+                        'Navigate to Location',
+                        `Open ${userArea} in a map app?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Open', onPress: () => openMapWithLocation(userArea) },
+                        ]
+                      );
+                    }}
+                  >
+                    <Icon name="location-outline" size={18} color={colors.accent} />
+                    <Text style={{ marginLeft: 6, color: colors.accent, fontSize: 14 }}>View Location</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            );
+          }}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={renderHeader}

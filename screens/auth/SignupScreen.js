@@ -110,7 +110,7 @@ export default function SignUpScreen({ navigation }) {
       <ScrollView style={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Icon name="arrow-back" size={24} color={colors.dark} />
           </TouchableOpacity>
         </View>
@@ -251,16 +251,17 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   header: {
-    paddingTop: spacing.sm,
-    paddingBottom: 4,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   backButton: {
     padding: spacing.sm,
-    marginBottom: 0,
+    marginBottom: -8,
   },
   logoContainer: {
     alignItems: 'center',
     marginBottom: 0,
+    marginTop: -8,
   },
   logoBackground: {
     backgroundColor: colors.accent,

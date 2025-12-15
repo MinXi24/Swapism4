@@ -1,30 +1,30 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    getFirestore,
-    query,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';

@@ -8,17 +8,21 @@ import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import FavouritesScreen from '../screens/favourites/FavouritesScreen';
 import SwapHistoryScreen from '../screens/history/SwapHistoryScreen';
 import HomeScreen from '../screens/home/HomeScreen';
+import PostActivityScreen from '../screens/home/PostActivityScreen';
 import SearchScreen from '../screens/home/SearchScreen';
 import ChatScreen from '../screens/messages/ChatScreen';
 import MessagesScreen from '../screens/messages/MessagesScreen';
 import AddPostScreen from '../screens/profile/AddPostScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
+import FollowListScreen from '../screens/profile/FollowListScreen';
 import PostDetailsScreen from '../screens/profile/PostDetailsScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import TryOnScreen from '../screens/profile/TryOnScreen';
 import UserProfileScreen from '../screens/profile/UserProfileScreen';
 import ActivityScreen from '../screens/settings/ActivityScreen';
+import BlockedUsersScreen from '../screens/settings/BlockedUsersScreen';
 import PrivacyScreen from '../screens/settings/PrivacyScreen';
+import RecentlyDeletedScreen from '../screens/settings/RecentlyDeletedScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ItemDetailsScreen from '../screens/swap/ItemDetailsScreen';
 import SwapScreen from '../screens/swap/SwapScreen';
@@ -51,9 +55,13 @@ export default function Navigation() {
       <Stack.Screen name="AddPost" component={AddPostScreen} />
       <Stack.Screen name="PostDetails" component={PostDetailsScreen} />
       <Stack.Screen name="TryOnScreen" component={TryOnScreen} />
+      <Stack.Screen name="FollowList" component={FollowListScreen} />
       <Stack.Screen name="Activity" component={ActivityScreen} />
+      <Stack.Screen name="PostActivity" component={PostActivityScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} />
+      <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
+      <Stack.Screen name="RecentlyDeleted" component={RecentlyDeletedScreen} />
       <Stack.Screen name="AdminHome" component={AdminHomeScreen} />
       <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
       <Stack.Screen name="ManageComments" component={ManageCommentsScreen} />

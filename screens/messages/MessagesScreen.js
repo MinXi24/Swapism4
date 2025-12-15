@@ -25,6 +25,7 @@ import {
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import Input from '../../components/Input';
+
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function MessagesScreen({ navigation }) {
@@ -157,9 +158,6 @@ export default function MessagesScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>Messages</Text>
-        <TouchableOpacity style={styles.headerIcon}>
-          <Icon name="heart-outline" size={28} color={colors.dark} />
-        </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
@@ -180,7 +178,7 @@ export default function MessagesScreen({ navigation }) {
         <View style={styles.emptyContainer}>
           <Icon name="chatbubbles-outline" size={64} color={colors.gray} />
           <Text style={styles.emptyText}>No messages yet</Text>
-          <Text style={styles.emptySubtext}>Start a conversation from a user's profile</Text>
+          <Text style={styles.emptySubtext}>Start a conversation from a user&apos;s profile</Text>
         </View>
       ) : (
         <View style={styles.messagesContainer}>

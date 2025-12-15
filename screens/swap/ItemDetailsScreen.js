@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { doc, getDoc, getFirestore } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 import {
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import Button from '../../components/Button';
@@ -16,6 +17,50 @@ import { colors, fonts, spacing } from '../../lib/theme';
 export default function ItemDetailsScreen({ route, navigation }) {
   const { item } = route.params;
   const [isFavorited, setIsFavorited] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  const db = getFirestore();
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      console.log('=== Starting to load user data ===');
+      console.log('Item ownerUid:', item.ownerUid);
+      console.log('Full item:', item);
+      
+      if (item.ownerUid) {
+        const userDocRef = doc(db, 'users', item.ownerUid);
+        const userSnapshot = await getDoc(userDocRef);
+        
+        console.log('User doc exists?', userSnapshot.exists());
+        
+        if (userSnapshot.exists()) {
+          const user = userSnapshot.data();
+          console.log('=== FULL USER DATA ===', JSON.stringify(user, null, 2));
+          console.log('User rating:', user.rating);
+          console.log('User reviewCount:', user.reviewCount);
+          console.log('User photoURL:', user.photoURL);
+          console.log('User username:', user.username);
+          console.log('User displayName:', user.displayName);
+          setUserData(user);
+          console.log('User data set successfully');
+        } else {
+          console.log('No user found for uid:', item.ownerUid);
+        }
+      } else {
+        console.log('No ownerUid in item');
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setLoading(false);
+      console.log('Loading finished, userData:', userData);
+    }
+  };
 
   const handleFavorite = () => {
     setIsFavorited(!isFavorited);
@@ -28,6 +73,15 @@ export default function ItemDetailsScreen({ route, navigation }) {
 
   const handleBack = () => {
     navigation.goBack();
+  };
+
+  const handleViewProfile = () => {
+    if (item.ownerUid) {
+      navigation.navigate('UserProfile', { 
+        userId: item.ownerUid, 
+        username: userData?.username || userData?.displayName || item.userName || 'User' 
+      });
+    }
   };
 
   return (
@@ -64,14 +118,6 @@ export default function ItemDetailsScreen({ route, navigation }) {
           {/* Item Title */}
           <Text style={styles.itemTitle}>{item.title}</Text>
 
-          {/* Rating */}
-          <View style={styles.ratingContainer}>
-            <Icon name="star" size={20} color={colors.highlight} />
-            <Text style={styles.ratingText}>
-              {item.rating} ({item.reviews} reviews)
-            </Text>
-          </View>
-
           {/* Description */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Description</Text>
@@ -83,20 +129,34 @@ export default function ItemDetailsScreen({ route, navigation }) {
           {/* User Information */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Owner Information</Text>
-            <View style={styles.userContainer}>
-              <View style={styles.userAvatar}>
-                <Icon name="person" size={32} color={colors.accent} />
-              </View>
+            <TouchableOpacity 
+              style={styles.userContainer}
+              onPress={handleViewProfile}
+              activeOpacity={0.7}
+            >
+              {userData?.photoURL ? (
+                <Image 
+                  source={{ uri: userData.photoURL }} 
+                  style={styles.userAvatarImage}
+                />
+              ) : (
+                <View style={styles.userAvatar}>
+                  <Icon name="person" size={32} color={colors.accent} />
+                </View>
+              )}
               <View style={styles.userInfo}>
-                <Text style={styles.userName}>{item.userName || 'User'}</Text>
+                <Text style={styles.userName}>
+                  {userData?.username || userData?.displayName || item.userName || 'User'}
+                </Text>
                 <View style={styles.userRating}>
                   <Icon name="star" size={16} color={colors.highlight} />
                   <Text style={styles.userRatingText}>
-                    {item.userRating || '4.5'} User Rating
+                    {loading ? 'Loading...' : `${userData?.rating?.toFixed(1) || '0'} (${userData?.reviewCount || 0} reviews)`}
                   </Text>
                 </View>
               </View>
-            </View>
+              <Icon name="chevron-forward" size={24} color={colors.gray} />
+            </TouchableOpacity>
           </View>
 
           {/* Additional Details */}
@@ -104,12 +164,18 @@ export default function ItemDetailsScreen({ route, navigation }) {
             <Text style={styles.sectionTitle}>Details</Text>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Condition:</Text>
-              <Text style={styles.detailValue}>{item.condition || 'Excellent'}</Text>
+              <Text style={styles.detailValue}>{item.condition || 'N/A'}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Size:</Text>
-              <Text style={styles.detailValue}>{item.size || 'M'}</Text>
+              <Text style={styles.detailValue}>{item.size || 'N/A'}</Text>
             </View>
+            {item.additionalDetails && item.additionalDetails !== 'N/A' && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>More Info:</Text>
+                <Text style={styles.detailValue}>{item.additionalDetails}</Text>
+              </View>
+            )}
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Posted:</Text>
               <Text style={styles.detailValue}>
@@ -219,6 +285,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  userAvatarImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     marginRight: spacing.md,
   },
   userInfo: {
