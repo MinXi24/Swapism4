@@ -1,30 +1,30 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  getFirestore,
-  query,
-  updateDoc,
-  where
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    getFirestore,
+    query,
+    updateDoc,
+    where
 } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
@@ -437,20 +437,35 @@ export default function PostDetailsScreen({ route, navigation }) {
     setNewComment(comment.text);
   };
 
-  const handleSwapNow = () => {
-    Alert.alert(
-      'Request Swap',
-      `Do you want to request a swap for "${activePost.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Request Swap',
-          onPress: () => {
-            Alert.alert('Swap Request Sent', 'The owner will be notified of your swap request.');
-          }
+  const handleSwapNow = async () => {
+    if (!auth.currentUser) {
+      Alert.alert('Sign In Required', 'Please sign in to request a swap.');
+      return;
+    }
+
+    try {
+      // Get the item owner's profile data
+      const userDoc = await getDoc(doc(db, 'users', activePost.ownerUid));
+      const userData = userDoc.data();
+
+      // Navigate to chat with swap data
+      navigation.navigate('Chat', {
+        user: {
+          id: activePost.ownerUid,
+          uid: activePost.ownerUid,
+          name: userData.username || activePost.userName,
+          photoURL: userData.photoURL
+        },
+        swapRequest: {
+          theirItemId: activePost.id,
+          theirItemImage: activePost.url,
+          theirItemTitle: activePost.title
         }
-      ]
-    );
+      });
+    } catch (error) {
+      console.error('Error initiating swap:', error);
+      Alert.alert('Error', 'Could not start swap request. Please try again.');
+    }
   };
 
   const handleChangeSwapStatus = async () => {

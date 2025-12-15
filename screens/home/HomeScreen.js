@@ -371,7 +371,44 @@ export default function HomeScreen({ navigation }) {
   const handleComment = (post) => {
     navigation.navigate('PostDetails', { post });
   };
+  const handleFavorite = async (post) => {
+    if (!currentUser) return;
 
+    try {
+      const favoritesQuery = query(
+        collection(db, 'favorites'),
+        where('userId', '==', currentUser.uid),
+        where('postId', '==', post.id)
+      );
+      const favoritesSnapshot = await getDocs(favoritesQuery);
+
+      if (!favoritesSnapshot.empty) {
+        // Remove from favorites
+        await deleteDoc(favoritesSnapshot.docs[0].ref);
+        setPosts(posts.map(p => 
+          p.id === post.id ? { ...p, userFavorited: false } : p
+        ));
+      } else {
+        // Add to favorites
+        await addDoc(collection(db, 'favorites'), {
+          userId: currentUser.uid,
+          postId: post.id,
+          postUrl: post.url,
+          postDescription: post.description || post.title,
+          ownerUid: post.ownerUid,
+          userName: post.userName,
+          userPhotoURL: post.userPhotoURL,
+          uploadedAt: post.uploadedAt,
+          createdAt: serverTimestamp(),
+        });
+        setPosts(posts.map(p => 
+          p.id === post.id ? { ...p, userFavorited: true } : p
+        ));
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  };
   const handlePostPress = (post) => {
     navigation.navigate('PostDetails', { post });
   };
@@ -542,8 +579,12 @@ export default function HomeScreen({ navigation }) {
             <Icon name="chatbubble-outline" size={26} color={colors.dark} />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity>
-          <Icon name="star-outline" size={26} color={colors.dark} />
+        <TouchableOpacity onPress={() => handleFavorite(item)}>
+          <Icon 
+            name={item.userFavorited ? 'star' : 'star-outline'} 
+            size={26} 
+            color={item.userFavorited ? '#F4C430' : colors.dark} 
+          />
         </TouchableOpacity>
       </View>
 
@@ -653,7 +694,7 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.headerIcon} 
             onPress={() => {
-              navigation.navigate('PostActivity');
+              navigation.navigate('Activity');
             }}
           >
             <Icon 
