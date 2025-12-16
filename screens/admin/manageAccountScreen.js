@@ -34,7 +34,6 @@ import { colors, fonts, spacing } from '../../lib/theme';
 // --- THEME COLORS ---
 const THEME_GREEN = '#9abeaa';
 const THEME_YELLOW = '#ffd75c';
-const THEME_CREAM = '#f5f3e4'; 
 const FLAG_BG = '#FFF9C4'; 
 const ALERT_RED = '#FF6B6B';
 
@@ -63,7 +62,8 @@ export default function ManageAccountScreen({ navigation, route }) {
       followers: 0,
       following: 0,
       photoURL: null,
-      ownerUid: null
+      ownerUid: null,
+      isBanned: false // New field to track ban status
   });
 
   // 1. INITIAL LOAD
@@ -156,7 +156,8 @@ export default function ManageAccountScreen({ navigation, route }) {
                     followers: Array.isArray(userData.followers) ? userData.followers.length : (userData.followers || 0),
                     following: Array.isArray(userData.following) ? userData.following.length : (userData.following || 0),
                     photoURL: userData.photoURL || null,
-                    ownerUid: ownerId
+                    ownerUid: ownerId,
+                    isBanned: userData.isBanned || false // LOAD BAN STATUS
                 });
             } else {
                  setUserInfo(prev => ({ ...prev, username: 'User Not Found', bio: 'Account might be deleted.' }));
@@ -194,8 +195,13 @@ export default function ManageAccountScreen({ navigation, route }) {
     
     const isUserReport = currentReport.reportType === 'user';
     const targetId = currentReport.reported_clothes_id || currentReport.post_id || currentReport.clothes_id;
-    // Determine which collection the REPORT lives in
     const collectionName = isUserReport ? 'reported_users' : 'report';
+
+    // Check ban status to determine button text
+    const banActionText = userInfo.isBanned ? "UNBAN USER" : "BAN USER (Suspend)";
+    const banMessage = userInfo.isBanned 
+        ? "Restore this user's access? They will be able to log in again."
+        : "Suspend this user? This will NOT delete their data, only block access.";
 
     Alert.alert(
       "Take Action",
@@ -212,41 +218,51 @@ export default function ManageAccountScreen({ navigation, route }) {
                         resolution: 'dismissed', 
                         resolved_at: new Date()
                     });
-                    
                     finalizeAction("Report dismissed.");
                 } catch (e) {
                     Alert.alert("Error", "Could not dismiss report.");
                 }
             } 
         },
-        // OPTION 2: DELETE / BAN
+        // OPTION 2: BAN / DELETE
         { 
-            text: isUserReport ? "BAN USER" : "DELETE POST", 
+            text: isUserReport ? banActionText : "DELETE POST", 
             style: "destructive", 
             onPress: async () => {
                 try {
                     if (isUserReport) {
-                        // --- BAN USER LOGIC REMOVED PER REQUEST ---
-                        // Does NOTHING to the user document.
-                        // It only updates the report status below.
-                        console.log("Ban selected, but logic disabled. User remains active.");
+                        // --- SAFE BAN LOGIC (Toggle isBanned) ---
+                        if (userInfo.ownerUid) {
+                            const newStatus = !userInfo.isBanned;
+                            await updateDoc(doc(db, 'users', userInfo.ownerUid), {
+                                isBanned: newStatus
+                            });
+                            // Resolve the ticket
+                            await updateDoc(doc(db, collectionName, currentReport.id), {
+                                status: 'resolved',
+                                resolution: newStatus ? 'banned' : 'unbanned',
+                                resolved_at: new Date()
+                            });
+                            finalizeAction(newStatus ? "User suspended (Safe Ban)." : "User access restored.");
+                        } else {
+                            Alert.alert("Error", "User ID not found.");
+                        }
                     } else {
-                        // --- DELETE POST LOGIC (Kept Active) ---
+                        // --- DELETE POST LOGIC ---
                         if (targetId) {
                             await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId)).catch(()=>{});
                             await deleteDoc(doc(db, 'clothes', targetId)).catch(()=>{});
                             await deleteDoc(doc(db, 'userImages', targetId)).catch(()=>{});
                         }
+                        
+                        // Resolve the ticket
+                        await updateDoc(doc(db, collectionName, currentReport.id), {
+                            status: 'resolved',
+                            resolution: 'deleted',
+                            resolved_at: new Date()
+                        });
+                        finalizeAction("Post permanently deleted.");
                     }
-                    
-                    // Resolve the report ticket
-                    await updateDoc(doc(db, collectionName, currentReport.id), {
-                        status: 'resolved',
-                        resolution: isUserReport ? 'banned_simulated' : 'deleted',
-                        resolved_at: new Date()
-                    });
-
-                    finalizeAction(isUserReport ? "User report resolved (No Ban)." : "Post permanently deleted.");
                 } catch (error) {
                     console.error(error);
                     Alert.alert("Error", "Could not complete action.");
@@ -288,9 +304,17 @@ export default function ManageAccountScreen({ navigation, route }) {
             </TouchableOpacity>
         </View>
 
-        <View style={styles.userReportCard}>
-            <Icon name="person-circle" size={60} color={colors.gray} />
-            <Text style={{fontSize: 20, fontWeight:'bold', marginTop:10, marginBottom:20, color: colors.dark}}>{userInfo.username}</Text>
+        <View style={[styles.userReportCard, userInfo.isBanned && styles.bannedCard]}>
+            {/* Visual Indicator for Banned Users */}
+            {userInfo.isBanned && (
+                <View style={styles.bannedBadge}>
+                    <Text style={styles.bannedText}>BANNED</Text>
+                </View>
+            )}
+
+            <Icon name="person-circle" size={60} color={userInfo.isBanned ? '#ccc' : colors.gray} />
+            <Text style={{fontSize: 20, fontWeight:'bold', marginTop:10, color: colors.dark}}>{userInfo.username}</Text>
+            <Text style={{color:colors.gray, marginBottom: 20}}>{userInfo.ownerUid}</Text>
             
             <View style={{width:'100%', padding: 15, backgroundColor:'#FFEBEE', borderRadius:8}}>
                 <Text style={{color:ALERT_RED, fontWeight:'bold', marginBottom:5, fontSize: 12}}>REASON FOR REPORT:</Text>
@@ -468,7 +492,10 @@ export default function ManageAccountScreen({ navigation, route }) {
                       </View>
                     </View>
                   </View>
-                  <Text style={styles.userName}>{userInfo.username}</Text>
+                  <Text style={styles.userName}>
+                      {userInfo.username}
+                      {userInfo.isBanned && <Text style={{color: ALERT_RED, fontSize: 12}}> (SUSPENDED)</Text>}
+                  </Text>
                   <Text style={styles.userBio}>{userInfo.bio}</Text>
                   <View style={styles.locationContainer}>
                     <Icon name="location-outline" size={16} color={colors.dark} />
@@ -768,7 +795,7 @@ const styles = StyleSheet.create({
     color: colors.dark,
   },
   
-  // --- USER REPORT CARD STYLES (NEW) ---
+  // --- USER REPORT CARD STYLES ---
   userReportCard: {
     backgroundColor: '#FAFAFA',
     borderRadius: 12,
@@ -777,6 +804,24 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     marginHorizontal: 4,
+  },
+  bannedCard: {
+    backgroundColor: '#ffebee',
+    borderColor: ALERT_RED,
+  },
+  bannedBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: ALERT_RED,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  bannedText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 10,
   },
 
   // --- EMPTY STATE ---
