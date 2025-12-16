@@ -398,6 +398,18 @@ export default function AddPostScreen({ navigation, route }) {
   };
 
   const handlePost = async () => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to start posting!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
     if (!selectedImage && selectedImages.length === 0) {
       Alert.alert('No Image', 'Please select an image to upload');
       return;

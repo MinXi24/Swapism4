@@ -167,6 +167,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleDeleteComment = async (commentId, commentUserId) => {
+    if (!auth.currentUser) return;
+    
     if (commentUserId !== auth.currentUser.uid) {
       Alert.alert('Error', 'You can only delete your own comments');
       return;
@@ -195,6 +197,18 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleReportComment = (comment) => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to report comments!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    
     if (comment.userId === auth.currentUser.uid) return;
 
     Alert.alert(
@@ -256,6 +270,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const checkIfLiked = async () => {
+    if (!auth.currentUser) return; // Guest users can't have likes
+    
     try {
       const q = query(
         collection(db, 'likes'),
@@ -290,6 +306,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const logViewActivity = async () => {
+    if (!auth.currentUser) return; // Guest users don't log activity
+    
     try {
       const oneHourAgo = new Date(Date.now() - 3600000);
       const q = query(
@@ -320,6 +338,18 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleLike = async () => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to start liking posts!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    
     try {
       if (liked && likeId) {
         await deleteDoc(doc(db, 'likes', likeId));
@@ -372,6 +402,18 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleAddComment = async () => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to start commenting!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    
     if (!newComment.trim()) return;
 
     setLoading(true);
@@ -439,7 +481,14 @@ export default function PostDetailsScreen({ route, navigation }) {
 
   const handleSwapNow = async () => {
     if (!auth.currentUser) {
-      Alert.alert('Sign In Required', 'Please sign in to request a swap.');
+      Alert.alert(
+        'Login to start swapping items!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
       return;
     }
 
@@ -563,7 +612,7 @@ export default function PostDetailsScreen({ route, navigation }) {
           {/* Swap Action Buttons */}
           {activePost.postType === 'forSwap' && (
             <View style={styles.swapActionsContainer}>
-              {activePost.ownerUid !== auth.currentUser.uid ? (
+              {activePost.ownerUid !== auth.currentUser?.uid ? (
                 // Show "Swap Now" and "Try On" buttons for non-owners if available
                 currentSwapStatus === 'available' && (
                   <View>
@@ -576,7 +625,20 @@ export default function PostDetailsScreen({ route, navigation }) {
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.tryOnButton}
-                      onPress={() => navigation.navigate('TryOnScreen', { item: activePost })}
+                      onPress={() => {
+                        if (!auth.currentUser) {
+                          Alert.alert(
+                            'Login to try on items virtually!',
+                            '',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Login', onPress: () => navigation.navigate('Login') }
+                            ]
+                          );
+                          return;
+                        }
+                        navigation.navigate('TryOnScreen', { item: activePost });
+                      }}
                     >
                       <Icon name="accessibility" size={20} color="#9ABEAA" />
                       <Text style={styles.tryOnButtonText}>Try On Virtually</Text>
@@ -613,7 +675,20 @@ export default function PostDetailsScreen({ route, navigation }) {
               <Icon name="chatbubble-outline" size={24} color={colors.dark} />
               <Text style={styles.actionText}>{comments.length} Comments</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity style={styles.actionButton} onPress={() => {
+              if (!auth.currentUser) {
+                Alert.alert(
+                  'Login to share posts!',
+                  '',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Login', onPress: () => navigation.navigate('Login') }
+                  ]
+                );
+                return;
+              }
+              // Share functionality
+            }}>
               <Icon name="share-social-outline" size={24} color={colors.dark} />
               <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
@@ -683,7 +758,7 @@ export default function PostDetailsScreen({ route, navigation }) {
                   <View style={styles.commentHeader}>
                     <Text style={styles.commentUser}>{comment.userName}</Text>
                     
-                    {comment.userId === auth.currentUser.uid ? (
+                    {comment.userId === auth.currentUser?.uid ? (
                       <View style={{ flexDirection: 'row' }}>
                         <TouchableOpacity
                           style={styles.editCommentButton}

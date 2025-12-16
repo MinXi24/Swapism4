@@ -47,7 +47,16 @@ export default function ProfileScreen({ navigation }) {
   const user = auth.currentUser;
 
   useEffect(() => {
-    loadUserProfile();
+    // Set guest-specific bio if not logged in
+    if (!user) {
+      setUserInfo(prev => ({
+        ...prev,
+        bio: 'Login to start customizing your profile!',
+        username: 'Guest',
+      }));
+    } else {
+      loadUserProfile();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -248,6 +257,17 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleAddPost = () => {
+    if (!user) {
+      Alert.alert(
+        'Login to start posting!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     navigation.navigate('AddPost');
   };
 
@@ -256,6 +276,17 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleShareProfile = () => {
+    if (!user) {
+      Alert.alert(
+        'Login to share your profile!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     // Share profile functionality
     console.log('Share profile');
   };
@@ -691,10 +722,14 @@ export default function ProfileScreen({ navigation }) {
                       {/* Swap Status Badge */}
                       <View style={[
                         styles.swapStatusBadge,
-                        post.swapStatus === 'swappedOut' && styles.swapStatusBadgeInactive
+                        (post.swapStatus === 'swappedOut' || post.swapStatus === 'reserved') && styles.swapStatusBadgeInactive
                       ]}>
                         <Text style={styles.swapStatusBadgeText}>
-                          {post.swapStatus === 'available' ? 'Available' : 'Swapped Out'}
+                          {post.swapStatus === 'available' 
+                            ? 'Available' 
+                            : post.swapStatus === 'reserved' 
+                            ? 'Reserved' 
+                            : 'Swapped Out'}
                         </Text>
                       </View>
                     </TouchableOpacity>

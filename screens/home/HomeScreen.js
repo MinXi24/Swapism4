@@ -1,16 +1,16 @@
 ﻿import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  getFirestore,
-  query,
-  serverTimestamp // <--- ADDED THIS IMPORT
-  ,
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    getFirestore,
+    query,
+    serverTimestamp // <--- ADDED THIS IMPORT
+    ,
 
 
 
@@ -35,28 +35,27 @@ import {
 
 
 
-  where
+
+    where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  FlatList,
-  Image,
-  PanResponder,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-  Modal,
-  TextInput,
-  Linking
+    ActivityIndicator,
+    Alert,
+    Animated,
+    FlatList,
+    Image,
+    Linking,
+    PanResponder,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -437,7 +436,17 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleLike = async (post) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      Alert.alert(
+        'Login to start liking posts!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
 
     try {
       if (post.userLiked) {
@@ -491,7 +500,17 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('PostDetails', { post });
   };
   const handleFavorite = async (post) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      Alert.alert(
+        'Login to start saving favorites!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
 
     try {
       const favoritesQuery = query(
@@ -813,6 +832,17 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.headerIcon} 
             onPress={() => {
+              if (!currentUser) {
+                Alert.alert(
+                  'Login to view activity!',
+                  '',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Login', onPress: () => navigation.navigate('Login') }
+                  ]
+                );
+                return;
+              }
               navigation.navigate('Activity');
             }}
           >

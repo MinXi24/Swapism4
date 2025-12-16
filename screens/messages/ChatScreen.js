@@ -161,7 +161,19 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !currentUser) return;
+    if (!currentUser) {
+      Alert.alert(
+        'Login to start messaging!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
+    if (!newMessage.trim()) return;
 
     try {
       await addDoc(collection(db, 'messages'), {
@@ -612,9 +624,6 @@ export default function ChatScreen({ route, navigation }) {
           styles.messageContainer,
           isMyMessage ? styles.myMessage : styles.theirMessage
         ]}>
-          {!isMyMessage && user?.photoURL && (
-            <Image source={{ uri: user.photoURL }} style={styles.messageAvatar} />
-          )}
           <View style={[
             styles.locationBubble,
             isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
@@ -691,9 +700,6 @@ export default function ChatScreen({ route, navigation }) {
           styles.messageContainer,
           isMyMessage ? styles.myMessage : styles.theirMessage
         ]}>
-          {!isMyMessage && user?.photoURL && (
-            <Image source={{ uri: user.photoURL }} style={styles.messageAvatar} />
-          )}
           <View style={[
             styles.calendarBubble,
             isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
@@ -832,7 +838,11 @@ export default function ChatScreen({ route, navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Icon name="arrow-back" size={24} color={colors.dark} />
           </TouchableOpacity>
-          <View style={styles.headerUser}>
+          <TouchableOpacity 
+            style={styles.headerUser}
+            onPress={() => navigation.navigate('UserProfile', { userId: otherUserId, username: otherUserName })}
+            activeOpacity={0.7}
+          >
             {user?.photoURL ? (
               <Image source={{ uri: user.photoURL }} style={styles.headerAvatar} />
             ) : (
@@ -841,7 +851,7 @@ export default function ChatScreen({ route, navigation }) {
               </View>
             )}
             <Text style={styles.headerName}>{user?.name}</Text>
-          </View>
+          </TouchableOpacity>
           {(() => {
             // Find the accepted swap request from messages (only if not completed or withdrawn)
             const acceptedSwap = messages.find(
@@ -939,10 +949,36 @@ export default function ChatScreen({ route, navigation }) {
               textAlignVertical="center"
             />
             <View style={styles.inputActions}>
-              <TouchableOpacity style={styles.iconButton} onPress={() => setShowLocationModal(true)}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => {
+                if (!currentUser) {
+                  Alert.alert(
+                    'Login to share location!',
+                    '',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Login', onPress: () => navigation.navigate('Login') }
+                    ]
+                  );
+                  return;
+                }
+                setShowLocationModal(true);
+              }}>
                 <Icon name="location-outline" size={20} color={colors.gray} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton} onPress={() => setShowCalendarModal(true)}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => {
+                if (!currentUser) {
+                  Alert.alert(
+                    'Login to send meetup invitations!',
+                    '',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Login', onPress: () => navigation.navigate('Login') }
+                    ]
+                  );
+                  return;
+                }
+                setShowCalendarModal(true);
+              }}>
                 <Icon name="calendar-outline" size={20} color={colors.gray} />
               </TouchableOpacity>
             </View>

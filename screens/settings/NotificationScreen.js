@@ -86,6 +86,18 @@ export default function NotificationScreen({ navigation }) {
   };
 
   const handlePushNotificationsToggle = async (value) => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login to change notification settings!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    
     setPushNotifications(value);
     await updateNotificationSetting('pushNotifications', value);
     
@@ -98,26 +110,81 @@ export default function NotificationScreen({ navigation }) {
   };
 
   const handleLikesToggle = async (value) => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login to change notification settings!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     setLikesNotifications(value);
     await updateNotificationSetting('likes', value);
   };
 
   const handleCommentsToggle = async (value) => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login to change notification settings!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     setCommentsNotifications(value);
     await updateNotificationSetting('comments', value);
   };
 
   const handleFollowToggle = async (value) => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login to change notification settings!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     setFollowNotifications(value);
     await updateNotificationSetting('follows', value);
   };
 
   const handleSwapToggle = async (value) => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login to change notification settings!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     setSwapNotifications(value);
     await updateNotificationSetting('swaps', value);
   };
 
   const handleMessageToggle = async (value) => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login to change notification settings!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     setMessageNotifications(value);
     await updateNotificationSetting('messages', value);
   };

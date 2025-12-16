@@ -125,7 +125,7 @@ export const useSwapRequest = ({
   const handleAcceptSwap = async (messageId) => {
     Alert.alert(
       'Accept Swap',
-      'Are you sure you want to accept this swap? Both items will be marked as swapped out.',
+      'Are you sure you want to accept this swap? Both items will be marked as Reserved.',
       [
         {
           text: 'Cancel',
