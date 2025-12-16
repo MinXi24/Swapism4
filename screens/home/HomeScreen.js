@@ -9,36 +9,7 @@ import {
   getDocs,
   getFirestore,
   query,
-<<<<<<< HEAD
   serverTimestamp,
-=======
-  serverTimestamp // <--- ADDED THIS IMPORT
-  ,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
->>>>>>> 8fbdc94f3526927f2cec5e1645e748c5783c9782
   where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -48,6 +19,7 @@ import {
   Animated,
   FlatList,
   Image,
+  Linking,
   PanResponder,
   RefreshControl,
   SafeAreaView,
@@ -57,10 +29,7 @@ import {
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  View,
-  Modal,
-  TextInput,
-  Linking
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -76,7 +45,8 @@ export default function HomeScreen({ navigation }) {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [postalCode, setPostalCode] = useState('');
   const [userArea, setUserArea] = useState('');
-  // Singapore postal code districts mapping (same as ProfileScreen)
+  
+  // Singapore postal code districts mapping
   const postalDistricts = {
     '01': 'Raffles Place, Cecil, Marina',
     '02': 'Anson, Tanjong Pagar',
@@ -106,7 +76,6 @@ export default function HomeScreen({ navigation }) {
     '26': 'Upper Thomson, Springleaf',
     '27': 'Yishun, Sembawang',
     '28': 'Seletar',
-    // ... (add more as needed)
   };
 
   const handleSaveLocation = () => {
@@ -131,7 +100,6 @@ export default function HomeScreen({ navigation }) {
     if (!area) return;
     const location = `Singapore, ${area}`;
     const encodedLocation = encodeURIComponent(location);
-    // Citymapper deep link: https://citymapper.com/directions?endaddress=Singapore,%20AREA
     const urls = [
       `citymapper://directions?endaddress=${encodedLocation}`,
       `comgooglemaps://?q=${encodedLocation}`,
@@ -301,19 +269,14 @@ export default function HomeScreen({ navigation }) {
         })
       );
       
-<<<<<<< HEAD
-      // Filter out private posts AND BLOCKED USERS
-      const filteredPosts = postsData.filter(post => {
-        // [NEW] Hide post if the owner is blocked
-        if (blockedIds.includes(post.ownerUid)) return false;
-
-=======
       // Remove nulls (posts from deleted/inactive/invalid owners)
       const validPosts = postsData.filter(Boolean);
 
-      // Filter out private posts from users the current user doesn't follow
+      // Filter out private posts AND BLOCKED USERS
       const filteredPosts = validPosts.filter(post => {
->>>>>>> 8fbdc94f3526927f2cec5e1645e748c5783c9782
+        // [NEW] Hide post if the owner is blocked
+        if (blockedIds.includes(post.ownerUid)) return false;
+
         // Show post if it's not private
         if (!post.isPrivate) return true;
         
@@ -386,7 +349,7 @@ export default function HomeScreen({ navigation }) {
         const followers = userData.followers || [];
         const following = userData.following || [];
 
-        // Calculate mutual following (how many people current user follows that this user also follows)
+        // Calculate mutual following
         const mutualCount = following.filter(uid => currentUserFollowing.includes(uid)).length;
 
         suggestedUsersData.push({
@@ -857,8 +820,6 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
-
-
 
       {/* Suggested Accounts Section */}
       {loading ? (
