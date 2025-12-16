@@ -111,7 +111,7 @@ export default function SettingsScreen({ navigation }) {
           
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => {/* Navigate to Notifications */}}
+            onPress={() => navigation.navigate('Notification')}
           >
             <View style={styles.menuLeft}>
               <Icon name="notifications-outline" size={24} color={colors.dark} />
@@ -185,7 +185,7 @@ export default function SettingsScreen({ navigation }) {
           
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => {/* Navigate to About */}}
+            onPress={() => navigation.navigate('About')}
           >
             <View style={styles.menuLeft}>
               <Icon name="information-circle-outline" size={24} color={colors.dark} />

@@ -2,16 +2,16 @@ import { getAuth } from 'firebase/auth';
 import { doc, getDoc, getFirestore, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
@@ -94,11 +94,11 @@ export default function PrivacyScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={colors.accent} barStyle="dark-content" />
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color={colors.dark} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Icon name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Privacy</Text>
         <View style={{ width: 24 }} />
@@ -150,12 +150,13 @@ export default function PrivacyScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#fff',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#fff',
   },
   loadingText: {
     marginTop: spacing.md,
@@ -167,29 +168,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: colors.lightGray,
+    borderBottomColor: '#dbdbdb',
+  },
+  backButton: {
+    padding: 4,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
+    fontWeight: '600',
     fontFamily: fonts.semiBold,
-    color: colors.dark,
+    color: '#000',
   },
   content: {
     flex: 1,
   },
   section: {
     marginTop: spacing.lg,
-    backgroundColor: colors.light,
+    backgroundColor: '#fff',
     paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   sectionTitle: {
     fontSize: 13,
     fontFamily: fonts.regular,
-    color: colors.gray,
+    color: '#666',
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -199,6 +206,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    backgroundColor: '#fff',
   },
   settingInfo: {
     flex: 1,
@@ -206,30 +214,33 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 16,
+    fontWeight: '600',
     fontFamily: fonts.semiBold,
-    color: colors.dark,
+    color: '#000',
     marginBottom: 4,
   },
   settingDescription: {
     fontSize: 13,
     fontFamily: fonts.regular,
-    color: colors.gray,
+    color: '#666',
     lineHeight: 18,
   },
   infoSection: {
     marginTop: spacing.xl,
     paddingHorizontal: spacing.lg,
+    backgroundColor: '#fff',
   },
   infoTitle: {
     fontSize: 16,
+    fontWeight: '600',
     fontFamily: fonts.semiBold,
-    color: colors.dark,
+    color: '#000',
     marginBottom: spacing.md,
   },
   infoText: {
     fontSize: 14,
     fontFamily: fonts.regular,
-    color: colors.gray,
+    color: '#666',
     lineHeight: 22,
     marginBottom: spacing.sm,
   },

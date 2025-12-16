@@ -19,8 +19,10 @@ import PostDetailsScreen from '../screens/profile/PostDetailsScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import TryOnScreen from '../screens/profile/TryOnScreen';
 import UserProfileScreen from '../screens/profile/UserProfileScreen';
+import AboutScreen from '../screens/settings/AboutScreen';
 import ActivityScreen from '../screens/settings/ActivityScreen';
 import BlockedUsersScreen from '../screens/settings/BlockedUsersScreen';
+import NotificationScreen from '../screens/settings/NotificationScreen';
 import PrivacyScreen from '../screens/settings/PrivacyScreen';
 import RecentlyDeletedScreen from '../screens/settings/RecentlyDeletedScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
@@ -61,6 +63,8 @@ export default function Navigation() {
       <Stack.Screen name="Activity" component={ActivityScreen} />
       <Stack.Screen name="PostActivity" component={PostActivityScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="About" component={AboutScreen} />
+      <Stack.Screen name="Notification" component={NotificationScreen} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} />
       <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
       <Stack.Screen name="RecentlyDeleted" component={RecentlyDeletedScreen} />
