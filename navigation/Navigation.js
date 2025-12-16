@@ -25,6 +25,7 @@ import PrivacyScreen from '../screens/settings/PrivacyScreen';
 import RecentlyDeletedScreen from '../screens/settings/RecentlyDeletedScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ItemDetailsScreen from '../screens/swap/ItemDetailsScreen';
+import SwapOngoingScreen from '../screens/swap/SwapOngoingScreen';
 import SwapScreen from '../screens/swap/SwapScreen';
 
 
@@ -45,6 +46,7 @@ export default function Navigation() {
       <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="Swap" component={SwapScreen} />
       <Stack.Screen name="ItemDetails" component={ItemDetailsScreen} />
+      <Stack.Screen name="SwapOngoing" component={SwapOngoingScreen} />
       <Stack.Screen name="Messages" component={MessagesScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="SwapHistory" component={SwapHistoryScreen} />

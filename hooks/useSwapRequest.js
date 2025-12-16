@@ -157,12 +157,12 @@ export const useSwapRequest = ({
                 'swapDetails.status': 'accepted'
               });
 
-              // Mark BOTH items as swapped out
+              // Mark BOTH items as reserved
               await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', myItemId), {
-                swapStatus: 'swapped out'
+                swapStatus: 'reserved'
               });
               await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
-                swapStatus: 'swapped out'
+                swapStatus: 'reserved'
               });
 
               // Create status message in chat
@@ -170,7 +170,7 @@ export const useSwapRequest = ({
               const statusMessage = {
                 senderId: currentUser.uid,
                 receiverId: otherUserId,
-                text: "The swap was accepted",
+                text: "Reserved",
                 type: 'status',
                 createdAt: new Date(),
                 participants: [currentUser.uid, otherUserId],
@@ -191,7 +191,7 @@ export const useSwapRequest = ({
                 }]);
               }
 
-              Alert.alert('Success', 'Swap accepted! Both items marked as swapped out.');
+              Alert.alert('Success', 'Swap accepted! Both items marked as reserved.');
             } catch (error) {
               console.error('Error accepting swap:', error);
               Alert.alert('Error', 'Could not accept swap. Please try again.');

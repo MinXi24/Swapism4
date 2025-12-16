@@ -2,24 +2,24 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-  collection,
-  getDocs,
-  getFirestore,
-  orderBy,
-  query,
-  where
+    collection,
+    getDocs,
+    getFirestore,
+    orderBy,
+    query,
+    where
 } from 'firebase/firestore';
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -226,8 +226,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
-    padding: spacing.md,
-    paddingTop: 50,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
