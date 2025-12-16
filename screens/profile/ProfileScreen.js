@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -60,20 +61,29 @@ export default function ProfileScreen({ navigation }) {
       
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        
+
         // Load followers and following counts
         const followers = userData.followers || [];
         const following = userData.following || [];
-        
+
+        // Filter reviews to exclude deleted/inactive users (client-side filtering)
+        // Note: This should ideally be handled by a Cloud Function when a user is deleted
+        const validReviews = (userData.reviews || []).filter(review => review.userId && review.userName);
+
+        // Calculate average rating from only valid reviews
+        const avgRating = validReviews.length > 0
+          ? validReviews.reduce((sum, r) => sum + (r.rating || 0), 0) / validReviews.length
+          : 0;
+
         setUserInfo(prev => ({
           ...prev,
           username: userData.username || user?.displayName || 'User',
           location: userData.location || 'Singapore',
           area: userData.area || '',
           bio: userData.bio || prev.bio,
-          rating: userData.rating || 0,
-          reviewCount: userData.reviewCount || 0,
-          reviews: userData.reviews || [],
+          rating: avgRating,
+          reviewCount: validReviews.length,
+          reviews: validReviews,
         }));
         
         setStats(prev => ({
@@ -136,15 +146,44 @@ export default function ProfileScreen({ navigation }) {
         where('postType', '==', 'forSwap')
       );
       const querySnapshot = await getDocs(q);
-      const posts = querySnapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        .filter(post => post.ownerUid !== uid && post.swapStatus === 'available') // Filter out current user's posts and swapped out items
-        .slice(0, 10); // Show only first 10 posts
       
-      setDiscoverPosts(posts);
+      // Filter and validate each post's owner
+      const validPosts = [];
+      for (const docSnapshot of querySnapshot.docs) {
+        const postData = { id: docSnapshot.id, ...docSnapshot.data() };
+        
+        // Skip current user's posts and swapped out items
+        if (postData.ownerUid === uid || postData.swapStatus !== 'available') continue;
+        
+        // Check if owner is valid
+        if (postData.ownerUid) {
+          try {
+            const userDocRef = doc(db, 'users', postData.ownerUid);
+            const userDoc = await getDoc(userDocRef);
+            if (!userDoc.exists()) continue;
+            
+            const userData = userDoc.data();
+            if (
+              userData.deleted === true ||
+              userData.active === false ||
+              !userData.username ||
+              typeof userData.username !== 'string' ||
+              userData.username.trim() === '' ||
+              (userData.role && userData.role.toLowerCase() === 'admin') ||
+              (userData.username && userData.username.toLowerCase().includes('admin'))
+            ) {
+              continue;
+            }
+          } catch (error) {
+            continue;
+          }
+        }
+        
+        validPosts.push(postData);
+        if (validPosts.length >= 10) break; // Show only first 10 posts
+      }
+      
+      setDiscoverPosts(validPosts);
     } catch (error) {
       console.error('Error loading discover posts:', error);
     }
@@ -221,8 +260,53 @@ export default function ProfileScreen({ navigation }) {
     console.log('Share profile');
   };
 
+  const openMapWithLocation = async () => {
+    const location = userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location;
+    if (!location) return;
+
+    const encodedLocation = encodeURIComponent(location);
+    
+    // Try different map apps in order of preference
+    const urls = [
+      `comgooglemaps://?q=${encodedLocation}`, // Google Maps iOS
+      `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`, // Google Maps web (works on Android and iOS)
+      `maps://maps.apple.com/?q=${encodedLocation}`, // Apple Maps
+    ];
+
+    for (const url of urls) {
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (error) {
+        console.log(`Cannot open ${url}`);
+      }
+    }
+
+    Alert.alert('Error', 'No map app available');
+  };
+
   const handleLocationPress = () => {
-    setShowLocationModal(true);
+    Alert.alert(
+      'Location',
+      'What would you like to do?',
+      [
+        {
+          text: 'Open in Maps',
+          onPress: openMapWithLocation,
+        },
+        {
+          text: 'Change Location',
+          onPress: () => setShowLocationModal(true),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   const handleSaveLocation = async () => {
@@ -481,7 +565,12 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.noReviewsText}>No reviews yet</Text>
             </View>
           ) : (
-            (userInfo.reviews || []).map((review, index) => (
+            (userInfo.reviews || []).filter(review => {
+              // This is a simple client-side filter. For better performance,
+              // reviews from deleted users should be removed from the database
+              // when a user is deleted (via Cloud Function)
+              return review.userId && review.userName;
+            }).map((review, index) => (
               <TouchableOpacity
                 key={index}
                 onPress={() => navigation.navigate('UserProfile', { userId: review.userId })}

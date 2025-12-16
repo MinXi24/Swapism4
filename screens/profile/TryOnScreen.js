@@ -1,19 +1,19 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { getAuth } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { captureRef } from 'react-native-view-shot';
@@ -229,16 +229,39 @@ export default function TryOnScreen({ route, navigation }) {
       const snapshot = await getDocs(postsRef);
 
       const suggestions = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        // Check if category field exists and equals 'for swap' (case insensitive)
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
         const category = data.category || data.postType || '';
         const isForSwap = category.toLowerCase().includes('swap') || category === 'forSwap';
-        
-        // Filter out current user's posts and only include 'for swap' items with tops/bottoms
         if (data.url && isForSwap && data.ownerUid !== currentUserId) {
+          // Check owner validity
+          let ownerIsValid = true;
+          if (data.ownerUid) {
+            try {
+              const userDocRef = doc(firestore, 'users', data.ownerUid);
+              const userDoc = await getDoc(userDocRef);
+              if (!userDoc.exists()) ownerIsValid = false;
+              else {
+                const userData = userDoc.data();
+                if (
+                  userData.deleted === true ||
+                  userData.active === false ||
+                  !userData.username ||
+                  typeof userData.username !== 'string' ||
+                  userData.username.trim() === '' ||
+                  (userData.role && userData.role.toLowerCase() === 'admin') ||
+                  (userData.username && userData.username.toLowerCase().includes('admin'))
+                ) {
+                  ownerIsValid = false;
+                }
+              }
+            } catch (err) {
+              ownerIsValid = false;
+            }
+          }
+          if (!ownerIsValid) continue;
           suggestions.push({
-            id: doc.id,
+            id: docSnap.id,
             url: data.url,
             title: data.title || '',
             ownerUid: data.ownerUid,
@@ -247,10 +270,8 @@ export default function TryOnScreen({ route, navigation }) {
             category: category,
           });
         }
-      });
-      
+      }
       console.log(`Found ${suggestions.length} swap items for AI suggestions`);
-
       // Shuffle and take top 5 suggestions
       const shuffled = suggestions.sort(() => 0.5 - Math.random());
       setSuggestedItems(shuffled.slice(0, 5));
@@ -307,6 +328,42 @@ export default function TryOnScreen({ route, navigation }) {
   const discardPhoto = () => {
     setShowPreview(false);
     setCapturedPhoto(null);
+  };
+
+  const saveOutfitToFavorites = async () => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser) {
+      Alert.alert('Error', 'You must be logged in to save outfits');
+      return;
+    }
+
+    const selectedTop = tops[currentTopIndex];
+    const selectedBottom = bottoms[currentBottomIndex];
+
+    if (!selectedTop || !selectedBottom) {
+      Alert.alert('Error', 'Please select both a top and bottom to save the outfit');
+      return;
+    }
+
+    try {
+      await addDoc(collection(firestore, 'favoriteOutfits'), {
+        userId: currentUser.uid,
+        topId: selectedTop.id,
+        topName: selectedTop.title || selectedTop.description || 'Top',
+        topImage: selectedTop.url,
+        bottomId: selectedBottom.id,
+        bottomName: selectedBottom.title || selectedBottom.description || 'Bottom',
+        bottomImage: selectedBottom.url,
+        createdAt: new Date(),
+      });
+      
+      Alert.alert('Success', 'Outfit saved to favorites!');
+    } catch (error) {
+      console.error('Error saving outfit:', error);
+      Alert.alert('Error', 'Failed to save outfit to favorites');
+    }
   };
 
   const handleSuggestionClick = async (item) => {
@@ -614,6 +671,13 @@ export default function TryOnScreen({ route, navigation }) {
                 >
                   <Icon name="camera" size={28} color="#fff" />
                 </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.favoriteButton}
+                  onPress={saveOutfitToFavorites}
+                >
+                  <Icon name="heart" size={24} color="#ff6b6b" />
+                </TouchableOpacity>
               </View>
 
 
@@ -844,9 +908,7 @@ export default function TryOnScreen({ route, navigation }) {
           {(selectedTop || selectedBottom) && (
             <TouchableOpacity 
               style={styles.primaryButton}
-              onPress={() => {
-                alert('Outfit saved to favorites!');
-              }}
+              onPress={saveOutfitToFavorites}
             >
               <Icon name="heart" size={20} color="#fff" />
               <Text style={styles.primaryButtonText}>Save This Outfit</Text>
@@ -1203,6 +1265,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 3,
     borderColor: '#fff',
+  },
+  favoriteButton: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ff6b6b',
   },
   suggestionsContainer: {
     position: 'absolute',

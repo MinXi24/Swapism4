@@ -12,8 +12,7 @@ import {
   getFirestore,
   query,
   serverTimestamp, // Needed for Block/Report
-  setDoc // Needed for Block
-  ,
+  setDoc, // Needed for Block
   updateDoc,
   where
 } from 'firebase/firestore';
@@ -24,6 +23,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking, // Added from merge
   Modal,
   Platform,
   SafeAreaView,
@@ -296,6 +296,34 @@ export default function UserProfileScreen({ route, navigation }) {
       </TouchableOpacity>
     </Modal>
   );
+
+  const openMapWithLocation = async () => {
+    const location = userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location;
+    if (!location) return;
+
+    const encodedLocation = encodeURIComponent(location);
+    
+    // Try different map apps in order of preference
+    const urls = [
+      `comgooglemaps://?q=${encodedLocation}`, // Google Maps iOS
+      `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`, // Google Maps web (works on Android and iOS)
+      `maps://maps.apple.com/?q=${encodedLocation}`, // Apple Maps
+    ];
+
+    for (const url of urls) {
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (error) {
+        console.log(`Cannot open ${url}`);
+      }
+    }
+
+    Alert.alert('Error', 'No map app available');
+  };
 
   const handleReport = async () => {
     try {
@@ -715,12 +743,13 @@ export default function UserProfileScreen({ route, navigation }) {
           <Text style={styles.userBio}>{userInfo.bio}</Text>
           
           {(userInfo.location || userInfo.area) && (
-            <View style={styles.locationContainer}>
+            <TouchableOpacity style={styles.locationContainer} onPress={openMapWithLocation}>
               <Icon name="location-outline" size={16} color={colors.dark} />
               <Text style={styles.locationText}>
                 {userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location}
               </Text>
-            </View>
+              <Icon name="open-outline" size={14} color={colors.gray} style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
           )}
 
           <View style={styles.actionButtons}>

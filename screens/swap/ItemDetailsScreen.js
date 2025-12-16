@@ -1,14 +1,14 @@
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import Button from '../../components/Button';
@@ -164,12 +164,18 @@ export default function ItemDetailsScreen({ route, navigation }) {
             <Text style={styles.sectionTitle}>Details</Text>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Condition:</Text>
-              <Text style={styles.detailValue}>{item.condition || 'Excellent'}</Text>
+              <Text style={styles.detailValue}>{item.condition || 'N/A'}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Size:</Text>
-              <Text style={styles.detailValue}>{item.size || 'M'}</Text>
+              <Text style={styles.detailValue}>{item.size || 'N/A'}</Text>
             </View>
+            {item.additionalDetails && item.additionalDetails !== 'N/A' && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>More Info:</Text>
+                <Text style={styles.detailValue}>{item.additionalDetails}</Text>
+              </View>
+            )}
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Posted:</Text>
               <Text style={styles.detailValue}>

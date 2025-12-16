@@ -1,19 +1,26 @@
 import { useFocusEffect } from '@react-navigation/native';
+import * as Calendar from 'expo-calendar';
 import { getAuth } from 'firebase/auth';
 import {
   addDoc,
   collection,
+  doc,
   getDocs,
   getFirestore,
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
   where
 } from 'firebase/firestore';
 import React, { useCallback, useRef, useState } from 'react';
 import {
+  Alert,
+  Clipboard,
   Image,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
   SafeAreaView,
   SectionList,
@@ -23,6 +30,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import RNModalDateTimePicker from 'react-native-modal-datetime-picker';
 import Icon from '../../assets/icons/icons';
 import { ItemPickerModal } from '../../components/ItemPickerModal';
 import { SwapRequestCard } from '../../components/SwapRequestCard';
@@ -35,7 +43,20 @@ export default function ChatScreen({ route, navigation }) {
   const otherUserName = user?.name;
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+  // Use a ref lock for loading to prevent overlapping calls
+  const loadingRef = useRef(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [postalCode, setPostalCode] = useState('');
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [swapDate, setSwapDate] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(14, 0, 0, 0);
+    return tomorrow;
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState('date');
   const flatListRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -70,9 +91,11 @@ export default function ChatScreen({ route, navigation }) {
 
   const loadMessages = async () => {
     if (!currentUser) return;
+    if (loadingRef.current) return;
+
+    loadingRef.current = true;
 
     try {
-      setLoading(true);
       const messagesQuery = query(
         collection(db, 'messages'),
         where('participants', 'array-contains', currentUser.uid),
@@ -80,22 +103,30 @@ export default function ChatScreen({ route, navigation }) {
       );
 
       const querySnapshot = await getDocs(messagesQuery);
-      const messagesData = querySnapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate?.() || new Date(),
-        }))
-        .filter(msg => 
+
+      // Deduplicate messages by id using Map
+      const messagesMap = new Map();
+
+      querySnapshot.docs.forEach(docSnap => {
+        messagesMap.set(docSnap.id, {
+          id: docSnap.id,
+          ...docSnap.data(),
+          createdAt: docSnap.data().createdAt?.toDate?.() || new Date(),
+        });
+      });
+
+      const messagesData = Array.from(messagesMap.values())
+        .filter(msg =>
           (msg.senderId === currentUser.uid && msg.receiverId === otherUserId) ||
           (msg.senderId === otherUserId && msg.receiverId === currentUser.uid)
-        );
+        )
+        .sort((a, b) => a.createdAt - b.createdAt);
 
       setMessages(messagesData);
     } catch (error) {
       console.error('Error loading messages:', error);
     } finally {
-      setLoading(false);
+      loadingRef.current = false;
     }
   };
 
@@ -117,6 +148,206 @@ export default function ChatScreen({ route, navigation }) {
       await loadMessages();
     } catch (error) {
       console.error('Error sending message:', error);
+    }
+  };
+
+  const handleSendLocation = async () => {
+    if (postalCode.length !== 6 || !/^\d{6}$/.test(postalCode)) {
+      Alert.alert('Invalid Postal Code', 'Please enter a valid 6-digit Singapore postal code.');
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'messages'), {
+        senderId: currentUser.uid,
+        receiverId: otherUserId,
+        text: postalCode,
+        createdAt: serverTimestamp(),
+        participants: [currentUser.uid, otherUserId],
+        read: false,
+        type: 'location',
+      });
+
+      setShowLocationModal(false);
+      setPostalCode('');
+      await loadMessages();
+    } catch (error) {
+      console.error('Error sending location:', error);
+      Alert.alert('Error', 'Failed to send location. Please try again.');
+    }
+  };
+
+  const openInMapApp = (postalCode) => {
+    const location = `Singapore ${postalCode}`;
+    const encodedLocation = encodeURIComponent(location);
+    
+    const mapOptions = [
+      {
+        name: 'Google Maps',
+        url: `comgooglemaps://?daddr=${encodedLocation}`,
+      },
+      {
+        name: 'Apple Maps',
+        url: `maps://?daddr=${encodedLocation}`,
+      }
+    ];
+
+    const buttons = mapOptions.map(option => ({
+      text: option.name,
+      onPress: async () => {
+        try {
+          await Linking.openURL(option.url);
+        } catch (error) {
+          Alert.alert('App Not Available', `${option.name} is not installed or cannot be opened. Please install the app to use this option.`);
+        }
+      }
+    }));
+
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert(
+      'Choose Map App',
+      `Navigate to ${location}`,
+      buttons
+    );
+  };
+
+  const copyToClipboard = (text) => {
+    Clipboard.setString(text);
+    Alert.alert('Copied', 'Postal code copied to clipboard!');
+  };
+
+  // Calendar permission
+  const getCalendarPermission = async () => {
+    const { status } = await Calendar.requestCalendarPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Calendar permission is required to add events.');
+      return false;
+    }
+    return true;
+  };
+
+  // Send calendar invite
+  const handleSendCalendarInvite = async () => {
+    try {
+      await addDoc(collection(db, 'messages'), {
+        senderId: currentUser.uid,
+        receiverId: otherUserId,
+        text: `Swap meetup invitation`,
+        createdAt: serverTimestamp(),
+        participants: [currentUser.uid, otherUserId],
+        read: false,
+        type: 'calendar_invite',
+        calendarDetails: {
+          dateTime: swapDate.toISOString(),
+          status: 'pending'
+        }
+      });
+
+      setShowCalendarModal(false);
+      await loadMessages();
+    } catch (error) {
+      console.error('Error sending calendar invite:', error);
+      Alert.alert('Error', 'Failed to send calendar invite. Please try again.');
+    }
+  };
+
+  // Handle date change
+  const onDateTimePicked = (selected) => {
+    if (pickerMode === 'date') {
+      const newDate = new Date(swapDate);
+      newDate.setFullYear(selected.getFullYear());
+      newDate.setMonth(selected.getMonth());
+      newDate.setDate(selected.getDate());
+      setSwapDate(newDate);
+    } else {
+      const newDate = new Date(swapDate);
+      newDate.setHours(selected.getHours());
+      newDate.setMinutes(selected.getMinutes());
+      setSwapDate(newDate);
+    }
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+  };
+  const onPickerCancel = () => {
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+  };
+
+  // Add event to calendar
+  // Add event to calendar and persist status in Firestore per user
+  const addEventToCalendar = async (calendarDetails, messageId) => {
+    const allowed = await getCalendarPermission();
+    if (!allowed) return;
+
+    try {
+      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      const defaultCalendar = calendars.find(cal => cal.allowsModifications) || calendars[0];
+
+      if (!defaultCalendar) {
+        Alert.alert('Error', 'No calendar available.');
+        return;
+      }
+
+      const startDate = new Date(calendarDetails.dateTime);
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hour duration
+
+      await Calendar.createEventAsync(defaultCalendar.id, {
+        title: 'Clothes Swap Meetup',
+        startDate,
+        endDate,
+        notes: `Meet to swap clothes with ${user?.name}. Don't forget to bring the item!`,
+        timeZone: 'Asia/Singapore',
+        alarms: [
+          { relativeOffset: -60 }, // 1 hour before
+          { relativeOffset: -30 }  // 30 minutes before
+        ]
+      });
+
+      // Update Firestore: set addedToCalendar.<userId> = true
+      const msgRef = doc(db, 'messages', messageId);
+      await updateDoc(msgRef, {
+        [`addedToCalendar.${currentUser.uid}`]: true
+      });
+
+      Alert.alert('Success', 'Event added to your calendar!');
+      await loadMessages(); // reload to reflect status
+      return true;
+    } catch (error) {
+      console.error('Error adding to calendar:', error);
+      Alert.alert('Error', 'Failed to add event to calendar.');
+      return false;
+    }
+  };
+
+  // Handle accept calendar invite
+  const handleAcceptCalendarInvite = async (message) => {
+    // Update Firestore status to 'accepted'
+    try {
+      const msgRef = doc(db, 'messages', message.id);
+      await updateDoc(msgRef, {
+        'calendarDetails.status': 'accepted',
+        updatedAt: serverTimestamp(),
+      });
+      await loadMessages();
+    } catch (e) {
+      console.error('Error updating event status:', e);
+      Alert.alert('Error', 'Failed to update event status.');
+    }
+  };
+
+  const handleDeclineCalendarInvite = async (message) => {
+    // Update Firestore status to 'declined'
+    try {
+      const msgRef = doc(db, 'messages', message.id);
+      await updateDoc(msgRef, {
+        'calendarDetails.status': 'declined',
+        updatedAt: serverTimestamp(),
+      });
+      await loadMessages();
+    } catch (e) {
+      console.error('Error updating event status:', e);
+      Alert.alert('Error', 'Failed to update event status.');
     }
   };
 
@@ -158,17 +389,22 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
+  // Group messages by date, deduplicate by id per section
   const groupMessagesByDate = (messages) => {
     const grouped = {};
-    
+
     messages.forEach(message => {
+      if (!message.id) return;
       const dateKey = formatDate(message.createdAt);
       if (!grouped[dateKey]) {
         grouped[dateKey] = [];
       }
-      grouped[dateKey].push(message);
+      // Prevent duplicate IDs per section
+      if (!grouped[dateKey].some(m => m.id === message.id)) {
+        grouped[dateKey].push(message);
+      }
     });
-    
+
     return Object.keys(grouped).map(date => ({
       title: date,
       data: grouped[date]
@@ -189,6 +425,146 @@ export default function ChatScreen({ route, navigation }) {
           onReject={handleRejectSwap}
           formatTime={formatTime}
         />
+      );
+    }
+    
+    // Render location message
+    if (item.type === 'location') {
+      return (
+        <View style={[
+          styles.messageContainer,
+          isMyMessage ? styles.myMessage : styles.theirMessage
+        ]}>
+          {!isMyMessage && user?.photoURL && (
+            <Image source={{ uri: user.photoURL }} style={styles.messageAvatar} />
+          )}
+          <View style={[
+            styles.locationBubble,
+            isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
+          ]}>
+            <View style={styles.locationHeader}>
+              <Icon name="location" size={20} color={isMyMessage ? '#fff' : colors.accent} />
+              <Text style={styles.locationTitle}>Location Shared</Text>
+            </View>
+            <Text style={styles.locationText}>Postal Code: {item.text}</Text>
+            <View style={styles.locationButtons}>
+              <TouchableOpacity
+                style={styles.locationButton}
+                onPress={() => copyToClipboard(item.text)}
+              >
+                <Icon name="copy-outline" size={16} color={colors.accent} />
+                <Text style={styles.locationButtonText}>Copy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationButton}
+                onPress={() => openInMapApp(item.text)}
+              >
+                <Icon name="map-outline" size={16} color={colors.accent} />
+                <Text style={styles.locationButtonText}>Open in Map</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[
+              styles.messageTime,
+              isMyMessage ? styles.myMessageTime : styles.theirMessageTime
+            ]}>
+              {formatTime(item.createdAt)}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+    
+    // Render calendar invite message
+    if (item.type === 'calendar_invite' && item.calendarDetails) {
+      const inviteDate = new Date(item.calendarDetails.dateTime);
+      const dateStr = inviteDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      const timeStr = inviteDate.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
+      const status = item.calendarDetails.status;
+      // Persisted per-user status
+      const isAdded = item.addedToCalendar && currentUser && item.addedToCalendar[currentUser.uid];
+
+      return (
+        <View style={[
+          styles.messageContainer,
+          isMyMessage ? styles.myMessage : styles.theirMessage
+        ]}>
+          {!isMyMessage && user?.photoURL && (
+            <Image source={{ uri: user.photoURL }} style={styles.messageAvatar} />
+          )}
+          <View style={[
+            styles.calendarBubble,
+            isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
+          ]}>
+            <View style={styles.calendarHeader}>
+              <Icon name="calendar" size={20} color={isMyMessage ? '#fff' : colors.accent} />
+              <Text style={styles.calendarTitle}>Swap Meetup Invitation</Text>
+            </View>
+            <View style={styles.calendarDetails}>
+              <View style={styles.calendarDetailRow}>
+                <Icon name="time-outline" size={16} color={colors.gray} />
+                <Text style={styles.calendarDetailText}>{dateStr} at {timeStr}</Text>
+              </View>
+            </View>
+            {status === 'pending' && !isMyMessage && (
+              <View style={styles.calendarActions}>
+                <TouchableOpacity
+                  style={styles.calendarAcceptButton}
+                  onPress={() => handleAcceptCalendarInvite(item)}
+                >
+                  <Icon name="checkmark-circle" size={18} color="#fff" />
+                  <Text style={styles.calendarAcceptText}>Accept & Add to Calendar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.calendarDeclineButton}
+                  onPress={() => handleDeclineCalendarInvite(item)}
+                >
+                  <Text style={styles.calendarDeclineText}>Decline</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {status === 'accepted' && (
+              <View style={styles.calendarActions}>
+                {!isAdded ? (
+                  <TouchableOpacity
+                    style={styles.calendarAcceptButton}
+                    onPress={() => addEventToCalendar(item.calendarDetails, item.id)}
+                  >
+                    <Icon name="calendar" size={18} color="#fff" />
+                    <Text style={styles.calendarAcceptText}>Add to Calendar</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text
+                    style={[
+                      styles.calendarAcceptText,
+                      { textAlign: 'center', color: isMyMessage ? '#fff' : colors.accent }
+                    ]}
+                  >
+                    Added to Calendar ✓
+                  </Text>
+                )}
+              </View>
+            )}
+            {status === 'declined' && (
+              <View style={styles.calendarActions}>
+                <Text style={styles.calendarDeclineText}>Rejected. Event request again.</Text>
+              </View>
+            )}
+            <Text style={[
+              styles.messageTime,
+              isMyMessage ? styles.myMessageTime : styles.theirMessageTime
+            ]}>
+              {formatTime(item.createdAt)}
+            </Text>
+          </View>
+        </View>
       );
     }
     
@@ -258,7 +634,7 @@ export default function ChatScreen({ route, navigation }) {
               </View>
             </View>
           )}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => `${item.id}`}
           contentContainerStyle={styles.messagesList}
           stickySectionHeadersEnabled={true}
           ListEmptyComponent={
@@ -283,8 +659,11 @@ export default function ChatScreen({ route, navigation }) {
               multiline
               maxLength={500}
             />
-            <TouchableOpacity style={styles.iconButton}>
-              <Icon name="image-outline" size={24} color={colors.gray} />
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowLocationModal(true)}>
+              <Icon name="location-outline" size={24} color={colors.accent} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowCalendarModal(true)}>
+              <Icon name="calendar-outline" size={24} color={colors.accent} />
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -295,6 +674,115 @@ export default function ChatScreen({ route, navigation }) {
             <Icon name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        {/* Location Modal */}
+        <Modal
+          visible={showLocationModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowLocationModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Send Your Location</Text>
+              <Text style={styles.modalSubtitle}>Enter your postal code</Text>
+              <TextInput
+                value={postalCode}
+                onChangeText={setPostalCode}
+                placeholder="e.g. 123456"
+                keyboardType="number-pad"
+                maxLength={6}
+                style={styles.modalInput}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => {
+                    setShowLocationModal(false);
+                    setPostalCode('');
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalSendButton}
+                  onPress={handleSendLocation}
+                >
+                  <Text style={styles.modalSendText}>Send Location</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Calendar Modal */}
+        <Modal
+          visible={showCalendarModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowCalendarModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Suggest Swap Meetup</Text>
+              <Text style={styles.modalSubtitle}>Choose date and time</Text>
+              
+              <View style={styles.calendarInputGroup}>
+
+                <Text style={styles.inputLabel}>Date</Text>
+                <TouchableOpacity 
+                  style={styles.dateTimeButton}
+                  onPress={() => { setPickerMode('date'); setShowDatePicker(true); }}
+                >
+                  <Icon name="calendar-outline" size={20} color={colors.gray} />
+                  <Text style={styles.dateTimeText}>
+                    {swapDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.calendarInputGroup}>
+                <Text style={styles.inputLabel}>Time</Text>
+                <TouchableOpacity 
+                  style={styles.dateTimeButton}
+                  onPress={() => { setPickerMode('time'); setShowTimePicker(true); }}
+                >
+                  <Icon name="time-outline" size={20} color={colors.gray} />
+                  <Text style={styles.dateTimeText}>
+                    {swapDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <RNModalDateTimePicker
+                isVisible={showDatePicker || showTimePicker}
+                mode={pickerMode}
+                date={swapDate}
+                onConfirm={onDateTimePicked}
+                onCancel={onPickerCancel}
+                minimumDate={pickerMode === 'date' ? new Date() : undefined}
+                display="spinner"
+              />
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => {
+                    setShowCalendarModal(false);
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalSendButton}
+                  onPress={handleSendCalendarInvite}
+                >
+                  <Text style={styles.modalSendText}>Send Invite</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Item Picker Modal */}
         <ItemPickerModal
@@ -453,6 +941,107 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: colors.gray,
   },
+  locationBubble: {
+    padding: spacing.md,
+    borderRadius: 12,
+    maxWidth: '75%',
+    backgroundColor: '#f0f0f0',
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  locationTitle: {
+    fontFamily: fonts.header,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    marginLeft: spacing.sm,
+  },
+  locationText: {
+    fontFamily: fonts.sub,
+    fontSize: 16,
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  locationButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    gap: 4,
+  },
+  locationButtonText: {
+    fontSize: 12,
+    color: colors.accent,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: spacing.lg,
+    width: '80%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.gray,
+    marginBottom: spacing.md,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: spacing.md,
+    fontSize: 16,
+    marginBottom: spacing.md,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.md,
+  },
+  modalCancelButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  modalCancelText: {
+    color: colors.gray,
+    fontSize: 16,
+  },
+  modalSendButton: {
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+  },
+  modalSendText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -490,5 +1079,87 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.gray,
     fontFamily: fonts.sub,
+  },
+  calendarBubble: {
+    padding: spacing.md,
+    borderRadius: 12,
+    maxWidth: '80%',
+    backgroundColor: '#f0f0f0',
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  calendarTitle: {
+    fontFamily: fonts.header,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    marginLeft: spacing.sm,
+  },
+  calendarDetails: {
+    marginBottom: spacing.md,
+  },
+  calendarDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  calendarDetailText: {
+    fontFamily: fonts.sub,
+    fontSize: 14,
+    color: colors.dark,
+    marginLeft: spacing.sm,
+  },
+  calendarActions: {
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  calendarAcceptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    gap: spacing.xs,
+  },
+  calendarAcceptText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  calendarDeclineButton: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  calendarDeclineText: {
+    fontSize: 14,
+    color: colors.gray,
+    fontWeight: '600',
+  },
+  calendarInputGroup: {
+    marginBottom: spacing.md,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: spacing.xs,
+  },
+  dateTimeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  dateTimeText: {
+    fontSize: 16,
+    color: colors.dark,
   },
 });
