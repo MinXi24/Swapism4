@@ -25,10 +25,13 @@ import { Alert } from 'react-native';
 export const useSwapRequest = ({ 
   currentUser, 
   otherUserId, 
-  otherUserName, 
+  otherUserName,
+  otherUserPhoto, 
   swapRequest, 
   db,
-  messages 
+  messages,
+  setMessages,
+  loadMessages 
 }) => {
   const [userItems, setUserItems] = useState([]);
   const [showItemPicker, setShowItemPicker] = useState(false);
@@ -73,8 +76,10 @@ export const useSwapRequest = ({
         type: 'swap_request',
         senderId: currentUser.uid,
         senderName: currentUser.displayName,
+        senderPhoto: currentUser.photoURL || null,
         receiverId: otherUserId,
         receiverName: otherUserName,
+        receiverPhoto: otherUserPhoto || null,
         message: 'Swap Request',
         swapDetails: {
           myItemId: myItem.id,
@@ -90,7 +95,7 @@ export const useSwapRequest = ({
       };
 
       // Save message
-      await addDoc(collection(db, 'messages'), messageData);
+      const docRef = await addDoc(collection(db, 'messages'), messageData);
       
       // Update conversation preview
       const conversationId = [currentUser.uid, otherUserId].sort().join('_');
@@ -100,6 +105,16 @@ export const useSwapRequest = ({
         lastMessageTime: new Date()
       }, { merge: true });
 
+      // Add message to local state immediately for instant UI update
+      if (setMessages) {
+        const newMessageWithId = {
+          ...messageData,
+          id: docRef.id,
+          createdAt: new Date() // Use current date for immediate display
+        };
+        setMessages(prevMessages => [...prevMessages, newMessageWithId]);
+      }
+      
       Alert.alert('Success', 'Swap request sent!');
     } catch (error) {
       console.error('Error creating swap request:', error);
@@ -108,44 +123,155 @@ export const useSwapRequest = ({
   };
 
   const handleAcceptSwap = async (messageId) => {
-    try {
-      // Find the message to get item IDs
-      const message = messages.find(m => m.id === messageId);
-      if (!message?.swapDetails) return;
-      
-      const { myItemId, theirItemId } = message.swapDetails;
+    Alert.alert(
+      'Accept Swap',
+      'Are you sure you want to accept this swap? Both items will be marked as swapped out.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Accept',
+          onPress: async () => {
+            try {
+              // Find the message to get item IDs
+              const message = messages.find(m => m.id === messageId);
+              if (!message?.swapDetails) return;
+              
+              const { myItemId, theirItemId } = message.swapDetails;
 
-      // Update message to accepted
-      await updateDoc(doc(db, 'messages', messageId), {
-        'swapDetails.status': 'accepted'
-      });
+              // Update local state immediately for instant UI feedback
+              if (setMessages) {
+                setMessages(prevMessages => 
+                  prevMessages.map(msg => 
+                    msg.id === messageId 
+                      ? { ...msg, swapDetails: { ...msg.swapDetails, status: 'accepted' } }
+                      : msg
+                  )
+                );
+              }
 
-      // Mark BOTH items as swapped out
-      await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', myItemId), {
-        swapStatus: 'swapped out'
-      });
-      await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
-        swapStatus: 'swapped out'
-      });
+              // Update message to accepted
+              await updateDoc(doc(db, 'messages', messageId), {
+                'swapDetails.status': 'accepted'
+              });
 
-      Alert.alert('Success', 'Swap accepted! Both items marked as swapped out.');
-    } catch (error) {
-      console.error('Error accepting swap:', error);
-      Alert.alert('Error', 'Could not accept swap. Please try again.');
-    }
+              // Mark BOTH items as swapped out
+              await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', myItemId), {
+                swapStatus: 'swapped out'
+              });
+              await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
+                swapStatus: 'swapped out'
+              });
+
+              // Create status message in chat
+              const otherUserId = message.senderId === currentUser.uid ? message.receiverId : message.senderId;
+              const statusMessage = {
+                senderId: currentUser.uid,
+                receiverId: otherUserId,
+                text: "The swap was accepted",
+                type: 'status',
+                createdAt: new Date(),
+                participants: [currentUser.uid, otherUserId],
+                read: false,
+              };
+              
+              // Add to Firestore
+              const statusDocRef = await addDoc(collection(db, 'messages'), {
+                ...statusMessage,
+                createdAt: serverTimestamp(),
+              });
+
+              // Add to local state immediately
+              if (setMessages) {
+                setMessages(prevMessages => [...prevMessages, {
+                  ...statusMessage,
+                  id: statusDocRef.id,
+                }]);
+              }
+
+              Alert.alert('Success', 'Swap accepted! Both items marked as swapped out.');
+            } catch (error) {
+              console.error('Error accepting swap:', error);
+              Alert.alert('Error', 'Could not accept swap. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleRejectSwap = async (messageId) => {
-    try {
-      // Just update message status
-      await updateDoc(doc(db, 'messages', messageId), {
-        'swapDetails.status': 'rejected'
-      });
-      Alert.alert('Rejected', 'Swap request has been declined.');
-    } catch (error) {
-      console.error('Error rejecting swap:', error);
-      Alert.alert('Error', 'Could not reject swap. Please try again.');
-    }
+    Alert.alert(
+      'Reject Swap',
+      'Are you sure you want to reject this swap request?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Update local state immediately for instant UI feedback
+              if (setMessages) {
+                setMessages(prevMessages => 
+                  prevMessages.map(msg => 
+                    msg.id === messageId 
+                      ? { ...msg, swapDetails: { ...msg.swapDetails, status: 'rejected' } }
+                      : msg
+                  )
+                );
+              }
+
+              // Update message status in Firestore
+              await updateDoc(doc(db, 'messages', messageId), {
+                'swapDetails.status': 'rejected'
+              });
+
+              // Create status message in chat
+              const message = messages.find(m => m.id === messageId);
+              if (message) {
+                const otherUserId = message.senderId === currentUser.uid ? message.receiverId : message.senderId;
+                const statusMessage = {
+                  senderId: currentUser.uid,
+                  receiverId: otherUserId,
+                  text: "The swap was rejected",
+                  type: 'status',
+                  createdAt: new Date(),
+                  participants: [currentUser.uid, otherUserId],
+                  read: false,
+                };
+                
+                // Add to Firestore
+                const statusDocRef = await addDoc(collection(db, 'messages'), {
+                  ...statusMessage,
+                  createdAt: serverTimestamp(),
+                });
+
+                // Add to local state immediately
+                if (setMessages) {
+                  setMessages(prevMessages => [...prevMessages, {
+                    ...statusMessage,
+                    id: statusDocRef.id,
+                  }]);
+                }
+              }
+
+              Alert.alert('Rejected', 'Swap request has been declined.');
+            } catch (error) {
+              console.error('Error rejecting swap:', error);
+              Alert.alert('Error', 'Could not reject swap. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   return {

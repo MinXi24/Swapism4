@@ -4,6 +4,7 @@ import { getAuth } from 'firebase/auth';
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   getFirestore,
@@ -79,6 +80,8 @@ export default function ChatScreen({ route, navigation }) {
     swapRequest,
     db,
     messages,
+    setMessages,
+    loadMessages,
   });
 
   // Load messages on mount
@@ -128,6 +131,33 @@ export default function ChatScreen({ route, navigation }) {
     } finally {
       loadingRef.current = false;
     }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'messages', messageId));
+              setMessages(messages.filter(msg => msg.id !== messageId));
+            } catch (error) {
+              console.error('Error deleting message:', error);
+              Alert.alert('Error', 'Failed to delete message');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleSendMessage = async () => {
@@ -207,7 +237,7 @@ export default function ChatScreen({ route, navigation }) {
 
     Alert.alert(
       'Choose Map App',
-      `Navigate to ${location}`,
+      `Maps to ${location}`,
       buttons
     );
   };
@@ -427,6 +457,17 @@ export default function ChatScreen({ route, navigation }) {
         />
       );
     }
+
+    // Render status message
+    if (item.type === 'status') {
+      return (
+        <View style={styles.statusMessageContainer}>
+          <View style={styles.statusMessageBubble}>
+            <Text style={styles.statusMessageText}>{item.text}</Text>
+          </View>
+        </View>
+      );
+    }
     
     // Render location message
     if (item.type === 'location') {
@@ -484,7 +525,7 @@ export default function ChatScreen({ route, navigation }) {
       });
       const timeStr = inviteDate.toLocaleTimeString('en-US', { 
         hour: 'numeric', 
-        minute: '2-digit',
+        minute: '2-digit', 
         hour12: true 
       });
       const status = item.calendarDetails.status;
@@ -574,13 +615,14 @@ export default function ChatScreen({ route, navigation }) {
         styles.messageContainer,
         isMyMessage ? styles.myMessage : styles.theirMessage
       ]}>
-        {!isMyMessage && user?.photoURL && (
-          <Image source={{ uri: user.photoURL }} style={styles.messageAvatar} />
-        )}
-        <View style={[
-          styles.messageBubble,
-          isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
-        ]}>
+        <TouchableOpacity
+          style={[
+            styles.messageBubble,
+            isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
+          ]}
+          onLongPress={() => isMyMessage && handleDeleteMessage(item.id)}
+          activeOpacity={isMyMessage ? 0.7 : 1}
+        >
           <Text style={[
             styles.messageText,
             isMyMessage ? styles.myMessageText : styles.theirMessageText
@@ -593,7 +635,7 @@ export default function ChatScreen({ route, navigation }) {
           ]}>
             {formatTime(item.createdAt)}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -619,7 +661,12 @@ export default function ChatScreen({ route, navigation }) {
             )}
             <Text style={styles.headerName}>{user?.name}</Text>
           </View>
-          <View style={styles.headerSpacer} />
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('SwapHistory')} 
+            style={styles.headerIconButton}
+          >
+            <Icon name="time-outline" size={24} color={colors.dark} />
+          </TouchableOpacity>
         </View>
 
         {/* Messages List */}
@@ -671,7 +718,11 @@ export default function ChatScreen({ route, navigation }) {
             onPress={handleSendMessage}
             disabled={!newMessage.trim()}
           >
-            <Icon name="send" size={20} color="#fff" />
+            <Icon
+              name="send"
+              size={25}
+              color="#9ABEAA"
+            />
           </TouchableOpacity>
         </View>
 
@@ -799,7 +850,7 @@ export default function ChatScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.secondary,
+    backgroundColor: '#fff',
   },
   container: {
     flex: 1,
@@ -807,8 +858,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
-    paddingTop: 50,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
@@ -843,8 +894,8 @@ const styles = StyleSheet.create({
     fontFamily: fonts.header,
     color: colors.dark,
   },
-  headerSpacer: {
-    width: 40,
+  headerIconButton: {
+    padding: spacing.xs,
   },
   messagesList: {
     padding: spacing.md,
@@ -852,7 +903,7 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     flexDirection: 'row',
-    marginVertical: spacing.xs,
+    marginVertical: spacing.sm,
     alignItems: 'flex-end',
   },
   myMessage: {
@@ -865,20 +916,25 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    marginRight: spacing.xs,
+    marginRight: spacing.sm,
   },
   messageBubble: {
     maxWidth: '75%',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   myMessageBubble: {
     backgroundColor: colors.accent,
     borderBottomRightRadius: 4,
   },
   theirMessageBubble: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.secondary,
     borderBottomLeftRadius: 4,
   },
   messageText: {
@@ -902,44 +958,57 @@ const styles = StyleSheet.create({
   theirMessageTime: {
     color: colors.gray,
   },
+  statusMessageContainer: {
+    alignItems: 'center',
+    marginVertical: spacing.sm,
+  },
+  statusMessageBubble: {
+    backgroundColor: '#E8E8E8',
+    borderRadius: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  statusMessageText: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
+  },
   inputContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
     padding: spacing.md,
-    backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
-    alignItems: 'center',
+    backgroundColor: '#fff',
   },
   inputWrapper: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.secondary,
-    borderRadius: 24,
+    backgroundColor: '#F5F3E4',
+    borderRadius: 20,
     paddingHorizontal: spacing.sm,
     marginRight: spacing.sm,
   },
-  iconButton: {
-    padding: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
   input: {
     flex: 1,
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    fontSize: 15,
     maxHeight: 100,
   },
+  iconButton: {
+    padding: spacing.xs,
+  },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.accent,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffffff',
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: colors.gray,
+    opacity: 0.5,
   },
   locationBubble: {
     padding: spacing.md,

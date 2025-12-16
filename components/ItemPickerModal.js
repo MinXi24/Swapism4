@@ -87,15 +87,15 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontFamily: fonts.medium,
-    color: colors.dark,
+    fontFamily: fonts.header,
+    color: colors.accent,
   },
   itemGrid: {
     padding: spacing.md,
   },
   itemCard: {
     flex: 1,
-    margin: spacing.xs,
+    margin: spacing.sm,
     backgroundColor: colors.secondary,
     borderRadius: 12,
     padding: spacing.sm,

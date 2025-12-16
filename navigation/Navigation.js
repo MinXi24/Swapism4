@@ -6,6 +6,7 @@ import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import FavouritesScreen from '../screens/favourites/FavouritesScreen';
+import SwapHistoryScreen from '../screens/history/SwapHistoryScreen';
 import HomeScreen from '../screens/home/HomeScreen';
 import PostActivityScreen from '../screens/home/PostActivityScreen';
 import SearchScreen from '../screens/home/SearchScreen';
@@ -48,6 +49,7 @@ export default function Navigation() {
       <Stack.Screen name="ItemDetails" component={ItemDetailsScreen} />
       <Stack.Screen name="Messages" component={MessagesScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="SwapHistory" component={SwapHistoryScreen} />
       <Stack.Screen name="Favorites" component={FavouritesScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />

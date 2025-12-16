@@ -149,7 +149,7 @@ export default function FavouritesScreen({ navigation }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>FAVOURITES</Text>
+        <Text style={styles.headerTitle}>Favourites</Text>
       </View>
 
       {/* Tabs */}
@@ -224,17 +224,19 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     padding: spacing.md,
     paddingTop: 50,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     fontFamily: fonts.header,
-    color: colors.dark,
+    color: colors.accent,
   },
   loadingContainer: {
     flex: 1,
