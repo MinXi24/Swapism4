@@ -15,10 +15,8 @@ import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 // Firebase imports
-import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
-// --- NEW IMPORTS START ---
+import { sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from 'firebase/auth'; // Added signOut
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
-// --- NEW IMPORTS END ---
 import { auth } from '../../firebaseConfig';
 
 export default function LoginScreen({ navigation }) {
@@ -39,16 +37,28 @@ export default function LoginScreen({ navigation }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // --- NEW ADMIN ROLE CHECK START ---
+      // 2. Fetch User Profile & Role Check
       const db = getFirestore();
       const userDocRef = doc(db, "users", user.uid);
       const userDoc = await getDoc(userDocRef);
 
-      Alert.alert('Success', 'Logged in successfully!');
-
       if (userDoc.exists()) {
         const userData = userDoc.data();
         
+        // --- BAN CHECK START ---
+        if (userData.isBanned === true) {
+            await signOut(auth); // Kick them out
+            setLoading(false);
+            Alert.alert(
+                "Account Suspended", 
+                "Your account has been suspended due to violations of our community guidelines."
+            );
+            return; // Stop here
+        }
+        // --- BAN CHECK END ---
+
+        Alert.alert('Success', 'Logged in successfully!');
+
         // Check if role is 'admin'
         if (userData.role === 'admin') {
           navigation.replace('AdminHome'); // Use replace to prevent going back to login
@@ -56,10 +66,10 @@ export default function LoginScreen({ navigation }) {
           navigation.navigate('Home');
         }
       } else {
-        // Default behavior if no user document exists
+        // Default behavior if no user document exists (Safe fallback)
+        Alert.alert('Success', 'Logged in successfully!');
         navigation.navigate('Home');
       }
-      // --- NEW ADMIN ROLE CHECK END ---
 
     } catch (error) {
       let errorMessage = error.message;

@@ -23,6 +23,7 @@ import {
   getDocs,
   getFirestore,
   query,
+  serverTimestamp,
   updateDoc,
   where
 } from 'firebase/firestore';
@@ -34,6 +35,7 @@ import { colors, fonts, spacing } from '../../lib/theme';
 // --- THEME COLORS ---
 const THEME_GREEN = '#9abeaa';
 const THEME_YELLOW = '#ffd75c';
+const THEME_CREAM = '#f5f3e4'; 
 const FLAG_BG = '#FFF9C4'; 
 const ALERT_RED = '#FF6B6B';
 
@@ -45,6 +47,9 @@ export default function ManageAccountScreen({ navigation, route }) {
   const [viewMode, setViewMode] = useState(paramReport ? 'detail' : 'list');
   const [currentReport, setCurrentReport] = useState(paramReport || null);
   
+  // New State: Filter Mode ('pending' or 'banned')
+  const [listFilter, setListFilter] = useState('pending'); 
+
   // List State
   const [reportsList, setReportsList] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -63,13 +68,13 @@ export default function ManageAccountScreen({ navigation, route }) {
       following: 0,
       photoURL: null,
       ownerUid: null,
-      isBanned: false // New field to track ban status
+      isBanned: false 
   });
 
   // 1. INITIAL LOAD
   useEffect(() => {
-    fetchReportsList();
-  }, []);
+    fetchData();
+  }, [listFilter]); // Re-fetch when tab changes
 
   // 2. HANDLE INCOMING PARAMS
   useEffect(() => {
@@ -87,9 +92,17 @@ export default function ManageAccountScreen({ navigation, route }) {
   }, [viewMode, currentReport]);
 
   // --- DATA FETCHING ---
+  const fetchData = async () => {
+    setLoadingList(true);
+    if (listFilter === 'pending') {
+        await fetchReportsList();
+    } else {
+        await fetchBannedUsers();
+    }
+  };
+
   const fetchReportsList = async () => {
     try {
-      // Fetch both Posts (report) and Users (reported_users)
       const postsQuery = query(collection(db, 'report'), where('status', '==', 'pending'));
       const usersQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
 
@@ -106,10 +119,38 @@ export default function ManageAccountScreen({ navigation, route }) {
 
       setReportsList(allData);
     } catch (error) {
-      console.error('Error fetching list:', error);
+      console.error('Error fetching reports:', error);
     } finally {
       setLoadingList(false);
       setRefreshing(false);
+    }
+  };
+
+  const fetchBannedUsers = async () => {
+    try {
+        // Query users where isBanned == true
+        const q = query(collection(db, 'users'), where('isBanned', '==', true));
+        const snapshot = await getDocs(q);
+        
+        // Map them to look like report objects so we can reuse the UI
+        const bannedUsers = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id, // User ID as Report ID
+                reportType: 'user', // Treat as user report
+                reported_user_id: doc.id, // Vital for fetching details
+                reported_user_name: data.username || data.display_name || "Unknown",
+                reason: "Account Suspended", // Placeholder reason
+                created_at: data.bannedAt || null // Use ban date
+            };
+        });
+
+        setReportsList(bannedUsers);
+    } catch (error) {
+        console.error('Error fetching banned users:', error);
+    } finally {
+        setLoadingList(false);
+        setRefreshing(false);
     }
   };
 
@@ -118,7 +159,6 @@ export default function ManageAccountScreen({ navigation, route }) {
     try {
         let ownerId = reportData.reported_user_id; 
         
-        // If Post Report and no ownerId, find it from the post
         if (reportData.reportType !== 'user') {
             const targetId = reportData.reported_clothes_id || reportData.post_id || reportData.clothes_id;
             
@@ -157,7 +197,7 @@ export default function ManageAccountScreen({ navigation, route }) {
                     following: Array.isArray(userData.following) ? userData.following.length : (userData.following || 0),
                     photoURL: userData.photoURL || null,
                     ownerUid: ownerId,
-                    isBanned: userData.isBanned || false // LOAD BAN STATUS
+                    isBanned: userData.isBanned || false 
                 });
             } else {
                  setUserInfo(prev => ({ ...prev, username: 'User Not Found', bio: 'Account might be deleted.' }));
@@ -172,7 +212,7 @@ export default function ManageAccountScreen({ navigation, route }) {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchReportsList();
+    fetchData();
   };
 
   // --- ACTIONS ---
@@ -193,30 +233,30 @@ export default function ManageAccountScreen({ navigation, route }) {
   const handleReportAction = async () => {
     if (!currentReport) return;
     
+    // If viewing a banned user directly, handle slightly differently
+    const isDirectBanView = listFilter === 'banned';
+    
     const isUserReport = currentReport.reportType === 'user';
     const targetId = currentReport.reported_clothes_id || currentReport.post_id || currentReport.clothes_id;
     const collectionName = isUserReport ? 'reported_users' : 'report';
 
-    // Check ban status to determine button text
     const banActionText = userInfo.isBanned ? "UNBAN USER" : "BAN USER (Suspend)";
-    const banMessage = userInfo.isBanned 
-        ? "Restore this user's access? They will be able to log in again."
-        : "Suspend this user? This will NOT delete their data, only block access.";
-
+    
     Alert.alert(
       "Take Action",
-      isUserReport ? "Decide on this User Report" : "Decide on this Post Report",
+      isUserReport ? "Manage User Account" : "Manage Reported Post",
       [
         { text: "Cancel", style: "cancel" },
-        // OPTION 1: DISMISS (Keep Content)
-        { 
+        
+        // Option 1: Dismiss (Only show if it's a pending report)
+        !isDirectBanView && { 
             text: "Dismiss (Ignore)", 
             onPress: async () => {
                 try {
                     await updateDoc(doc(db, collectionName, currentReport.id), {
                         status: 'resolved',
                         resolution: 'dismissed', 
-                        resolved_at: new Date()
+                        resolved_at: serverTimestamp()
                     });
                     finalizeAction("Report dismissed.");
                 } catch (e) {
@@ -224,28 +264,47 @@ export default function ManageAccountScreen({ navigation, route }) {
                 }
             } 
         },
-        // OPTION 2: BAN / DELETE
+
+        // Option 2: Ban / Unban / Delete
         { 
             text: isUserReport ? banActionText : "DELETE POST", 
             style: "destructive", 
             onPress: async () => {
                 try {
                     if (isUserReport) {
-                        // --- SAFE BAN LOGIC (Toggle isBanned) ---
+                        // --- BAN/UNBAN LOGIC ---
                         if (userInfo.ownerUid) {
                             const newStatus = !userInfo.isBanned;
+                            
+                            // 1. Toggle Ban on User
                             await updateDoc(doc(db, 'users', userInfo.ownerUid), {
-                                isBanned: newStatus
+                                isBanned: newStatus,
+                                bannedAt: newStatus ? serverTimestamp() : null
                             });
-                            // Resolve the ticket
-                            await updateDoc(doc(db, collectionName, currentReport.id), {
-                                status: 'resolved',
-                                resolution: newStatus ? 'banned' : 'unbanned',
-                                resolved_at: new Date()
-                            });
-                            finalizeAction(newStatus ? "User suspended (Safe Ban)." : "User access restored.");
+
+                            // 2. If it came from a report ticket, resolve it
+                            if (!isDirectBanView) {
+                                await updateDoc(doc(db, collectionName, currentReport.id), {
+                                    status: 'resolved',
+                                    resolution: newStatus ? 'banned' : 'unbanned',
+                                    resolved_at: serverTimestamp()
+                                });
+                            }
+
+                            // 3. Update Local State & UI
+                            setUserInfo(prev => ({...prev, isBanned: newStatus}));
+                            
+                            const msg = newStatus ? "User suspended." : "User restored.";
+                            
+                            // If we are in "Banned List" mode and we just Unbanned them, they should disappear from list
+                            if (isDirectBanView && !newStatus) {
+                                finalizeAction(msg);
+                            } else {
+                                Alert.alert("Success", msg);
+                            }
+
                         } else {
-                            Alert.alert("Error", "User ID not found.");
+                            Alert.alert("Error", "User not found");
                         }
                     } else {
                         // --- DELETE POST LOGIC ---
@@ -255,25 +314,25 @@ export default function ManageAccountScreen({ navigation, route }) {
                             await deleteDoc(doc(db, 'userImages', targetId)).catch(()=>{});
                         }
                         
-                        // Resolve the ticket
                         await updateDoc(doc(db, collectionName, currentReport.id), {
                             status: 'resolved',
                             resolution: 'deleted',
-                            resolved_at: new Date()
+                            resolved_at: serverTimestamp()
                         });
                         finalizeAction("Post permanently deleted.");
                     }
                 } catch (error) {
                     console.error(error);
-                    Alert.alert("Error", "Could not complete action.");
+                    Alert.alert("Error", "Action failed.");
                 }
             } 
         }
-      ]
+      ].filter(Boolean) // Filter out false values
     );
   };
 
   const finalizeAction = (message) => {
+      // Remove item from current list
       setReportsList(prev => prev.filter(r => r.id !== currentReport.id));
       
       Alert.alert("Success", message, [
@@ -293,22 +352,65 @@ export default function ManageAccountScreen({ navigation, route }) {
   };
 
   // --- RENDER HELPERS ---
-  
-  // 1. User Detail View (Simplified Card)
+  const renderListItem = ({ item }) => {
+    const isBannedItem = listFilter === 'banned';
+    
+    return (
+        <View style={[styles.reportCard, isBannedItem && { borderColor: ALERT_RED, borderWidth: 1 }]}>
+            <View style={styles.cardHeader}>
+                <View style={{flexDirection:'row', alignItems:'center', gap: 6}}>
+                    <Icon name={item.reportType === 'user' ? 'person' : 'alert-circle'} size={16} color={ALERT_RED} />
+                    <Text style={styles.flaggedLabel}>
+                        {isBannedItem ? "SUSPENDED USER" : (item.reportType === 'user' ? 'User Report' : "Reported Content")}
+                    </Text>
+                </View>
+                <Text style={styles.dateText}>
+                    {item.created_at?.toDate ? item.created_at.toDate().toLocaleDateString() : ''}
+                </Text>
+            </View>
+            <View style={styles.cardContent}>
+                {item.reportType !== 'user' && !isBannedItem && (
+                    item.snapshot_image_url ? (
+                        <Image source={{ uri: item.snapshot_image_url }} style={styles.thumbnail} resizeMode="cover" />
+                    ) : (
+                        <View style={[styles.thumbnail, styles.placeholderThumb]}>
+                            <Icon name="image" size={20} color={colors.gray}/>
+                        </View>
+                    )
+                )}
+                
+                <View style={styles.textDetails}>
+                    <Text style={styles.descriptionText} numberOfLines={2}>
+                        <Text style={{fontWeight: 'bold'}}>{isBannedItem ? 'User: ' : 'Subject: '}</Text>
+                        {item.reported_user_name || "Unknown"}
+                    </Text>
+                    <Text style={[styles.idText, {marginTop: 2}]}>
+                        {isBannedItem ? "Account currently blocked." : `Reason: ${item.reason}`}
+                    </Text>
+                </View>
+                <TouchableOpacity style={styles.reviewButton} onPress={() => handleReviewItem(item)}>
+                    <Text style={styles.reviewButtonText}>{isBannedItem ? "Manage" : "Review"}</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+  };
+
   const renderUserDetail = () => (
     <View style={styles.adminPostView}>
         <View style={[styles.postHeader, {borderBottomWidth: 0, marginBottom: 5}]}>
-            <Text style={{fontSize: 18, fontWeight: 'bold', color: ALERT_RED}}>USER REPORT</Text>
+            <Text style={{fontSize: 18, fontWeight: 'bold', color: ALERT_RED}}>
+                {listFilter === 'banned' ? "MANAGE USER" : "USER REPORT"}
+            </Text>
             <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={handleReportAction}>
                 <Icon name="hammer-outline" size={24} color={colors.dark} />
             </TouchableOpacity>
         </View>
 
         <View style={[styles.userReportCard, userInfo.isBanned && styles.bannedCard]}>
-            {/* Visual Indicator for Banned Users */}
             {userInfo.isBanned && (
                 <View style={styles.bannedBadge}>
-                    <Text style={styles.bannedText}>BANNED</Text>
+                    <Text style={styles.bannedText}>SUSPENDED</Text>
                 </View>
             )}
 
@@ -317,14 +419,15 @@ export default function ManageAccountScreen({ navigation, route }) {
             <Text style={{color:colors.gray, marginBottom: 20}}>{userInfo.ownerUid}</Text>
             
             <View style={{width:'100%', padding: 15, backgroundColor:'#FFEBEE', borderRadius:8}}>
-                <Text style={{color:ALERT_RED, fontWeight:'bold', marginBottom:5, fontSize: 12}}>REASON FOR REPORT:</Text>
-                <Text style={{fontSize:16, color: colors.dark}}>{currentReport?.reason || "Inappropriate Behavior"}</Text>
+                <Text style={{color:ALERT_RED, fontWeight:'bold', marginBottom:5, fontSize: 12}}>STATUS:</Text>
+                <Text style={{fontSize:16, color: colors.dark}}>
+                    {userInfo.isBanned ? "This user is currently banned." : (currentReport?.reason || "Active Account")}
+                </Text>
             </View>
         </View>
     </View>
   );
 
-  // 2. Post Detail View (Original Layout with Image)
   const renderPostDetail = () => (
     <View style={styles.adminPostView}>
         <View style={styles.postHeader}>
@@ -365,48 +468,6 @@ export default function ManageAccountScreen({ navigation, route }) {
     </View>
   );
 
-  // 3. List Item Renderer
-  const renderListItem = ({ item }) => (
-    <View style={styles.reportCard}>
-        <View style={styles.cardHeader}>
-            <View style={{flexDirection:'row', alignItems:'center', gap: 6}}>
-                <Icon name={item.reportType === 'user' ? 'person' : 'alert-circle'} size={16} color={ALERT_RED} />
-                <Text style={styles.flaggedLabel}>
-                    {item.reportType === 'user' ? 'User Report' : (item.reason || "Reported")}
-                </Text>
-            </View>
-            <Text style={styles.dateText}>
-                {item.created_at?.toDate ? item.created_at.toDate().toLocaleDateString() : ''}
-            </Text>
-        </View>
-        <View style={styles.cardContent}>
-            {/* Show thumbnail only if it's a post report with an image */}
-            {item.reportType !== 'user' && (
-                item.snapshot_image_url ? (
-                    <Image source={{ uri: item.snapshot_image_url }} style={styles.thumbnail} resizeMode="cover" />
-                ) : (
-                    <View style={[styles.thumbnail, styles.placeholderThumb]}>
-                        <Icon name="image" size={20} color={colors.gray}/>
-                    </View>
-                )
-            )}
-            
-            <View style={styles.textDetails}>
-                 <Text style={styles.descriptionText} numberOfLines={2}>
-                    <Text style={{fontWeight: 'bold'}}>{item.reportType === 'user' ? 'Subject: ' : 'User: '}</Text>
-                    {item.reported_user_name || "Unknown"}
-                 </Text>
-                 <Text style={[styles.idText, {marginTop: 2}]}>
-                    Reason: {item.reason}
-                 </Text>
-            </View>
-            <TouchableOpacity style={styles.reviewButton} onPress={() => handleReviewItem(item)}>
-                <Text style={styles.reviewButtonText}>Review</Text>
-            </TouchableOpacity>
-        </View>
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -418,15 +479,32 @@ export default function ManageAccountScreen({ navigation, route }) {
                 <Icon name="arrow-back" size={24} color={colors.dark} />
             </TouchableOpacity>
             <Text style={styles.headerLogo}>
-                {viewMode === 'detail' ? 'Review Report' : 'Manage Reports'}
+                {viewMode === 'detail' ? 'Review Details' : 'Manage Reports'}
             </Text>
         </View>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerIcon}>
-            <Icon name="ellipsis-horizontal" size={28} color={colors.dark} />
-          </TouchableOpacity>
-        </View>
       </View>
+
+      {/* --- LIST FILTER TABS (Visible only in List Mode) --- */}
+      {viewMode === 'list' && (
+          <View style={styles.filterTabs}>
+              <TouchableOpacity 
+                  style={[styles.filterTab, listFilter === 'pending' && styles.activeFilterTab]}
+                  onPress={() => setListFilter('pending')}
+              >
+                  <Text style={[styles.filterTabText, listFilter === 'pending' && styles.activeFilterText]}>
+                      Pending Reports
+                  </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                  style={[styles.filterTab, listFilter === 'banned' && styles.activeFilterTab]}
+                  onPress={() => setListFilter('banned')}
+              >
+                  <Text style={[styles.filterTabText, listFilter === 'banned' && styles.activeFilterText]}>
+                      Banned Users
+                  </Text>
+              </TouchableOpacity>
+          </View>
+      )}
 
       {/* --- BODY CONTENT --- */}
       {viewMode === 'list' ? (
@@ -447,12 +525,16 @@ export default function ManageAccountScreen({ navigation, route }) {
                 ListHeaderComponent={
                     <View style={{ paddingBottom: 10 }}>
                         <Text style={styles.sectionTitle}>
-                            {reportsList.length} Pending Reports
+                            {listFilter === 'pending' 
+                                ? `${reportsList.length} Pending Reports` 
+                                : `${reportsList.length} Suspended Accounts`}
                         </Text>
                         {reportsList.length === 0 && (
                             <View style={styles.emptyState}>
                                 <Icon name="checkmark-circle" size={40} color={THEME_GREEN} />
-                                <Text style={styles.emptyText}>No pending reports!</Text>
+                                <Text style={styles.emptyText}>
+                                    {listFilter === 'pending' ? "No pending reports!" : "No suspended users."}
+                                </Text>
                             </View>
                         )}
                     </View>
@@ -493,7 +575,7 @@ export default function ManageAccountScreen({ navigation, route }) {
                     </View>
                   </View>
                   <Text style={styles.userName}>
-                      {userInfo.username}
+                      {userInfo.username} 
                       {userInfo.isBanned && <Text style={{color: ALERT_RED, fontSize: 12}}> (SUSPENDED)</Text>}
                   </Text>
                   <Text style={styles.userBio}>{userInfo.bio}</Text>
@@ -505,19 +587,17 @@ export default function ManageAccountScreen({ navigation, route }) {
               )}
             </View>
 
-            {/* Reported Content Card */}
             <View style={styles.tabsContainer}>
                 <View style={[styles.tab, styles.activeTab]}>
                     <Icon name="alert-circle-outline" size={20} color={colors.dark} />
                     <Text style={{fontFamily: fonts.header, fontWeight:'700', marginLeft: 5}}>
-                        {currentReport?.reportType === 'user' ? 'Report Details' : 'Reported Content'}
+                        {currentReport?.reportType === 'user' || listFilter === 'banned' ? 'Account Details' : 'Reported Content'}
                     </Text>
                 </View>
             </View>
 
             <View style={styles.postsContainer}>
-                {/* Dynamically choose layout based on report type */}
-                {currentReport?.reportType === 'user' ? renderUserDetail() : renderPostDetail()}
+                {(currentReport?.reportType === 'user' || listFilter === 'banned') ? renderUserDetail() : renderPostDetail()}
             </View>
         </ScrollView>
       )}
@@ -591,6 +671,31 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   
+  // --- FILTER TABS ---
+  filterTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.md,
+    marginBottom: 10,
+    marginTop: 10,
+  },
+  filterTab: {
+    marginRight: 15,
+    paddingBottom: 5,
+  },
+  activeFilterTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: THEME_GREEN,
+  },
+  filterTabText: {
+    fontSize: 14,
+    color: colors.gray,
+    fontWeight: '600',
+  },
+  activeFilterText: {
+    color: THEME_GREEN,
+    fontWeight: 'bold',
+  },
+
   // --- LIST CARD STYLES ---
   reportCard: {
     backgroundColor: FLAG_BG,
@@ -722,7 +827,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    alignSelf: 'flex-start'
+    alignSelf: 'flex-start',
   },
   locationText: {
     fontSize: 14,
@@ -820,8 +925,8 @@ const styles = StyleSheet.create({
   },
   bannedText: {
     color: '#fff',
-    fontWeight: 'bold',
     fontSize: 10,
+    fontWeight: 'bold',
   },
 
   // --- EMPTY STATE ---
