@@ -400,7 +400,14 @@ export default function UserProfileScreen({ route, navigation }) {
 
   const handleFollowToggle = async () => {
     if (!currentUser) {
-      Alert.alert('Error', 'Please log in to follow users');
+      Alert.alert(
+        'Login to start following users!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
       return;
     }
 
@@ -540,6 +547,18 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleSubmitReview = async () => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login to submit reviews!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
     if (reviewRating === 0) {
       Alert.alert('Error', 'Please select a rating');
       return;
@@ -922,10 +941,14 @@ export default function UserProfileScreen({ route, navigation }) {
                   {activeTab === 'forSwap' && (
                     <View style={[
                       styles.swapStatusBadge,
-                      post.swapStatus === 'swappedOut' && styles.swapStatusBadgeInactive
+                      (post.swapStatus === 'swappedOut' || post.swapStatus === 'reserved') && styles.swapStatusBadgeInactive
                     ]}>
                       <Text style={styles.swapStatusBadgeText}>
-                        {post.swapStatus === 'available' ? 'Available' : 'Swapped Out'}
+                        {post.swapStatus === 'available' 
+                          ? 'Available' 
+                          : post.swapStatus === 'reserved' 
+                          ? 'Reserved' 
+                          : 'Swapped Out'}
                       </Text>
                     </View>
                   )}

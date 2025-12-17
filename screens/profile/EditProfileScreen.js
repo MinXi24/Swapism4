@@ -130,6 +130,18 @@ export default function EditProfileScreen({ navigation }) {
   };
 
   const handleSave = async () => {
+    if (!user) {
+      Alert.alert(
+        'Login to start customizing your profile!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
     if (!username.trim()) {
       Alert.alert('Error', 'Username is required');
       return;

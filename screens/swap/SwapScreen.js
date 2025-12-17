@@ -1,6 +1,8 @@
+import { getAuth } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Modal,
   SafeAreaView,
@@ -27,6 +29,7 @@ export default function SwapScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
 
   const db = getFirestore();
+  const auth = getAuth();
 
   const sortOptions = [
     'Newest to Oldest',
@@ -185,14 +188,48 @@ export default function SwapScreen({ navigation }) {
   };
 
   const handleHistory = () => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to view swap history!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     navigation.navigate('SwapHistory');
   };
 
   const handleFavorite = (item) => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to start saving favorites!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return false; // Return false to prevent visual state change
+    }
     console.log('Favorited:', item.title);
+    return true; // Return true to allow visual state change
   };
 
   const handleSwap = (item) => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to start swapping items!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
     console.log('Swap:', item.title);
   };
 

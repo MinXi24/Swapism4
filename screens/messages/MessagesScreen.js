@@ -1,26 +1,26 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  getFirestore,
-  orderBy,
-  query,
-  where
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    getFirestore,
+    orderBy,
+    query,
+    where
 } from 'firebase/firestore';
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    FlatList,
+    Image,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -82,11 +82,43 @@ export default function MessagesScreen({ navigation }) {
                 lastMessage: lastMessageText,
                 lastMessageTime: messageData.createdAt?.toDate?.() || new Date(),
                 unread: !messageData.read && messageData.receiverId === currentUser.uid,
+                hasSwapOngoing: false, // Will be updated below
               });
             }
           } catch (error) {
             console.error('Error loading user data:', error);
           }
+        }
+      }
+
+      // Check for ongoing swaps in each conversation
+      for (const [otherUserId, conversation] of conversationsMap.entries()) {
+        try {
+          const userMessagesQuery = query(
+            collection(db, 'messages'),
+            where('participants', 'array-contains', currentUser.uid)
+          );
+          const userMessagesSnapshot = await getDocs(userMessagesQuery);
+          
+          const userMessages = userMessagesSnapshot.docs
+            .map(doc => doc.data())
+            .filter(msg => 
+              (msg.senderId === currentUser.uid && msg.receiverId === otherUserId) ||
+              (msg.senderId === otherUserId && msg.receiverId === currentUser.uid)
+            );
+
+          // Check if there's an accepted swap request that's not completed
+          const hasAcceptedSwap = userMessages.some(
+            msg => msg.type === 'swap_request' && 
+            msg.swapDetails && 
+            msg.swapDetails.status === 'accepted'
+          );
+
+          if (hasAcceptedSwap) {
+            conversation.hasSwapOngoing = true;
+          }
+        } catch (error) {
+          console.error('Error checking swap status:', error);
         }
       }
 
@@ -140,7 +172,15 @@ export default function MessagesScreen({ navigation }) {
       )}
       <View style={styles.messageContent}>
         <View style={styles.messageHeader}>
-          <Text style={styles.userName}>{item.userName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <Text style={styles.userName}>{item.userName}</Text>
+            {item.hasSwapOngoing && (
+              <View style={styles.swapOngoingBadge}>
+                <Icon name="swap-horizontal" size={12} color="#fff" />
+                <Text style={styles.swapOngoingText}>Swap</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.time}>{formatTime(item.lastMessageTime)}</Text>
         </View>
         <Text style={[styles.messageText, item.unread && styles.unreadMessage]} numberOfLines={1}>
@@ -275,6 +315,21 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sub,
     fontSize: 12,
     color: colors.gray,
+  },
+  swapOngoingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 10,
+    gap: 4,
+  },
+  swapOngoingText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#fff',
+    fontFamily: fonts.semiBold,
   },
   messageText: {
     fontFamily: fonts.sub,

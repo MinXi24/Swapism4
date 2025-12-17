@@ -1,22 +1,23 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-  collection,
-  getDocs,
-  getFirestore,
-  orderBy,
-  query,
-  where
+    collection,
+    getDocs,
+    getFirestore,
+    orderBy,
+    query,
+    where
 } from 'firebase/firestore';
 import React, { useCallback, useState } from 'react';
 import {
-  FlatList,
-  Image,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    FlatList,
+    Image,
+    Modal,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import Input from '../../components/Input';
@@ -26,8 +27,9 @@ export default function SwapHistoryScreen({ navigation }) {
   const [swapHistory, setSwapHistory] = useState([]);
   const [allSwapHistory, setAllSwapHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, completed, pending, rejected
+  const [filter, setFilter] = useState('all'); // all, completed, accepted, pending, rejected
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -128,6 +130,8 @@ export default function SwapHistoryScreen({ navigation }) {
 
   const getStatusColor = (status) => {
     switch (status) {
+      case 'completed':
+        return '#4caf50';
       case 'accepted':
         return colors.accent;
       case 'pending':
@@ -141,6 +145,8 @@ export default function SwapHistoryScreen({ navigation }) {
 
   const getStatusIcon = (status) => {
     switch (status) {
+      case 'completed':
+        return 'checkmark-done-circle';
       case 'accepted':
         return 'checkmark-circle';
       case 'pending':
@@ -175,14 +181,22 @@ export default function SwapHistoryScreen({ navigation }) {
     const otherUserName = isInitiatedByMe 
       ? item.receiverName 
       : item.senderName;
+    
+    const otherUserPhoto = isInitiatedByMe 
+      ? item.receiverPhoto 
+      : item.senderPhoto;
 
     return (
       <TouchableOpacity style={styles.swapCard}>
         <View style={styles.swapHeader}>
           <View style={styles.swapHeaderLeft}>
-            <View style={styles.userAvatarPlaceholder}>
-              <Icon name="person" size={14} color={colors.gray} />
-            </View>
+            {otherUserPhoto ? (
+              <Image source={{ uri: otherUserPhoto }} style={styles.userAvatar} />
+            ) : (
+              <View style={styles.userAvatarPlaceholder}>
+                <Icon name="person" size={14} color={colors.gray} />
+              </View>
+            )}
             <Text style={styles.swapWithText}>
               {otherUserName || 'Unknown User'}
             </Text>
@@ -264,36 +278,104 @@ export default function SwapHistoryScreen({ navigation }) {
         style={styles.searchBar}
       />
 
-      {/* Filter Buttons */}
+      {/* Filter Dropdown Button */}
       <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'accepted' && styles.filterButtonActive]}
-          onPress={() => setFilter(filter === 'accepted' ? 'all' : 'accepted')}
-        >
-          <Icon name="checkmark-circle-outline" size={18} color={filter === 'accepted' ? '#fff' : colors.dark} />
-          <Text style={[styles.filterText, filter === 'accepted' && styles.filterTextActive]}>
-            Accepted
+        <TouchableOpacity style={styles.filterDropdown} onPress={() => setShowFilterModal(true)}>
+          <Icon name="funnel-outline" size={20} color={colors.dark} />
+          <Text style={styles.filterDropdownText}>
+            Filter: {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'pending' && styles.filterButtonActive]}
-          onPress={() => setFilter(filter === 'pending' ? 'all' : 'pending')}
-        >
-          <Icon name="time-outline" size={18} color={filter === 'pending' ? '#fff' : colors.dark} />
-          <Text style={[styles.filterText, filter === 'pending' && styles.filterTextActive]}>
-            Pending
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'rejected' && styles.filterButtonActive]}
-          onPress={() => setFilter(filter === 'rejected' ? 'all' : 'rejected')}
-        >
-          <Icon name="close-circle-outline" size={18} color={filter === 'rejected' ? '#fff' : colors.dark} />
-          <Text style={[styles.filterText, filter === 'rejected' && styles.filterTextActive]}>
-            Rejected
-          </Text>
+          <Icon name="chevron-down" size={20} color={colors.dark} />
         </TouchableOpacity>
       </View>
+
+      {/* Filter Modal */}
+      <Modal
+        visible={showFilterModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowFilterModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Filter Swaps</Text>
+            
+            <TouchableOpacity
+              style={[styles.modalOption, filter === 'all' && styles.modalOptionActive]}
+              onPress={() => {
+                setFilter('all');
+                setShowFilterModal(false);
+              }}
+            >
+              <Icon name="list-outline" size={20} color={filter === 'all' ? colors.accent : colors.dark} />
+              <Text style={[styles.modalOptionText, filter === 'all' && styles.modalOptionTextActive]}>
+                All
+              </Text>
+              {filter === 'all' && <Icon name="checkmark" size={20} color={colors.accent} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalOption, filter === 'completed' && styles.modalOptionActive]}
+              onPress={() => {
+                setFilter('completed');
+                setShowFilterModal(false);
+              }}
+            >
+              <Icon name="checkmark-done-circle-outline" size={20} color={filter === 'completed' ? colors.accent : colors.dark} />
+              <Text style={[styles.modalOptionText, filter === 'completed' && styles.modalOptionTextActive]}>
+                Completed
+              </Text>
+              {filter === 'completed' && <Icon name="checkmark" size={20} color={colors.accent} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalOption, filter === 'accepted' && styles.modalOptionActive]}
+              onPress={() => {
+                setFilter('accepted');
+                setShowFilterModal(false);
+              }}
+            >
+              <Icon name="checkmark-circle-outline" size={20} color={filter === 'accepted' ? colors.accent : colors.dark} />
+              <Text style={[styles.modalOptionText, filter === 'accepted' && styles.modalOptionTextActive]}>
+                Accepted
+              </Text>
+              {filter === 'accepted' && <Icon name="checkmark" size={20} color={colors.accent} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalOption, filter === 'pending' && styles.modalOptionActive]}
+              onPress={() => {
+                setFilter('pending');
+                setShowFilterModal(false);
+              }}
+            >
+              <Icon name="time-outline" size={20} color={filter === 'pending' ? colors.accent : colors.dark} />
+              <Text style={[styles.modalOptionText, filter === 'pending' && styles.modalOptionTextActive]}>
+                Pending
+              </Text>
+              {filter === 'pending' && <Icon name="checkmark" size={20} color={colors.accent} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalOption, filter === 'rejected' && styles.modalOptionActive]}
+              onPress={() => {
+                setFilter('rejected');
+                setShowFilterModal(false);
+              }}
+            >
+              <Icon name="close-circle-outline" size={20} color={filter === 'rejected' ? colors.accent : colors.dark} />
+              <Text style={[styles.modalOptionText, filter === 'rejected' && styles.modalOptionTextActive]}>
+                Rejected
+              </Text>
+              {filter === 'rejected' && <Icon name="checkmark" size={20} color={colors.accent} />}
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Swap History List */}
       <FlatList
@@ -348,34 +430,75 @@ const styles = StyleSheet.create({
     marginVertical: spacing.sm,
   },
   filterContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  filterButton: {
-    flex: 1,
+  filterDropdown: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     backgroundColor: colors.secondary,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     borderRadius: 20,
-    marginHorizontal: 4,
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.accent,
   },
-  filterButtonActive: {
-    backgroundColor: colors.accent,
-  },
-  filterText: {
+  filterDropdownText: {
     fontFamily: fonts.header,
-    fontSize: 12,
+    fontSize: 14,
     color: colors.dark,
-    marginLeft: 4,
+    fontWeight: '600',
+    flex: 1,
   },
-  filterTextActive: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: spacing.lg,
+    width: '80%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: colors.dark,
+    marginBottom: spacing.md,
+    fontFamily: fonts.header,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 8,
+    gap: spacing.sm,
+  },
+  modalOptionActive: {
+    backgroundColor: colors.secondary,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: colors.dark,
+    flex: 1,
+  },
+  modalOptionTextActive: {
+    fontWeight: 'bold',
+    color: colors.accent,
   },
   listContainer: {
     paddingHorizontal: spacing.md,
@@ -400,6 +523,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     marginRight: spacing.sm,
+  },
+  userAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   userAvatarPlaceholder: {
     width: 28,
@@ -446,12 +574,10 @@ const styles = StyleSheet.create({
   itemCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.accent,
     borderRadius: 8,
     padding: spacing.sm,
     width: 140,
-    borderWidth: 1,
-    borderColor: colors.accent,
   },
   itemCardImage: {
     width: 50,

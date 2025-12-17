@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   },
   acceptButton: {
     flex: 1,
-    backgroundColor: colors.accent,
+    backgroundColor: '#4caf50',
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
     borderRadius: 25,

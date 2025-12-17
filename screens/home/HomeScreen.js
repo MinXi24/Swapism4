@@ -430,7 +430,17 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleLike = async (post) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      Alert.alert(
+        'Login to start liking posts!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
 
     try {
       if (post.userLiked) {
@@ -484,7 +494,17 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('PostDetails', { post });
   };
   const handleFavorite = async (post) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      Alert.alert(
+        'Login to start saving favorites!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
 
     try {
       const favoritesQuery = query(
@@ -806,6 +826,17 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.headerIcon} 
             onPress={() => {
+              if (!currentUser) {
+                Alert.alert(
+                  'Login to view activity!',
+                  '',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Login', onPress: () => navigation.navigate('Login') }
+                  ]
+                );
+                return;
+              }
               navigation.navigate('Activity');
             }}
           >

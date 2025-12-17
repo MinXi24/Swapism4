@@ -13,9 +13,14 @@ export default function Card({
 }) {
   const [isFavorited, setIsFavorited] = useState(false);
 
-  const handleFavorite = () => {
-    setIsFavorited(!isFavorited);
-    onFavorite && onFavorite(item);
+  const handleFavorite = async () => {
+    if (onFavorite) {
+      const result = await onFavorite(item);
+      // Only toggle if the action was successful (not blocked by guest prompt)
+      if (result !== false) {
+        setIsFavorited(!isFavorited);
+      }
+    }
   };
 
   return (
