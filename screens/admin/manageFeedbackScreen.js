@@ -1,26 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    RefreshControl,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDocs,
-    getFirestore,
-    query,
-    updateDoc,
-    where
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  getFirestore,
+  query,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 
 // --- IMPORTS ---
@@ -179,7 +179,9 @@ export default function AdminFeedbackScreen({ navigation }) {
 
       {/* List */}
       {loading ? (
-          <View style={styles.centerContainer}><ActivityIndicator size="large" color={THEME_GREEN} /></View>
+          <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color={THEME_GREEN} />
+          </View>
       ) : (
           <FlatList 
             data={feedbackList}
@@ -196,12 +198,12 @@ export default function AdminFeedbackScreen({ navigation }) {
           />
       )}
 
-      {/* Bottom Nav (Matches your other Admin Screens) */}
+      {/* Bottom Nav */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AdminHome')}>
           <Icon name="home-outline" size={24} color={colors.gray} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ManageAccount')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ManageReport')}>
           <Icon name="people-outline" size={24} color={colors.gray} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem}>
@@ -214,65 +216,200 @@ export default function AdminFeedbackScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   
   // Header
   header: { 
-      flexDirection: 'row', alignItems: 'center', padding: spacing.md, 
-      paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#dbdbdb', backgroundColor: '#fff' 
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: spacing.md, 
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: '#dbdbdb',
+      backgroundColor: '#fff',
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerTitle: { fontFamily: fonts.header, fontSize: 22, fontWeight: '700', color: THEME_GREEN },
-  backButton: { padding: 4 },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerTitle: {
+    fontFamily: fonts.header,
+    fontSize: 22,
+    fontWeight: '700',
+    color: THEME_GREEN,
+  },
+  backButton: {
+    padding: 4,
+  },
 
   // Tabs
-  tabsContainer: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  tab: { flex: 1, paddingVertical: 15, alignItems: 'center' },
-  activeTab: { borderBottomWidth: 2, borderBottomColor: colors.dark },
-  tabText: { fontSize: 14, color: colors.gray, fontWeight: '600' },
-  activeTabText: { color: colors.dark, fontWeight: 'bold' },
+  tabsContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: colors.dark,
+  },
+  tabText: {
+    fontSize: 14,
+    color: colors.gray,
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: colors.dark,
+    fontWeight: 'bold',
+  },
 
   // List
-  listContent: { padding: spacing.md, paddingBottom: 80 },
+  listContent: {
+    padding: spacing.md,
+    paddingBottom: 80,
+  },
   
   // Card
-  card: { borderRadius: 12, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
-  cardPending: { backgroundColor: PENDING_BG },
-  cardReviewed: { backgroundColor: REVIEWED_BG },
+  card: {
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  cardPending: {
+    backgroundColor: PENDING_BG,
+  },
+  cardReviewed: {
+    backgroundColor: REVIEWED_BG,
+  },
   
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, borderWidth: 1 },
-  badgeBug: { backgroundColor: '#ffebee', borderColor: ALERT_RED },
-  badgeFeature: { backgroundColor: '#e3f2fd', borderColor: '#2196F3' },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  badgeBug: {
+    backgroundColor: '#ffebee',
+    borderColor: ALERT_RED,
+  },
+  badgeFeature: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#2196F3',
+  },
   
-  badgeText: { fontSize: 10, fontWeight: 'bold' },
-  textBug: { color: ALERT_RED },
-  textFeature: { color: '#2196F3' },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  textBug: {
+    color: ALERT_RED,
+  },
+  textFeature: {
+    color: '#2196F3',
+  },
   
-  dateText: { fontSize: 10, color: colors.gray },
+  dateText: {
+    fontSize: 10,
+    color: colors.gray,
+  },
   
-  messageText: { fontSize: 15, color: colors.dark, lineHeight: 22, marginBottom: 12, fontWeight: '500' },
+  messageText: {
+    fontSize: 15,
+    color: colors.dark,
+    lineHeight: 22,
+    marginBottom: 12,
+    fontWeight: '500',
+  },
   
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 15 },
-  usernameText: { fontSize: 12, color: colors.gray },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 15,
+  },
+  usernameText: {
+    fontSize: 12,
+    color: colors.gray,
+  },
 
-  actionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 15, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingTop: 10 },
-  actionBtnPrimary: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  actionTextPrimary: { fontSize: 13, fontWeight: '600', color: colors.dark },
-  actionBtnDestructive: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  actionTextDestructive: { fontSize: 13, fontWeight: '600', color: ALERT_RED },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 15,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+    paddingTop: 10,
+  },
+  actionBtnPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  actionTextPrimary: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  actionBtnDestructive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  actionTextDestructive: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: ALERT_RED,
+  },
 
   // Empty
-  emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
-  emptyText: { color: colors.gray, fontSize: 16, fontWeight: '500' },
+  emptyState: {
+    alignItems: 'center',
+    marginTop: 50,
+    gap: 10,
+  },
+  emptyText: {
+    color: colors.gray,
+    fontSize: 16,
+    fontWeight: '500',
+  },
 
   // Bottom Nav
   bottomNav: {
-    flexDirection: 'row', backgroundColor: '#fff',
-    paddingVertical: 12, paddingHorizontal: spacing.md,
-    borderTopWidth: 1, borderTopColor: '#e0e0e0',
-    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
-  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -1,7 +1,8 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AdminHomeScreen from '../screens/admin/AdminHomeScreen';
-import ManageAccountScreen from '../screens/admin/manageAccountScreen';
-import ManageCommentsScreen from '../screens/admin/manageCommentsScreen';
+import AdminSearchScreen from '../screens/admin/AdminSearchScreen';
+import ManageFeedback from '../screens/admin/manageFeedbackScreen';
+import ManageReportsScreen from '../screens/admin/manageReportsScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
@@ -25,10 +26,10 @@ import BlockedUsersScreen from '../screens/settings/BlockedUsersScreen';
 import NotificationScreen from '../screens/settings/NotificationScreen';
 import PrivacyScreen from '../screens/settings/PrivacyScreen';
 import RecentlyDeletedScreen from '../screens/settings/RecentlyDeletedScreen';
+import SendFeedbackScreen from '../screens/settings/SendFeedbackScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ItemDetailsScreen from '../screens/swap/ItemDetailsScreen';
 import SwapScreen from '../screens/swap/SwapScreen';
-
 
 const Stack = createNativeStackNavigator();
 
@@ -66,9 +67,12 @@ export default function Navigation() {
       <Stack.Screen name="Privacy" component={PrivacyScreen} />
       <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
       <Stack.Screen name="RecentlyDeleted" component={RecentlyDeletedScreen} />
+      <Stack.Screen name="SendFeedback" component={SendFeedbackScreen} />
       <Stack.Screen name="AdminHome" component={AdminHomeScreen} />
-      <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
-      <Stack.Screen name="ManageComments" component={ManageCommentsScreen} />
+      <Stack.Screen name="ManageReport" component={ManageReportsScreen} />
+      <Stack.Screen name="AdminSearch" component={AdminSearchScreen} />
+      <Stack.Screen name="ManageFeedback" component={ManageFeedback} />
+      
     </Stack.Navigator>
   );
 }

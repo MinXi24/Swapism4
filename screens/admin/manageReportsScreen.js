@@ -38,9 +38,9 @@ const THEME_YELLOW = '#ffd75c';
 const THEME_CREAM = '#f5f3e4'; 
 const FLAG_BG = '#FFF9C4'; 
 const ALERT_RED = '#FF6B6B';
-const COMMENT_BG = '#f8f8f8'; // Added for comment bubbles
+const COMMENT_BG = '#f8f8f8'; 
 
-export default function ManageAccountScreen({ navigation, route }) {
+export default function ManageReportsScreen({ navigation, route }) {
   const db = getFirestore();
   const { report: paramReport } = route.params || {};
 
@@ -94,10 +94,8 @@ export default function ManageAccountScreen({ navigation, route }) {
   // 3. LOAD DETAILS
   useEffect(() => {
     if (viewMode === 'detail' && currentReport) {
-        // Only load user profile if NOT a comment (Comment view hides profile)
         fetchUserDetails(currentReport);
         
-        // If comment, fetch context
         if (currentReport.reportType === 'comment') {
             fetchCommentContext(currentReport);
         }
@@ -149,12 +147,54 @@ export default function ManageAccountScreen({ navigation, route }) {
     } catch (error) { console.error(error); } finally { setLoadingList(false); setRefreshing(false); }
   };
 
-  // 2. FETCH POSTS
+  // 2. FETCH POSTS [UPDATED TO RESOLVE USERNAME]
   const fetchPostsTab = async () => {
     try {
         const q = query(collection(db, 'report'), where('status', '==', 'pending'));
         const snapshot = await getDocs(q);
-        const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'post' }));
+        
+        // Use Promise.all to fetch missing usernames for posts
+        const postsPromises = snapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data();
+            let finalUsername = data.userName || data.reported_user_name || "Unknown User";
+            let ownerId = data.reported_user_id;
+
+            // If we don't have the username or the owner ID immediately, looks for the Post -> Then Owner -> Then Name
+            if (finalUsername === "Unknown User") {
+                const targetId = data.reported_clothes_id || data.post_id;
+                
+                // 1. Fetch Post to find Owner ID
+                if (targetId) {
+                    try {
+                        let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId));
+                        if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'clothes', targetId));
+                        
+                        if (postSnap.exists()) {
+                            ownerId = postSnap.data().ownerUid;
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+
+                // 2. Fetch User to find Username
+                if (ownerId) {
+                    try {
+                        const userSnap = await getDoc(doc(db, 'users', ownerId));
+                        if (userSnap.exists()) {
+                            finalUsername = userSnap.data().username || "Unknown User";
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+            }
+
+            return { 
+                id: docSnap.id, 
+                ...data, 
+                reportType: 'post',
+                resolvedUserName: finalUsername // Store resolved name here
+            };
+        });
+
+        const posts = await Promise.all(postsPromises);
         posts.sort((a, b) => (b.created_at?.toDate() || 0) - (a.created_at?.toDate() || 0));
         setReportsList(posts);
     } catch (error) { console.error(error); } finally { setLoadingList(false); setRefreshing(false); }
@@ -184,6 +224,7 @@ export default function ManageAccountScreen({ navigation, route }) {
             const targetId = reportData.reported_clothes_id || reportData.post_id;
             if (targetId) {
                 let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId));
+                if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'clothes', targetId));
                 if (postSnap.exists()) ownerId = postSnap.data().ownerUid;
             }
         } else if (reportData.reportType === 'comment') {
@@ -214,7 +255,7 @@ export default function ManageAccountScreen({ navigation, route }) {
     } catch (error) { console.error(error); } finally { setLoadingUser(false); }
   };
 
-  // Fetch Comment Context + Look up users for photos
+  // Fetch Comment Context
   const fetchCommentContext = async (report) => {
       try {
           let postId = report.postId || report.post_id;
@@ -249,7 +290,6 @@ export default function ManageAccountScreen({ navigation, route }) {
                       let userImg = cData.userPhotoURL || cData.photoURL;
                       const uid = cData.userId || cData.authorId || cData.uid;
 
-                      // If photo missing in comment, fetch from User collection
                       if (!userImg && uid) {
                           try {
                               const uSnap = await getDoc(doc(db, 'users', uid));
@@ -307,7 +347,7 @@ export default function ManageAccountScreen({ navigation, route }) {
       [
         { text: "Cancel", style: "cancel" },
         !isBannedItem && { 
-            text: "Resolve Report", 
+            text: "Dismiss", 
             onPress: async () => {
                 try {
                     await updateDoc(doc(db, collectionName, currentReport.id), { status: 'resolved', resolution: 'dismissed', resolved_at: serverTimestamp() });
@@ -362,7 +402,7 @@ export default function ManageAccountScreen({ navigation, route }) {
     switch(tab) {
       case 'home': navigation.navigate('AdminHome'); break;
       case 'profiles': break; 
-      case 'comments': navigation.navigate('ManageComments'); break;
+      case 'comments': navigation.navigate('ManageFeedback'); break;
     }
   };
 
@@ -387,7 +427,8 @@ export default function ManageAccountScreen({ navigation, route }) {
         subInfo = item.isBannedUser ? "Account currently suspended." : `Reason: ${item.reason}`;
     } else if (isPostTab) {
         subjectLabel = "Post Owner: ";
-        mainText = item.reported_user_name || "Unknown User";
+        // [UPDATED] Use resolved name from fetchPostsTab
+        mainText = item.resolvedUserName || item.userName || item.reported_user_name || "Unknown User";
         subInfo = `Reason: ${item.reason}`;
     } else if (isCommentTab) {
         subjectLabel = "Commenter: ";
@@ -499,7 +540,6 @@ export default function ManageAccountScreen({ navigation, route }) {
                         const isReported = comment.id === currentReport.targetId || comment.id === currentReport.commentId;
                         const userImg = comment.userPhotoURL || comment.photoURL;
                         
-                        // [UPDATED] Avatar rendered directly without grey background container
                         const AvatarView = userImg ? (
                             <Image source={{ uri: userImg }} style={{ width: 32, height: 32, borderRadius: 16, marginRight: 10 }} />
                         ) : (
