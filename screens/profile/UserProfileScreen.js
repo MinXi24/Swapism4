@@ -70,10 +70,88 @@ export default function UserProfileScreen({ route, navigation }) {
   const [mutualFollowers, setMutualFollowers] = useState([]);
   const [showAllMutuals, setShowAllMutuals] = useState(false);
 
-  // [NEW] State to track if I have blocked this user
-  const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+  // Show menu for report/block
+  const [androidMenuVisible, setAndroidMenuVisible] = useState(false);
+  const showMenu = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Report User', 'Block User'],
+          destructiveButtonIndex: 2,
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) handleReport();
+          if (buttonIndex === 2) handleBlock();
+        }
+      );
+    } else {
+      setAndroidMenuVisible(true);
+    }
+  };
+  // Android custom modal for report/block
+  const renderAndroidMenu = () => (
+    <Modal
+      visible={androidMenuVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setAndroidMenuVisible(false)}
+    >
+      <TouchableOpacity
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}
+        activeOpacity={1}
+        onPress={() => setAndroidMenuVisible(false)}
+      >
+        <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 }}>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleReport(); }} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Report User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleBlock(); }} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Block User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setAndroidMenuVisible(false)} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#333', fontSize: 16, textAlign: 'center' }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
 
-  // Define DB/Auth
+  const handleReport = () => {
+    Alert.alert('Report', 'User has been reported.');
+  };
+  const handleBlock = () => {
+    Alert.alert('Block', 'User has been blocked.');
+  };
+
+  const openMapWithLocation = async () => {
+    const location = userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location;
+    if (!location) return;
+
+    const encodedLocation = encodeURIComponent(location);
+    
+    // Try different map apps in order of preference
+    const urls = [
+      `comgooglemaps://?q=${encodedLocation}`, // Google Maps iOS
+      `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`, // Google Maps web (works on Android and iOS)
+      `maps://maps.apple.com/?q=${encodedLocation}`, // Apple Maps
+    ];
+
+    for (const url of urls) {
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (error) {
+        console.log(`Cannot open ${url}`);
+      }
+    }
+
+    Alert.alert('Error', 'No map app available');
+  };
+
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
@@ -400,7 +478,14 @@ export default function UserProfileScreen({ route, navigation }) {
 
   const handleFollowToggle = async () => {
     if (!currentUser) {
-      Alert.alert('Error', 'Please log in to follow users');
+      Alert.alert(
+        'Login to start following users!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
       return;
     }
 
@@ -540,6 +625,18 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleSubmitReview = async () => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login to submit reviews!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
     if (reviewRating === 0) {
       Alert.alert('Error', 'Please select a rating');
       return;
@@ -922,10 +1019,14 @@ export default function UserProfileScreen({ route, navigation }) {
                   {activeTab === 'forSwap' && (
                     <View style={[
                       styles.swapStatusBadge,
-                      post.swapStatus === 'swappedOut' && styles.swapStatusBadgeInactive
+                      (post.swapStatus === 'swappedOut' || post.swapStatus === 'reserved') && styles.swapStatusBadgeInactive
                     ]}>
                       <Text style={styles.swapStatusBadgeText}>
-                        {post.swapStatus === 'available' ? 'Available' : 'Swapped Out'}
+                        {post.swapStatus === 'available' 
+                          ? 'Available' 
+                          : post.swapStatus === 'reserved' 
+                          ? 'Reserved' 
+                          : 'Swapped Out'}
                       </Text>
                     </View>
                   )}

@@ -1,12 +1,12 @@
 import React from 'react';
 import {
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Image,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { colors, fonts, spacing } from '../../lib/theme';
 
@@ -69,9 +69,9 @@ export default function WelcomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Skip for now */}
+        {/* Continue as Guest */}
         <TouchableOpacity onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip for now</Text>
+          <Text style={styles.skipText}>Continue as Guest</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
