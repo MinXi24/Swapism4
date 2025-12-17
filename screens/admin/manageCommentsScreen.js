@@ -227,7 +227,7 @@ export default function ManageCommentsScreen({ navigation }) {
             <View style={styles.textDetails}>
                  <Text style={styles.descriptionText} numberOfLines={2}>
                     <Text style={{fontWeight: 'bold'}}>Comment: </Text>
-                    "{item.targetContent}"
+                    &quot;{item.targetContent}&quot;
                  </Text>
                  <Text style={[styles.idText, {marginTop: 4}]}>
                     By: {item.targetOwnerName || "Unknown"}
