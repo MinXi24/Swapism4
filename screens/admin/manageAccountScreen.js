@@ -38,6 +38,7 @@ const THEME_YELLOW = '#ffd75c';
 const THEME_CREAM = '#f5f3e4'; 
 const FLAG_BG = '#FFF9C4'; 
 const ALERT_RED = '#FF6B6B';
+const COMMENT_BG = '#f8f8f8'; // Added for comment bubbles
 
 export default function ManageAccountScreen({ navigation, route }) {
   const db = getFirestore();
@@ -47,16 +48,19 @@ export default function ManageAccountScreen({ navigation, route }) {
   const [viewMode, setViewMode] = useState(paramReport ? 'detail' : 'list');
   const [currentReport, setCurrentReport] = useState(paramReport || null);
   
-  // New State: Filter Mode ('pending' or 'banned')
-  const [listFilter, setListFilter] = useState('pending'); 
+  // Tabs State: 'users', 'posts', 'comments'
+  const [selectedTab, setSelectedTab] = useState('users'); 
 
   // List State
   const [reportsList, setReportsList] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Profile State
+  // Detail State
   const [loadingUser, setLoadingUser] = useState(false);
+  const [commentsList, setCommentsList] = useState([]); 
+  const [postData, setPostData] = useState(null); 
+
   const [userInfo, setUserInfo] = useState({
       username: 'Loading...',
       bio: '...',
@@ -74,84 +78,101 @@ export default function ManageAccountScreen({ navigation, route }) {
   // 1. INITIAL LOAD
   useEffect(() => {
     fetchData();
-  }, [listFilter]); // Re-fetch when tab changes
+  }, [selectedTab]); 
 
   // 2. HANDLE INCOMING PARAMS
   useEffect(() => {
     if (paramReport) {
         setCurrentReport(paramReport);
         setViewMode('detail');
+        if(paramReport.reportType === 'comment') setSelectedTab('comments');
+        else if(paramReport.reportType === 'post') setSelectedTab('posts');
+        else setSelectedTab('users');
     }
   }, [paramReport]);
 
-  // 3. LOAD USER ON DETAIL VIEW
+  // 3. LOAD DETAILS
   useEffect(() => {
     if (viewMode === 'detail' && currentReport) {
+        // Only load user profile if NOT a comment (Comment view hides profile)
         fetchUserDetails(currentReport);
+        
+        // If comment, fetch context
+        if (currentReport.reportType === 'comment') {
+            fetchCommentContext(currentReport);
+        }
     }
   }, [viewMode, currentReport]);
 
   // --- DATA FETCHING ---
   const fetchData = async () => {
     setLoadingList(true);
-    if (listFilter === 'pending') {
-        await fetchReportsList();
-    } else {
-        await fetchBannedUsers();
+    setReportsList([]); 
+    
+    if (selectedTab === 'users') {
+        await fetchUsersTab();
+    } else if (selectedTab === 'posts') {
+        await fetchPostsTab();
+    } else if (selectedTab === 'comments') {
+        await fetchCommentsTab();
     }
   };
 
-  const fetchReportsList = async () => {
+  // 1. FETCH USERS
+  const fetchUsersTab = async () => {
     try {
-      const postsQuery = query(collection(db, 'report'), where('status', '==', 'pending'));
-      const usersQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
+        const reportsQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
+        const bannedQuery = query(collection(db, 'users'), where('active', '==', false));
 
-      const [postSnap, userSnap] = await Promise.all([ getDocs(postsQuery), getDocs(usersQuery) ]);
+        const [reportsSnap, bannedSnap] = await Promise.all([getDocs(reportsQuery), getDocs(bannedQuery)]);
 
-      const posts = postSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'post' }));
-      const users = userSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'user' }));
+        const reportedUsers = reportsSnap.docs.map(doc => ({ 
+            id: doc.id, ...doc.data(), reportType: 'user', isBannedUser: false
+        }));
 
-      const allData = [...posts, ...users].sort((a, b) => {
-          const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(0);
-          const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(0);
-          return dateB - dateA;
-      });
-
-      setReportsList(allData);
-    } catch (error) {
-      console.error('Error fetching reports:', error);
-    } finally {
-      setLoadingList(false);
-      setRefreshing(false);
-    }
-  };
-
-  const fetchBannedUsers = async () => {
-    try {
-        // Query users where isBanned == true
-        const q = query(collection(db, 'users'), where('isBanned', '==', true));
-        const snapshot = await getDocs(q);
-        
-        // Map them to look like report objects so we can reuse the UI
-        const bannedUsers = snapshot.docs.map(doc => {
+        const bannedUsers = bannedSnap.docs.map(doc => {
             const data = doc.data();
             return {
-                id: doc.id, // User ID as Report ID
-                reportType: 'user', // Treat as user report
-                reported_user_id: doc.id, // Vital for fetching details
-                reported_user_name: data.username || data.display_name || "Unknown",
-                reason: "Account Suspended", // Placeholder reason
-                created_at: data.bannedAt || null // Use ban date
+                id: doc.id, reportType: 'user', reported_user_id: doc.id,
+                reported_user_name: data.username || "Unknown",
+                reason: "Account Suspended", created_at: data.bannedAt || null,
+                isBannedUser: true
             };
         });
 
-        setReportsList(bannedUsers);
-    } catch (error) {
-        console.error('Error fetching banned users:', error);
-    } finally {
-        setLoadingList(false);
-        setRefreshing(false);
-    }
+        const allUsers = [...reportedUsers, ...bannedUsers].sort((a, b) => {
+            const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(0);
+            const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(0);
+            return dateB - dateA;
+        });
+        setReportsList(allUsers);
+    } catch (error) { console.error(error); } finally { setLoadingList(false); setRefreshing(false); }
+  };
+
+  // 2. FETCH POSTS
+  const fetchPostsTab = async () => {
+    try {
+        const q = query(collection(db, 'report'), where('status', '==', 'pending'));
+        const snapshot = await getDocs(q);
+        const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'post' }));
+        posts.sort((a, b) => (b.created_at?.toDate() || 0) - (a.created_at?.toDate() || 0));
+        setReportsList(posts);
+    } catch (error) { console.error(error); } finally { setLoadingList(false); setRefreshing(false); }
+  };
+
+  // 3. FETCH COMMENTS
+  const fetchCommentsTab = async () => {
+    try {
+        const q = query(collection(db, 'reported_comments'), where('status', '==', 'pending'));
+        const snapshot = await getDocs(q);
+        const comments = snapshot.docs.map(doc => ({ 
+            id: doc.id, ...doc.data(), reportType: 'comment',
+            reason: doc.data().reason || "Reported Comment",
+            snapshot_description: doc.data().commentText || doc.data().text || "Unavailable"
+        }));
+        comments.sort((a, b) => (b.created_at?.toDate() || 0) - (a.created_at?.toDate() || 0));
+        setReportsList(comments);
+    } catch (error) { console.error(error); } finally { setLoadingList(false); setRefreshing(false); }
   };
 
   const fetchUserDetails = async (reportData) => {
@@ -159,55 +180,93 @@ export default function ManageAccountScreen({ navigation, route }) {
     try {
         let ownerId = reportData.reported_user_id; 
         
-        if (reportData.reportType !== 'user') {
-            const targetId = reportData.reported_clothes_id || reportData.post_id || reportData.clothes_id;
-            
+        if (reportData.reportType === 'post') {
+            const targetId = reportData.reported_clothes_id || reportData.post_id;
             if (targetId) {
                 let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId));
-                if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'clothes', targetId));
-                if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'userImages', targetId));
-
-                if (postSnap.exists()) {
-                    const postData = postSnap.data();
-                    if (!ownerId) {
-                        ownerId = postData.ownerUid || postData.userId || postData.uid;
-                    }
-                } else {
-                    if (!ownerId) {
-                        setUserInfo(prev => ({ ...prev, username: 'Post Deleted / Unknown User', bio: 'Item removed.' }));
-                        return;
-                    }
-                }
+                if (postSnap.exists()) ownerId = postSnap.data().ownerUid;
             }
+        } else if (reportData.reportType === 'comment') {
+             ownerId = reportData.commentAuthorId || reportData.authorId || reportData.reported_user_id;
         }
 
         if (ownerId) {
             let userSnap = await getDoc(doc(db, 'users', ownerId));
-            
             if (userSnap.exists()) {
                 const userData = userSnap.data();
                 setUserInfo({
-                    username: userData.username || userData.display_name || 'No Name',
-                    bio: userData.bio || 'No bio available',
+                    username: userData.username || 'No Name',
+                    bio: userData.bio || 'No bio',
                     location: userData.location || 'Singapore',
                     rating: userData.rating || 0.0,
                     reviewCount: userData.reviewCount || 0,
-                    posts: Array.isArray(userData.posts) ? userData.posts.length : (userData.posts || 0),
-                    followers: Array.isArray(userData.followers) ? userData.followers.length : (userData.followers || 0),
-                    following: Array.isArray(userData.following) ? userData.following.length : (userData.following || 0),
+                    posts: Array.isArray(userData.posts) ? userData.posts.length : 0,
+                    followers: Array.isArray(userData.followers) ? userData.followers.length : 0,
+                    following: Array.isArray(userData.following) ? userData.following.length : 0,
                     photoURL: userData.photoURL || null,
                     ownerUid: ownerId,
-                    isBanned: userData.isBanned || false 
+                    isBanned: userData.active === false || userData.isBanned === true
                 });
             } else {
                  setUserInfo(prev => ({ ...prev, username: 'User Not Found', bio: 'Account might be deleted.' }));
             }
         }
-    } catch (error) {
-        console.error("Error details:", error);
-    } finally {
-        setLoadingUser(false);
-    }
+    } catch (error) { console.error(error); } finally { setLoadingUser(false); }
+  };
+
+  // Fetch Comment Context + Look up users for photos
+  const fetchCommentContext = async (report) => {
+      try {
+          let postId = report.postId || report.post_id;
+          if (!postId && report.targetId) {
+              const commentSnap = await getDoc(doc(db, 'comments', report.targetId));
+              if (commentSnap.exists()) postId = commentSnap.data().postId;
+          }
+
+          if (postId) {
+              let postSnap = await getDoc(doc(db, 'wardrobe-plug-fyp/user/images', postId));
+              if (!postSnap.exists()) postSnap = await getDoc(doc(db, 'clothes', postId));
+              
+              if (postSnap.exists()) {
+                  const rawPostData = postSnap.data();
+                  let finalPostData = { ...rawPostData };
+
+                  if (rawPostData.ownerUid) {
+                      const ownerSnap = await getDoc(doc(db, 'users', rawPostData.ownerUid));
+                      if (ownerSnap.exists()) {
+                          finalPostData.userPhotoURL = ownerSnap.data().photoURL;
+                          finalPostData.userName = ownerSnap.data().username || finalPostData.userName;
+                      }
+                  }
+                  setPostData(finalPostData);
+                  
+                  // Fetch Comments & Enrich with User Photos
+                  const commentsQ = query(collection(db, 'comments'), where('postId', '==', postId));
+                  const commentsSnap = await getDocs(commentsQ);
+                  
+                  const threadPromises = commentsSnap.docs.map(async (c) => {
+                      const cData = c.data();
+                      let userImg = cData.userPhotoURL || cData.photoURL;
+                      const uid = cData.userId || cData.authorId || cData.uid;
+
+                      // If photo missing in comment, fetch from User collection
+                      if (!userImg && uid) {
+                          try {
+                              const uSnap = await getDoc(doc(db, 'users', uid));
+                              if (uSnap.exists()) {
+                                  userImg = uSnap.data().photoURL;
+                              }
+                          } catch (e) { /* ignore */ }
+                      }
+                      return { id: c.id, ...cData, userPhotoURL: userImg };
+                  });
+
+                  const thread = await Promise.all(threadPromises);
+                  thread.sort((a, b) => (a.createdAt?.toDate?.() || 0) - (b.createdAt?.toDate?.() || 0));
+                  setCommentsList(thread);
+              }
+          }
+      } catch (error) { console.error(error); }
   };
 
   const handleRefresh = () => {
@@ -215,7 +274,6 @@ export default function ManageAccountScreen({ navigation, route }) {
     fetchData();
   };
 
-  // --- ACTIONS ---
   const handleReviewItem = (item) => {
       setCurrentReport(item);
       setViewMode('detail');
@@ -225,6 +283,8 @@ export default function ManageAccountScreen({ navigation, route }) {
       if (viewMode === 'detail' && !paramReport) {
           setViewMode('list');
           setCurrentReport(null);
+          setPostData(null);
+          setCommentsList([]);
       } else {
           navigation.goBack();
       }
@@ -233,114 +293,69 @@ export default function ManageAccountScreen({ navigation, route }) {
   const handleReportAction = async () => {
     if (!currentReport) return;
     
-    // If viewing a banned user directly, handle slightly differently
-    const isDirectBanView = listFilter === 'banned';
-    
     const isUserReport = currentReport.reportType === 'user';
-    const targetId = currentReport.reported_clothes_id || currentReport.post_id || currentReport.clothes_id;
-    const collectionName = isUserReport ? 'reported_users' : 'report';
+    const isCommentReport = currentReport.reportType === 'comment';
+    const isBannedItem = currentReport.isBannedUser; 
 
-    const banActionText = userInfo.isBanned ? "UNBAN USER" : "BAN USER (Suspend)";
-    
+    const targetId = currentReport.reported_clothes_id || currentReport.post_id || currentReport.commentId || currentReport.targetId || currentReport.id;
+    let collectionName = isUserReport ? 'reported_users' : isCommentReport ? 'reported_comments' : 'report';
+    let deleteActionText = isUserReport ? (userInfo.isBanned ? "UNBAN USER" : "BAN USER") : isCommentReport ? "DELETE COMMENT" : "DELETE POST";
+
     Alert.alert(
       "Take Action",
-      isUserReport ? "Manage User Account" : "Manage Reported Post",
+      "Choose an action for this report.",
       [
         { text: "Cancel", style: "cancel" },
-        
-        // Option 1: Dismiss (Only show if it's a pending report)
-        !isDirectBanView && { 
-            text: "Dismiss (Ignore)", 
+        !isBannedItem && { 
+            text: "Resolve Report", 
             onPress: async () => {
                 try {
-                    await updateDoc(doc(db, collectionName, currentReport.id), {
-                        status: 'resolved',
-                        resolution: 'dismissed', 
-                        resolved_at: serverTimestamp()
-                    });
+                    await updateDoc(doc(db, collectionName, currentReport.id), { status: 'resolved', resolution: 'dismissed', resolved_at: serverTimestamp() });
                     finalizeAction("Report dismissed.");
-                } catch (e) {
-                    Alert.alert("Error", "Could not dismiss report.");
-                }
+                } catch (e) { Alert.alert("Error", "Could not dismiss."); }
             } 
         },
-
-        // Option 2: Ban / Unban / Delete
         { 
-            text: isUserReport ? banActionText : "DELETE POST", 
+            text: deleteActionText, 
             style: "destructive", 
             onPress: async () => {
                 try {
                     if (isUserReport) {
-                        // --- BAN/UNBAN LOGIC ---
                         if (userInfo.ownerUid) {
-                            const newStatus = !userInfo.isBanned;
-                            
-                            // 1. Toggle Ban on User
+                            const newStatus = !userInfo.isBanned; 
                             await updateDoc(doc(db, 'users', userInfo.ownerUid), {
-                                isBanned: newStatus,
-                                bannedAt: newStatus ? serverTimestamp() : null
+                                active: !newStatus, isBanned: newStatus, bannedAt: newStatus ? serverTimestamp() : null
                             });
-
-                            // 2. If it came from a report ticket, resolve it
-                            if (!isDirectBanView) {
+                            if (!isBannedItem) {
                                 await updateDoc(doc(db, collectionName, currentReport.id), {
-                                    status: 'resolved',
-                                    resolution: newStatus ? 'banned' : 'unbanned',
-                                    resolved_at: serverTimestamp()
+                                    status: 'resolved', resolution: newStatus ? 'banned' : 'unbanned', resolved_at: serverTimestamp()
                                 });
                             }
-
-                            // 3. Update Local State & UI
                             setUserInfo(prev => ({...prev, isBanned: newStatus}));
-                            
-                            const msg = newStatus ? "User suspended." : "User restored.";
-                            
-                            // If we are in "Banned List" mode and we just Unbanned them, they should disappear from list
-                            if (isDirectBanView && !newStatus) {
-                                finalizeAction(msg);
-                            } else {
-                                Alert.alert("Success", msg);
-                            }
-
-                        } else {
-                            Alert.alert("Error", "User not found");
+                            finalizeAction(newStatus ? "User suspended." : "User restored.");
                         }
+                    } else if (isCommentReport) {
+                        await deleteDoc(doc(db, 'comments', targetId)).catch(()=>{}); 
+                        await updateDoc(doc(db, collectionName, currentReport.id), { status: 'resolved', resolution: 'deleted', resolved_at: serverTimestamp() });
+                        finalizeAction("Comment deleted.");
                     } else {
-                        // --- DELETE POST LOGIC ---
                         if (targetId) {
                             await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', targetId)).catch(()=>{});
                             await deleteDoc(doc(db, 'clothes', targetId)).catch(()=>{});
-                            await deleteDoc(doc(db, 'userImages', targetId)).catch(()=>{});
                         }
-                        
-                        await updateDoc(doc(db, collectionName, currentReport.id), {
-                            status: 'resolved',
-                            resolution: 'deleted',
-                            resolved_at: serverTimestamp()
-                        });
-                        finalizeAction("Post permanently deleted.");
+                        await updateDoc(doc(db, collectionName, currentReport.id), { status: 'resolved', resolution: 'deleted', resolved_at: serverTimestamp() });
+                        finalizeAction("Post deleted.");
                     }
-                } catch (error) {
-                    console.error(error);
-                    Alert.alert("Error", "Action failed.");
-                }
+                } catch (error) { Alert.alert("Error", "Action failed."); }
             } 
         }
-      ].filter(Boolean) // Filter out false values
+      ].filter(Boolean)
     );
   };
 
   const finalizeAction = (message) => {
-      // Remove item from current list
       setReportsList(prev => prev.filter(r => r.id !== currentReport.id));
-      
-      Alert.alert("Success", message, [
-          { text: "OK", onPress: () => {
-              if (paramReport) navigation.goBack();
-              else setViewMode('list'); 
-          }}
-      ]);
+      Alert.alert("Success", message, [{ text: "OK", onPress: () => { if (paramReport) navigation.goBack(); else setViewMode('list'); }}]);
   };
 
   const handleNavigation = (tab) => {
@@ -353,43 +368,57 @@ export default function ManageAccountScreen({ navigation, route }) {
 
   // --- RENDER HELPERS ---
   const renderListItem = ({ item }) => {
-    const isBannedItem = listFilter === 'banned';
-    
+    const isUserTab = selectedTab === 'users';
+    const isPostTab = selectedTab === 'posts';
+    const isCommentTab = selectedTab === 'comments';
+
+    let headerText = "Report";
+    if (isUserTab) headerText = item.isBannedUser ? "SUSPENDED" : "User Report";
+    if (isPostTab) headerText = "Post Report";
+    if (isCommentTab) headerText = "Comment Report";
+
+    let subjectLabel = "Subject: ";
+    let mainText = "Unknown";
+    let subInfo = "";
+
+    if (isUserTab) {
+        subjectLabel = "User: ";
+        mainText = item.reported_user_name || "Unknown User";
+        subInfo = item.isBannedUser ? "Account currently suspended." : `Reason: ${item.reason}`;
+    } else if (isPostTab) {
+        subjectLabel = "Post Owner: ";
+        mainText = item.reported_user_name || "Unknown User";
+        subInfo = `Reason: ${item.reason}`;
+    } else if (isCommentTab) {
+        subjectLabel = "Commenter: ";
+        mainText = item.targetOwnerName || item.commentAuthorName || item.reported_user_name || "Unknown User";
+        subInfo = `Reason: ${item.reason}`; 
+    }
+
     return (
-        <View style={[styles.reportCard, isBannedItem && { borderColor: ALERT_RED, borderWidth: 1 }]}>
+        <View style={[styles.reportCard, item.isBannedUser && { borderColor: ALERT_RED, borderWidth: 1 }]}>
             <View style={styles.cardHeader}>
                 <View style={{flexDirection:'row', alignItems:'center', gap: 6}}>
-                    <Icon name={item.reportType === 'user' ? 'person' : 'alert-circle'} size={16} color={ALERT_RED} />
-                    <Text style={styles.flaggedLabel}>
-                        {isBannedItem ? "SUSPENDED USER" : (item.reportType === 'user' ? 'User Report' : "Reported Content")}
-                    </Text>
+                    <Icon name={isUserTab ? 'person' : (isCommentTab ? 'chatbubble' : 'alert-circle')} size={16} color={ALERT_RED} />
+                    <Text style={styles.flaggedLabel}>{headerText}</Text>
                 </View>
-                <Text style={styles.dateText}>
-                    {item.created_at?.toDate ? item.created_at.toDate().toLocaleDateString() : ''}
-                </Text>
+                <Text style={styles.dateText}>{item.created_at?.toDate ? item.created_at.toDate().toLocaleDateString() : ''}</Text>
             </View>
             <View style={styles.cardContent}>
-                {item.reportType !== 'user' && !isBannedItem && (
-                    item.snapshot_image_url ? (
-                        <Image source={{ uri: item.snapshot_image_url }} style={styles.thumbnail} resizeMode="cover" />
-                    ) : (
-                        <View style={[styles.thumbnail, styles.placeholderThumb]}>
-                            <Icon name="image" size={20} color={colors.gray}/>
-                        </View>
-                    )
+                {isPostTab && (
+                    item.snapshot_image_url ? <Image source={{ uri: item.snapshot_image_url }} style={styles.thumbnail} resizeMode="cover" /> : <View style={[styles.thumbnail, styles.placeholderThumb]}><Icon name="image" size={20} color={colors.gray}/></View>
                 )}
-                
                 <View style={styles.textDetails}>
-                    <Text style={styles.descriptionText} numberOfLines={2}>
-                        <Text style={{fontWeight: 'bold'}}>{isBannedItem ? 'User: ' : 'Subject: '}</Text>
-                        {item.reported_user_name || "Unknown"}
-                    </Text>
-                    <Text style={[styles.idText, {marginTop: 2}]}>
-                        {isBannedItem ? "Account currently blocked." : `Reason: ${item.reason}`}
-                    </Text>
+                     <Text style={styles.descriptionText} numberOfLines={2}>
+                        <Text style={{fontWeight: 'bold'}}>{subjectLabel}</Text>
+                        {mainText}
+                     </Text>
+                     <Text style={[styles.idText, {marginTop: 2}]} numberOfLines={2}>
+                        {subInfo}
+                     </Text>
                 </View>
                 <TouchableOpacity style={styles.reviewButton} onPress={() => handleReviewItem(item)}>
-                    <Text style={styles.reviewButtonText}>{isBannedItem ? "Manage" : "Review"}</Text>
+                    <Text style={styles.reviewButtonText}>{item.isBannedUser ? "Manage" : "Review"}</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -399,74 +428,147 @@ export default function ManageAccountScreen({ navigation, route }) {
   const renderUserDetail = () => (
     <View style={styles.adminPostView}>
         <View style={[styles.postHeader, {borderBottomWidth: 0, marginBottom: 5}]}>
-            <Text style={{fontSize: 18, fontWeight: 'bold', color: ALERT_RED}}>
-                {listFilter === 'banned' ? "MANAGE USER" : "USER REPORT"}
-            </Text>
+            <Text style={{fontSize: 18, fontWeight: 'bold', color: ALERT_RED}}>MANAGE USER</Text>
             <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={handleReportAction}>
                 <Icon name="hammer-outline" size={24} color={colors.dark} />
             </TouchableOpacity>
         </View>
-
         <View style={[styles.userReportCard, userInfo.isBanned && styles.bannedCard]}>
-            {userInfo.isBanned && (
-                <View style={styles.bannedBadge}>
-                    <Text style={styles.bannedText}>SUSPENDED</Text>
-                </View>
-            )}
-
+            {userInfo.isBanned ? <View style={styles.bannedBadge}><Text style={styles.bannedText}>SUSPENDED</Text></View> : null}
             <Icon name="person-circle" size={60} color={userInfo.isBanned ? '#ccc' : colors.gray} />
             <Text style={{fontSize: 20, fontWeight:'bold', marginTop:10, color: colors.dark}}>{userInfo.username}</Text>
             <Text style={{color:colors.gray, marginBottom: 20}}>{userInfo.ownerUid}</Text>
-            
             <View style={{width:'100%', padding: 15, backgroundColor:'#FFEBEE', borderRadius:8}}>
-                <Text style={{color:ALERT_RED, fontWeight:'bold', marginBottom:5, fontSize: 12}}>STATUS:</Text>
+                <Text style={{color:ALERT_RED, fontWeight:'bold', marginBottom:5, fontSize: 12}}>STATUS / REASON:</Text>
                 <Text style={{fontSize:16, color: colors.dark}}>
-                    {userInfo.isBanned ? "This user is currently banned." : (currentReport?.reason || "Active Account")}
+                    {userInfo.isBanned ? "This user is suspended." : (currentReport?.reason || "Reported for Inappropriate Behavior")}
                 </Text>
             </View>
         </View>
     </View>
   );
 
-  const renderPostDetail = () => (
-    <View style={styles.adminPostView}>
-        <View style={styles.postHeader}>
-            <View style={styles.smallAvatar}>
-                {userInfo.photoURL ? (
-                    <Image source={{ uri: userInfo.photoURL }} style={{ width: 30, height: 30, borderRadius: 15 }} /> 
+  const renderContentDetail = () => {
+    // If comment, show context and conversation
+    if (currentReport?.reportType === 'comment') {
+        const isMissing = !postData;
+        return (
+            <View style={styles.adminPostView}>
+                <View style={styles.postHeader}>
+                    <Text style={{fontSize: 16, fontWeight: 'bold', color: colors.dark}}>Context: Original Post</Text>
+                </View>
+                <View style={[styles.reportCard, {marginBottom: 20}]}>
+                    {isMissing ? (
+                        <View style={[styles.postImage, styles.postImagePlaceholder]}><Text style={{color:colors.gray}}>Post Unavailable</Text></View>
+                    ) : (
+                        <>
+                            <View style={{flexDirection:'row', alignItems:'center', marginBottom: 8}}>
+                                {postData.userPhotoURL ? (
+                                    <Image source={{ uri: postData.userPhotoURL }} style={{width: 30, height: 30, borderRadius: 15, marginRight: 8}} />
+                                ) : (
+                                    <View style={{marginRight: 8}}>
+                                        <Icon name="person-circle" size={32} color={colors.gray} />
+                                    </View>
+                                )}
+                                <Text style={{fontWeight: 'bold', color: colors.dark}}>{postData.userName}</Text>
+                            </View>
+                            <Image source={{ uri: postData.url }} style={{width: '100%', height: 200, borderRadius: 8, backgroundColor: '#eee'}} resizeMode="cover" />
+                            <Text style={{marginTop: 8, color: colors.dark}}>{postData.description || postData.title}</Text>
+                        </>
+                    )}
+                </View>
+                <View style={styles.postHeader}>
+                    <Text style={{fontSize: 16, fontWeight: 'bold', color: colors.dark}}>Conversation</Text>
+                    <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={handleReportAction}>
+                        <Icon name="hammer-outline" size={24} color={ALERT_RED} />
+                    </TouchableOpacity>
+                </View>
+                {commentsList.length === 0 ? (
+                    <View style={styles.reportedWrapper}>
+                        <View style={styles.reportedHeader}>
+                            <Icon name="alert-circle" size={14} color={ALERT_RED} />
+                            <Text style={styles.reportReasonLabel}>Reported: {currentReport.reason}</Text>
+                        </View>
+                        <View style={[styles.commentBubble, {backgroundColor: '#fff'}]}>
+                            <Text style={styles.commentUser}>{userInfo.username}</Text>
+                            <Text style={styles.commentText}>{currentReport.snapshot_description}</Text>
+                        </View>
+                    </View>
                 ) : (
-                    <Icon name="person" size={16} color="#fff"/>
+                    commentsList.map(comment => {
+                        const isReported = comment.id === currentReport.targetId || comment.id === currentReport.commentId;
+                        const userImg = comment.userPhotoURL || comment.photoURL;
+                        
+                        // [UPDATED] Avatar rendered directly without grey background container
+                        const AvatarView = userImg ? (
+                            <Image source={{ uri: userImg }} style={{ width: 32, height: 32, borderRadius: 16, marginRight: 10 }} />
+                        ) : (
+                            <View style={{ marginRight: 10 }}>
+                                <Icon name="person-circle" size={32} color={colors.gray} />
+                            </View>
+                        );
+
+                        if (isReported) {
+                            return (
+                                <View key={comment.id} style={styles.reportedWrapper}>
+                                    <View style={styles.reportedHeader}>
+                                        <Icon name="alert-circle" size={14} color={ALERT_RED} />
+                                        <Text style={styles.reportReasonLabel}>Reported: {currentReport.reason}</Text>
+                                    </View>
+                                    <View style={{flexDirection: 'row', alignItems: 'flex-start'}}>
+                                        {AvatarView}
+                                        <View style={[styles.commentBubble, {backgroundColor: '#fff'}]}>
+                                            <Text style={styles.commentUser}>{comment.userName || 'User'}</Text>
+                                            <Text style={styles.commentText}>{comment.text || comment.content}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            );
+                        } else {
+                            return (
+                                <View key={comment.id} style={styles.normalCommentRow}>
+                                    {AvatarView}
+                                    <View style={styles.commentBubble}>
+                                        <Text style={styles.commentUser}>{comment.userName || 'User'}</Text>
+                                        <Text style={styles.commentText}>{comment.text || comment.content}</Text>
+                                    </View>
+                                </View>
+                            );
+                        }
+                    })
                 )}
             </View>
-            <Text style={styles.postUsername}>{userInfo.username}</Text>
-            <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={handleReportAction}>
-                <Icon name="hammer-outline" size={24} color={colors.dark} />
-            </TouchableOpacity>
-        </View>
-        
-        {currentReport?.snapshot_image_url ? (
-            <Image source={{ uri: currentReport.snapshot_image_url }} style={styles.postImage} resizeMode="cover" />
-        ) : (
-            <View style={[styles.postImage, styles.postImagePlaceholder]}>
-                <Text style={{color:colors.gray}}>Image Unavailable</Text>
+        );
+    }
+
+    // Standard Post View
+    return (
+        <View style={styles.adminPostView}>
+            <View style={styles.postHeader}>
+                <View style={styles.smallAvatar}>
+                    {userInfo.photoURL ? <Image source={{ uri: userInfo.photoURL }} style={{ width: 30, height: 30, borderRadius: 15 }} /> : <Icon name="person" size={16} color="#fff"/> }
+                </View>
+                <Text style={styles.postUsername}>{userInfo.username}</Text>
+                <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={handleReportAction}>
+                    <Icon name="hammer-outline" size={24} color={colors.dark} />
+                </TouchableOpacity>
             </View>
-        )}
-        
-        <View style={styles.postFooter}>
-            <View style={{marginTop: 10, padding: 8, backgroundColor: '#FFEBEE', borderRadius: 4}}>
-                <Text style={{color: '#D32F2F', fontSize: 12, fontWeight:'bold'}}>
-                    REPORT REASON: {currentReport?.reason}
-                </Text>
-            </View>
-            {currentReport?.snapshot_description && (
-                <Text style={styles.captionText}>
-                    <Text style={{fontWeight: 'bold'}}>Caption: </Text>
-                    {currentReport.snapshot_description}
-                </Text>
+            {currentReport?.snapshot_image_url ? (
+                <Image source={{ uri: currentReport.snapshot_image_url }} style={styles.postImage} resizeMode="cover" />
+            ) : (
+                <View style={[styles.postImage, styles.postImagePlaceholder]}><Text style={{color:colors.gray}}>Image Unavailable</Text></View>
             )}
+            <View style={styles.postFooter}>
+                <View style={{marginTop: 10, padding: 8, backgroundColor: '#FFEBEE', borderRadius: 4}}>
+                    <Text style={{color: '#D32F2F', fontSize: 12, fontWeight:'bold'}}>REPORT REASON: {currentReport?.reason}</Text>
+                </View>
+                {currentReport?.snapshot_description && (
+                    <Text style={styles.captionText}><Text style={{fontWeight: 'bold'}}>Caption: </Text>{currentReport.snapshot_description}</Text>
+                )}
+            </View>
         </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -484,25 +586,20 @@ export default function ManageAccountScreen({ navigation, route }) {
         </View>
       </View>
 
-      {/* --- LIST FILTER TABS (Visible only in List Mode) --- */}
+      {/* --- TABS (LIST MODE ONLY) --- */}
       {viewMode === 'list' && (
           <View style={styles.filterTabs}>
-              <TouchableOpacity 
-                  style={[styles.filterTab, listFilter === 'pending' && styles.activeFilterTab]}
-                  onPress={() => setListFilter('pending')}
-              >
-                  <Text style={[styles.filterTabText, listFilter === 'pending' && styles.activeFilterText]}>
-                      Pending Reports
-                  </Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                  style={[styles.filterTab, listFilter === 'banned' && styles.activeFilterTab]}
-                  onPress={() => setListFilter('banned')}
-              >
-                  <Text style={[styles.filterTabText, listFilter === 'banned' && styles.activeFilterText]}>
-                      Banned Users
-                  </Text>
-              </TouchableOpacity>
+              {['users', 'posts', 'comments'].map(tab => (
+                  <TouchableOpacity 
+                      key={tab}
+                      style={[styles.filterTab, selectedTab === tab && styles.activeFilterTab]}
+                      onPress={() => setSelectedTab(tab)}
+                  >
+                      <Text style={[styles.filterTabText, selectedTab === tab && styles.activeFilterText]}>
+                          {tab === 'users' ? 'User Reports' : tab === 'posts' ? 'Reported Posts' : 'Reported Comments'}
+                      </Text>
+                  </TouchableOpacity>
+              ))}
           </View>
       )}
 
@@ -510,9 +607,7 @@ export default function ManageAccountScreen({ navigation, route }) {
       {viewMode === 'list' ? (
         // ---------------- LIST VIEW ----------------
         loadingList ? (
-            <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color={THEME_GREEN} />
-            </View>
+            <View style={styles.centerContainer}><ActivityIndicator size="large" color={THEME_GREEN} /></View>
         ) : (
             <FlatList
                 data={reportsList}
@@ -520,84 +615,64 @@ export default function ManageAccountScreen({ navigation, route }) {
                 keyExtractor={item => item.id}
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                    <RefreshControl refreshing={refreshing} onRefresh={() => {setRefreshing(true); fetchData();}} />
                 }
-                ListHeaderComponent={
-                    <View style={{ paddingBottom: 10 }}>
-                        <Text style={styles.sectionTitle}>
-                            {listFilter === 'pending' 
-                                ? `${reportsList.length} Pending Reports` 
-                                : `${reportsList.length} Suspended Accounts`}
-                        </Text>
-                        {reportsList.length === 0 && (
-                            <View style={styles.emptyState}>
-                                <Icon name="checkmark-circle" size={40} color={THEME_GREEN} />
-                                <Text style={styles.emptyText}>
-                                    {listFilter === 'pending' ? "No pending reports!" : "No suspended users."}
-                                </Text>
-                            </View>
-                        )}
+                ListEmptyComponent={
+                    <View style={styles.emptyState}>
+                        <Icon name="checkmark-circle" size={40} color={THEME_GREEN} />
+                        <Text style={styles.emptyText}>No items found in {selectedTab}.</Text>
                     </View>
                 }
             />
         )
       ) : (
-        // ---------------- DETAIL VIEW (PROFILE) ----------------
+        // ---------------- DETAIL VIEW ----------------
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            <View style={styles.profileSection}>
-              {loadingUser ? (
-                  <ActivityIndicator color={THEME_GREEN} style={{padding:20}} />
-              ) : (
-                <>
-                  <View style={styles.profileTopRow}>
-                    <View style={styles.profileImageContainer}>
-                        <View style={styles.profileImagePlaceholder}>
-                          {userInfo.photoURL ? (
-                              <Image source={{ uri: userInfo.photoURL }} style={{ width: 80, height: 80, borderRadius: 40 }} />
-                          ) : ( 
-                              <Icon name="person" size={40} color="#fff" /> 
-                          )}
+            
+            {/* Only show Profile Header if NOT a comment report */}
+            {currentReport?.reportType !== 'comment' && (
+                <View style={styles.profileSection}>
+                {loadingUser ? (
+                    <ActivityIndicator color={THEME_GREEN} style={{padding:20}} />
+                ) : (
+                    <>
+                    <View style={styles.profileTopRow}>
+                        <View style={styles.profileImageContainer}>
+                            <View style={styles.profileImagePlaceholder}>
+                            {userInfo.photoURL ? <Image source={{ uri: userInfo.photoURL }} style={{ width: 80, height: 80, borderRadius: 40 }} /> : <Icon name="person" size={40} color="#fff" /> }
+                            </View>
+                        </View>
+                        <View style={styles.statsRow}>
+                        <View style={styles.statItem}><Text style={styles.statNumber}>{userInfo.posts}</Text><Text style={styles.statLabel}>posts</Text></View>
+                        <View style={styles.statItem}><Text style={styles.statNumber}>{userInfo.followers}</Text><Text style={styles.statLabel}>followers</Text></View>
+                        <View style={styles.statItem}><Text style={styles.statNumber}>{userInfo.following}</Text><Text style={styles.statLabel}>following</Text></View>
                         </View>
                     </View>
-                    <View style={styles.statsRow}>
-                      <View style={styles.statItem}>
-                          <Text style={styles.statNumber}>{userInfo.posts}</Text>
-                          <Text style={styles.statLabel}>posts</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                          <Text style={styles.statNumber}>{userInfo.followers}</Text>
-                          <Text style={styles.statLabel}>followers</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                          <Text style={styles.statNumber}>{userInfo.following}</Text>
-                          <Text style={styles.statLabel}>following</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <Text style={styles.userName}>
-                      {userInfo.username} 
-                      {userInfo.isBanned && <Text style={{color: ALERT_RED, fontSize: 12}}> (SUSPENDED)</Text>}
-                  </Text>
-                  <Text style={styles.userBio}>{userInfo.bio}</Text>
-                  <View style={styles.locationContainer}>
-                    <Icon name="location-outline" size={16} color={colors.dark} />
-                    <Text style={styles.locationText}>{userInfo.location}</Text>
-                  </View>
-                </>
-              )}
-            </View>
-
-            <View style={styles.tabsContainer}>
-                <View style={[styles.tab, styles.activeTab]}>
-                    <Icon name="alert-circle-outline" size={20} color={colors.dark} />
-                    <Text style={{fontFamily: fonts.header, fontWeight:'700', marginLeft: 5}}>
-                        {currentReport?.reportType === 'user' || listFilter === 'banned' ? 'Account Details' : 'Reported Content'}
+                    <Text style={styles.userName}>
+                        {userInfo.username} 
+                        {userInfo.isBanned ? <Text style={{color: ALERT_RED, fontSize: 12}}> (SUSPENDED)</Text> : null}
                     </Text>
+                    <Text style={styles.userBio}>{userInfo.bio}</Text>
+                    <View style={styles.locationContainer}><Icon name="location-outline" size={16} color={colors.dark} /><Text style={styles.locationText}>{userInfo.location}</Text></View>
+                    </>
+                )}
                 </View>
-            </View>
+            )}
+
+            {/* Only show Tabs if NOT a comment report */}
+            {currentReport?.reportType !== 'comment' && (
+                <View style={styles.tabsContainer}>
+                    <View style={[styles.tab, styles.activeTab]}>
+                        <Icon name="alert-circle-outline" size={20} color={colors.dark} />
+                        <Text style={{fontFamily: fonts.header, fontWeight:'700', marginLeft: 5}}>
+                            {(currentReport?.reportType === 'user' || currentReport?.isBannedUser) ? 'Account Details' : 'Content Details'}
+                        </Text>
+                    </View>
+                </View>
+            )}
 
             <View style={styles.postsContainer}>
-                {(currentReport?.reportType === 'user' || listFilter === 'banned') ? renderUserDetail() : renderPostDetail()}
+                {(currentReport?.reportType === 'user' || currentReport?.isBannedUser) ? renderUserDetail() : renderContentDetail()}
             </View>
         </ScrollView>
       )}
@@ -650,13 +725,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: THEME_GREEN, 
   },
-  headerIcons: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  headerIcon: {
-    padding: 4,
-  },
   backButton: {
     padding: 4,
   },
@@ -664,23 +732,17 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingBottom: 80,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.dark,
-    marginBottom: 16,
-  },
-  
-  // --- FILTER TABS ---
   filterTabs: {
     flexDirection: 'row',
     paddingHorizontal: spacing.md,
     marginBottom: 10,
     marginTop: 10,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
   },
   filterTab: {
-    marginRight: 15,
-    paddingBottom: 5,
+    marginRight: 20,
+    paddingBottom: 10,
   },
   activeFilterTab: {
     borderBottomWidth: 2,
@@ -695,8 +757,6 @@ const styles = StyleSheet.create({
     color: THEME_GREEN,
     fontWeight: 'bold',
   },
-
-  // --- LIST CARD STYLES ---
   reportCard: {
     backgroundColor: FLAG_BG,
     borderRadius: 8,
@@ -767,8 +827,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.dark,
   },
-
-  // --- PROFILE VIEW STYLES ---
   profileSection: {
     backgroundColor: '#fff',
     paddingVertical: spacing.md,
@@ -827,7 +885,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-start'
   },
   locationText: {
     fontSize: 14,
@@ -899,8 +957,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.dark,
   },
-  
-  // --- USER REPORT CARD STYLES ---
+  emptyState: {
+    alignItems: 'center',
+    marginTop: 40,
+    gap: 10,
+  },
+  emptyText: {
+    color: THEME_GREEN,
+    fontWeight: '600',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commentBubble: {
+    backgroundColor: COMMENT_BG,
+    padding: 10,
+    borderRadius: 12,
+    flex: 1,
+  },
+  commentUser: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.dark,
+    marginBottom: 2,
+  },
+  commentText: {
+    fontSize: 14,
+    color: colors.dark,
+  },
+  reportedWrapper: {
+    marginBottom: 15,
+    backgroundColor: FLAG_BG,
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ffe082',
+  },
+  reportedHeader: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reportReasonLabel: {
+    fontSize: 11,
+    color: ALERT_RED,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  normalCommentRow: {
+    flexDirection: 'row',
+    marginBottom: 15,
+    gap: 10,
+  },
   userReportCard: {
     backgroundColor: '#FAFAFA',
     borderRadius: 12,
@@ -927,35 +1050,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: 'bold',
-  },
-
-  // --- EMPTY STATE ---
-  emptyState: {
-    alignItems: 'center',
-    marginTop: 40,
-    gap: 10,
-  },
-  emptyText: {
-    color: THEME_GREEN,
-    fontWeight: '600',
-  },
-
-  // --- NAVBAR ---
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

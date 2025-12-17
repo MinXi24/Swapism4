@@ -167,7 +167,7 @@ export default function HomeScreen({ navigation }) {
     try {
       setLoading(true);
 
-      // 1. [NEW] Fetch Blocked Users List First
+      // 1. Fetch Blocked Users List First
       let blockedIds = [];
       if (currentUser) {
         const blockedSnap = await getDocs(collection(db, 'users', currentUser.uid, 'blocked_users'));
@@ -184,33 +184,41 @@ export default function HomeScreen({ navigation }) {
         querySnapshot.docs.map(async (docSnapshot) => {
           const postData = docSnapshot.data();
 
-          // Check if owner is deleted, inactive, or invalid
-          let ownerIsInvalid = false;
+          // [CRITICAL UPDATE] Filter Banned / Invalid Users
           if (postData.ownerUid) {
             try {
               const userDocRef = doc(db, 'users', postData.ownerUid);
               const userDoc = await getDoc(userDocRef);
+              
               if (!userDoc.exists()) {
-                ownerIsInvalid = true;
-              } else {
-                const userData = userDoc.data();
-                if (
-                  userData.deleted === true ||
-                  userData.active === false ||
-                  !userData.username ||
-                  typeof userData.username !== 'string' ||
-                  userData.username.trim() === '' ||
-                  (userData.role && userData.role.toLowerCase() === 'admin') ||
-                  (userData.username && userData.username.toLowerCase().includes('admin'))
-                ) {
-                  ownerIsInvalid = true;
-                }
+                return null; // User doesn't exist
               }
+
+              const userData = userDoc.data();
+
+              // --- BANNED CHECK ---
+              // If active is false OR isBanned is true, HIDE POST
+              if (userData.active === false || userData.isBanned === true) {
+                  return null;
+              }
+              // --------------------
+
+              // Check other invalid states
+              if (
+                userData.deleted === true ||
+                !userData.username ||
+                (userData.role && userData.role.toLowerCase() === 'admin') ||
+                (userData.username && userData.username.toLowerCase().includes('admin'))
+              ) {
+                return null;
+              }
+
             } catch (_error) {
-              ownerIsInvalid = true;
+              return null; // Error checking user, play safe and hide
             }
+          } else {
+              return null; // No owner UID
           }
-          if (ownerIsInvalid) return null;
           
           const likesQuery = query(
             collection(db, 'likes'),
@@ -269,12 +277,12 @@ export default function HomeScreen({ navigation }) {
         })
       );
       
-      // Remove nulls (posts from deleted/inactive/invalid owners)
+      // Remove nulls (posts from banned/deleted/blocked owners)
       const validPosts = postsData.filter(Boolean);
 
       // Filter out private posts AND BLOCKED USERS
       const filteredPosts = validPosts.filter(post => {
-        // [NEW] Hide post if the owner is blocked
+        // Hide post if the owner is blocked by current user
         if (blockedIds.includes(post.ownerUid)) return false;
 
         // Show post if it's not private
@@ -306,7 +314,7 @@ export default function HomeScreen({ navigation }) {
         return;
       }
 
-      // [NEW] Fetch Blocked Users for Suggestions too
+      // Fetch Blocked Users for Suggestions too
       let blockedIds = [];
       const blockedSnap = await getDocs(collection(db, 'users', currentUser.uid, 'blocked_users'));
       blockedIds = blockedSnap.docs.map(doc => doc.id);
@@ -326,8 +334,8 @@ export default function HomeScreen({ navigation }) {
         const userData = userDoc.data();
         const userUid = userDoc.id;
 
-        // [NEW] Skip Blocked Users
-        if (blockedIds.includes(userUid)) {
+        // [NEW] Skip Blocked OR Banned Users
+        if (blockedIds.includes(userUid) || userData.active === false || userData.isBanned === true) {
             return;
         }
 
@@ -342,7 +350,7 @@ export default function HomeScreen({ navigation }) {
         }
 
         // Exclude deleted, inactive, or invalid accounts
-        if (userData.deleted === true || userData.active === false || !userData.username || typeof userData.username !== 'string' || userData.username.trim() === '') {
+        if (userData.deleted === true || !userData.username || typeof userData.username !== 'string' || userData.username.trim() === '') {
           return;
         }
 
