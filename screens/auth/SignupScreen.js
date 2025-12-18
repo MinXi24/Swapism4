@@ -75,7 +75,7 @@ export default function SignUpScreen({ navigation }) {
       });
 
       Alert.alert('Success', 'Account created successfully!');
-      navigation.navigate('Home');
+      navigation.navigate('ProfileSetup');
 
     } catch (error) {
       // handling errors

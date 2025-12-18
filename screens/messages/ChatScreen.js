@@ -2,34 +2,34 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Calendar from 'expo-calendar';
 import { getAuth } from 'firebase/auth';
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDocs,
-    getFirestore,
-    orderBy,
-    query,
-    serverTimestamp,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import React, { useCallback, useRef, useState } from 'react';
 import {
-    Alert,
-    Clipboard,
-    Image,
-    KeyboardAvoidingView,
-    Linking,
-    Modal,
-    Platform,
-    SafeAreaView,
-    SectionList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Clipboard,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  SafeAreaView,
+  SectionList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import RNModalDateTimePicker from 'react-native-modal-datetime-picker';
 import Icon from '../../assets/icons/icons';
@@ -1276,19 +1276,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    minHeight: 44,
-    maxHeight: 120,
-  },
-  inputWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#F5F3E4',
     borderRadius: 20,
     paddingHorizontal: spacing.sm,
@@ -1310,14 +1297,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingLeft: spacing.xs,
     gap: spacing.xs,
-  },
-  iconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   iconButton: {
     padding: spacing.xs,
