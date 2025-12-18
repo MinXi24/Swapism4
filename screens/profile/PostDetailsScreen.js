@@ -199,8 +199,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   const handleReportComment = (comment) => {
     if (!auth.currentUser) {
       Alert.alert(
-        'Login to report comments!',
-        '',
+        'Login Required',
+        'You must be logged in to report comments!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -340,8 +340,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   const handleLike = async () => {
     if (!auth.currentUser) {
       Alert.alert(
+        'Login Required',
         'Login to start liking posts!',
-        '',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -404,8 +404,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   const handleAddComment = async () => {
     if (!auth.currentUser) {
       Alert.alert(
+        'Login Required',
         'Login to start commenting!',
-        '',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -482,8 +482,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   const handleSwapNow = async () => {
     if (!auth.currentUser) {
       Alert.alert(
-        'Login to start swapping items!',
-        '',
+        'Login Required',
+        'Login to start swapping!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -493,6 +493,24 @@ export default function PostDetailsScreen({ route, navigation }) {
     }
 
     try {
+      // Check if current user has any available items to swap
+      const myItemsQuery = query(
+        collection(db, 'wardrobe-plug-fyp/user/images'),
+        where('ownerUid', '==', auth.currentUser.uid),
+        where('postType', '==', 'forSwap'),
+        where('swapStatus', '==', 'available')
+      );
+      const myItemsSnapshot = await getDocs(myItemsQuery);
+      
+      if (myItemsSnapshot.empty) {
+        Alert.alert(
+          'No Items Available',
+          'You don\'t have any items available for swapping. Please add items marked "For Swap" with status "Available" to your wardrobe.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       // Get the item owner's profile data
       const userDoc = await getDoc(doc(db, 'users', activePost.ownerUid));
       const userData = userDoc.data();
@@ -604,7 +622,11 @@ export default function PostDetailsScreen({ route, navigation }) {
             <View style={styles.swapInfoBadge}>
               <Icon name="swap-horizontal" size={20} color={colors.accent} />
               <Text style={styles.swapInfoText}>
-                Available for Swap • Status: {currentSwapStatus === 'available' ? 'Available' : 'Swapped Out'}
+                Available for Swap • Status: {
+                  currentSwapStatus === 'available' ? 'Available' : 
+                  currentSwapStatus === 'reserved' ? 'Reserved' : 
+                  'Swapped Out'
+                }
               </Text>
             </View>
           )}
@@ -628,8 +650,8 @@ export default function PostDetailsScreen({ route, navigation }) {
                       onPress={() => {
                         if (!auth.currentUser) {
                           Alert.alert(
+                            'Login Required',
                             'Login to try on items virtually!',
-                            '',
                             [
                               { text: 'Cancel', style: 'cancel' },
                               { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -678,8 +700,8 @@ export default function PostDetailsScreen({ route, navigation }) {
             <TouchableOpacity style={styles.actionButton} onPress={() => {
               if (!auth.currentUser) {
                 Alert.alert(
+                  'Login Required',
                   'Login to share posts!',
-                  '',
                   [
                     { text: 'Cancel', style: 'cancel' },
                     { text: 'Login', onPress: () => navigation.navigate('Login') }

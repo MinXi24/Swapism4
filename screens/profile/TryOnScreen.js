@@ -335,7 +335,7 @@ export default function TryOnScreen({ route, navigation }) {
     const currentUser = auth.currentUser;
     
     if (!currentUser) {
-      Alert.alert('Error', 'You must be logged in to save outfits');
+      Alert.alert('Login Required', 'You must be logged in to save outfits!');
       return;
     }
 

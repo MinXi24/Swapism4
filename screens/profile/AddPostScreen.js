@@ -400,8 +400,8 @@ export default function AddPostScreen({ navigation, route }) {
   const handlePost = async () => {
     if (!auth.currentUser) {
       Alert.alert(
-        'Login to start posting!',
-        '',
+        'Login Required',
+        'You must be logged in to create posts!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }

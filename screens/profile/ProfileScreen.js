@@ -3,22 +3,23 @@ import { getAuth } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, setDoc, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
+import useGuest from '../../hooks/useGuest';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function ProfileScreen({ navigation }) {
@@ -45,20 +46,27 @@ export default function ProfileScreen({ navigation }) {
   const auth = getAuth();
   const db = getFirestore();
   const user = auth.currentUser;
+  const { isGuest } = useGuest();
 
   useEffect(() => {
-    // Set guest-specific bio if not logged in
-    if (!user) {
-      setUserInfo(prev => ({
-        ...prev,
-        bio: 'Login to start customizing your profile!',
-        username: 'Guest',
-      }));
+    // Check if user is guest
+    if (isGuest) {
+      Alert.alert(
+        'Login Required',
+        'You must be logged in to have an account!',
+        [
+          {
+            text: 'Login',
+            onPress: () => navigation.navigate('Welcome')
+          }
+        ],
+        { cancelable: false }
+      );
     } else {
       loadUserProfile();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isGuest]);
 
   const loadUserProfile = async () => {
     try {
@@ -259,8 +267,8 @@ export default function ProfileScreen({ navigation }) {
   const handleAddPost = () => {
     if (!user) {
       Alert.alert(
-        'Login to start posting!',
-        '',
+        'Login Required',
+        'You must be logged in to create posts!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -278,8 +286,8 @@ export default function ProfileScreen({ navigation }) {
   const handleShareProfile = () => {
     if (!user) {
       Alert.alert(
-        'Login to share your profile!',
-        '',
+        'Login Required',
+        'You must be logged in to share your profile!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -479,7 +487,23 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.headerIcons}>
           <TouchableOpacity 
             style={styles.headerIcon}
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() => {
+              if (isGuest) {
+                Alert.alert(
+                  'Login Required',
+                  'You must be logged in to access settings!',
+                  [
+                    {
+                      text: 'Login',
+                      onPress: () => navigation.navigate('Welcome')
+                    }
+                  ],
+                  { cancelable: false }
+                );
+              } else {
+                navigation.navigate('Settings');
+              }
+            }}
           >
             <Icon name="menu-outline" size={28} color={colors.dark} />
           </TouchableOpacity>
@@ -722,7 +746,8 @@ export default function ProfileScreen({ navigation }) {
                       {/* Swap Status Badge */}
                       <View style={[
                         styles.swapStatusBadge,
-                        (post.swapStatus === 'swappedOut' || post.swapStatus === 'reserved') && styles.swapStatusBadgeInactive
+                        post.swapStatus === 'reserved' && styles.swapStatusBadgeInactive,
+                        (post.swapStatus === 'swappedOut' || post.swapStatus === 'swapped out') && styles.swapStatusBadgeSwappedOut
                       ]}>
                         <Text style={styles.swapStatusBadgeText}>
                           {post.swapStatus === 'available' 
@@ -1151,10 +1176,13 @@ const styles = StyleSheet.create({
   swapStatusBadgeInactive: {
     backgroundColor: colors.gray,
   },
+  swapStatusBadgeSwappedOut: {
+    backgroundColor: colors.secondary,
+  },
   swapStatusBadgeText: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#fff',
+    color: colors.dark,
   },
   addButton: {
     position: 'absolute',

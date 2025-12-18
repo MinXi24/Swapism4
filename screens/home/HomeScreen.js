@@ -438,8 +438,8 @@ export default function HomeScreen({ navigation }) {
   const handleLike = async (post) => {
     if (!currentUser) {
       Alert.alert(
+        'Login Required',
         'Login to start liking posts!',
-        '',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -502,8 +502,8 @@ export default function HomeScreen({ navigation }) {
   const handleFavorite = async (post) => {
     if (!currentUser) {
       Alert.alert(
+        'Login Required',
         'Login to start saving favorites!',
-        '',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -625,7 +625,7 @@ export default function HomeScreen({ navigation }) {
   // --- UPDATED FUNCTION: Added Debugging & ServerTimestamp ---
   const handleReportPost = async (post) => {
     if (!currentUser) {
-      Alert.alert('Error', 'You must be logged in to report posts.');
+      Alert.alert('Login Required', 'You must be logged in to report posts.');
       return;
     }
     
@@ -834,8 +834,8 @@ export default function HomeScreen({ navigation }) {
             onPress={() => {
               if (!currentUser) {
                 Alert.alert(
-                  'Login to view activity!',
-                  '',
+                  'Login Required',
+                  'You must be logged in to view activity!',
                   [
                     { text: 'Cancel', style: 'cancel' },
                     { text: 'Login', onPress: () => navigation.navigate('Login') }

@@ -2,27 +2,28 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-    collection,
-    getDocs,
-    getFirestore,
-    orderBy,
-    query,
-    where
+  collection,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+  where
 } from 'firebase/firestore';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
+import useGuest from '../../hooks/useGuest';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 const { width } = Dimensions.get('window');
@@ -33,12 +34,31 @@ const ITEM_SIZE = (width - (COLUMN_COUNT + 1) * SPACING) / COLUMN_COUNT;
 export default function FavouritesScreen({ navigation }) {
   const [favorites, setFavorites] = useState([]);
   const [favoriteOutfits, setFavoriteOutfits] = useState([]);
+  const [favoriteSwaps, setFavoriteSwaps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('posts');
 
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
+  const { isGuest } = useGuest();
+
+  // Check if user is guest
+  useEffect(() => {
+    if (isGuest) {
+      Alert.alert(
+        'Login Required',
+        'You must be logged in to access favourites!',
+        [
+          {
+            text: 'Login',
+            onPress: () => navigation.navigate('Welcome')
+          }
+        ],
+        { cancelable: false }
+      );
+    }
+  }, [isGuest, navigation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -85,6 +105,21 @@ export default function FavouritesScreen({ navigation }) {
       }));
       
       setFavoriteOutfits(outfitsData);
+      
+      // Load favorite swaps
+      const swapsQuery = query(
+        collection(db, 'favoriteSwaps'),
+        where('userId', '==', currentUser.uid),
+        orderBy('createdAt', 'desc')
+      );
+      
+      const swapsSnapshot = await getDocs(swapsQuery);
+      const swapsData = swapsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      
+      setFavoriteSwaps(swapsData);
     } catch (error) {
       console.error('Error loading favorites:', error);
     } finally {
@@ -145,6 +180,40 @@ export default function FavouritesScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  const renderSwapItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.swapCard}
+      onPress={() => {
+        navigation.navigate('PostDetails', { 
+          post: {
+            id: item.itemId,
+            url: item.itemImage,
+            description: item.itemTitle || 'Item for swap',
+            title: item.itemTitle,
+            ownerUid: item.ownerUid,
+            userName: item.userName || 'User',
+            userPhotoURL: item.userPhotoURL || null,
+            uploadedAt: item.createdAt || new Date(),
+            swapStatus: 'available',
+          }
+        });
+      }}
+    >
+      <Image source={{ uri: item.itemImage }} style={styles.swapImage} />
+      <View style={styles.swapInfo}>
+        <Text style={styles.swapTitle} numberOfLines={2}>
+          {item.itemTitle}
+        </Text>
+        <View style={styles.swapRating}>
+          <Icon name="star" size={14} color={colors.highlight} />
+          <Text style={styles.swapRatingText}>
+            {item.userRating?.toFixed(1) || '0.0'} ({item.reviews || 0})
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -160,6 +229,13 @@ export default function FavouritesScreen({ navigation }) {
         >
           <Icon name="images-outline" size={20} color={colors.dark} />
           <Text style={styles.tabText}>Posts</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'swaps' && styles.activeTab]}
+          onPress={() => setActiveTab('swaps')}
+        >
+          <Icon name="swap-horizontal-outline" size={20} color={colors.dark} />
+          <Text style={styles.tabText}>Swaps</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'outfits' && styles.activeTab]}
@@ -185,6 +261,7 @@ export default function FavouritesScreen({ navigation }) {
           </View>
         ) : (
           <FlatList
+            key="posts"
             data={favorites}
             renderItem={renderFavoriteItem}
             keyExtractor={(item) => item.id}
@@ -193,7 +270,7 @@ export default function FavouritesScreen({ navigation }) {
             contentContainerStyle={styles.gridContainer}
           />
         )
-      ) : (
+      ) : activeTab === 'outfits' ? (
         favoriteOutfits.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Icon name="shirt-outline" size={64} color={colors.gray} />
@@ -202,12 +279,33 @@ export default function FavouritesScreen({ navigation }) {
           </View>
         ) : (
           <FlatList
+            key="outfits"
             data={favoriteOutfits}
             renderItem={renderOutfitItem}
             keyExtractor={(item) => item.id}
             numColumns={2}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.gridContainer}
+            contentContainerStyle={styles.twoColumnContainer}
+            columnWrapperStyle={styles.columnWrapper}
+          />
+        )
+      ) : (
+        favoriteSwaps.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Icon name="swap-horizontal-outline" size={64} color={colors.gray} />
+            <Text style={styles.emptyText}>No favorite swaps yet</Text>
+            <Text style={styles.emptySubtext}>Heart swap items to save them here!</Text>
+          </View>
+        ) : (
+          <FlatList
+            key="swaps"
+            data={favoriteSwaps}
+            renderItem={renderSwapItem}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.twoColumnContainer}
+            columnWrapperStyle={styles.columnWrapper}
           />
         )
       )}
@@ -269,6 +367,16 @@ const styles = StyleSheet.create({
   gridContainer: {
     padding: SPACING,
   },
+  twoColumnContainer: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: 100,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 0,
+    marginBottom: spacing.md,
+  },
   gridItem: {
     width: ITEM_SIZE,
     height: ITEM_SIZE,
@@ -307,7 +415,6 @@ const styles = StyleSheet.create({
     width: (width - spacing.md * 3) / 2,
     backgroundColor: '#fff',
     borderRadius: 8,
-    margin: spacing.xs,
     overflow: 'hidden',
     elevation: 2,
     shadowColor: '#000',
@@ -333,6 +440,40 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   outfitDate: {
+    fontSize: 12,
+    color: colors.gray,
+  },
+  swapCard: {
+    width: (width - spacing.md * 3) / 2,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  swapImage: {
+    width: '100%',
+    height: 150,
+    resizeMode: 'cover',
+  },
+  swapInfo: {
+    padding: spacing.sm,
+  },
+  swapTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: 4,
+  },
+  swapRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  swapRatingText: {
     fontSize: 12,
     color: colors.gray,
   },

@@ -37,9 +37,12 @@ export default function SwapOngoingScreen({ route, navigation }) {
     : { image: swapDetails?.theirItemImage, title: swapDetails?.theirItemTitle };
 
   // Debug: Log the swapDetails to see what we're receiving
-  console.log('SwapOngoingScreen - swapDetails:', swapDetails);
-  console.log('SwapOngoingScreen - otherUser:', otherUser);
+  console.log('SwapOngoingScreen - currentUser.uid:', currentUser?.uid);
+  console.log('SwapOngoingScreen - swapSenderId:', swapSenderId);
   console.log('SwapOngoingScreen - iAmSender:', iAmSender);
+  console.log('SwapOngoingScreen - swapDetails:', JSON.stringify(swapDetails, null, 2));
+  console.log('SwapOngoingScreen - itemIWillReceive:', itemIWillReceive);
+  console.log('SwapOngoingScreen - itemIAmGiving:', itemIAmGiving);
 
   // Load confirmation status from Firestore
   const loadConfirmationStatus = useCallback(async () => {
@@ -266,48 +269,69 @@ export default function SwapOngoingScreen({ route, navigation }) {
     );
   };
 
+  if (!swapDetails) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Icon name="arrow-back" size={24} color={colors.dark} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Swap Ongoing</Text>
+            <View style={{ width: 40 }} />
+          </View>
+          <View style={styles.content}>
+            <Text style={styles.placeholderText}>No swap details available</Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Swap Ongoing</Text>
-          <View style={{ width: 40 }} />
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Icon name="arrow-back" size={24} color={colors.dark} />
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Swap Ongoing</Text>
+          <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
           {/* Item Image - what you're receiving */}
-          <View style={styles.itemImageContainer}>
-            <Text style={styles.receiveText}>You will receive</Text>
-            {swapDetails && itemIWillReceive.image ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>You Will Receive</Text>
+            <View style={styles.detailCard}>
+            {itemIWillReceive.image ? (
               <Image 
                 source={{ uri: itemIWillReceive.image }} 
                 style={styles.largeItemImage}
                 onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
               />
             ) : (
-              <View>
+              <View style={styles.placeholderContainer}>
                 <Icon name="hand-right" size={80} color={colors.accent} />
-                <Text style={{ color: colors.gray, marginTop: 10 }}>No swap details available</Text>
+                <Text style={styles.placeholderText}>No swap details available</Text>
               </View>
             )}
+            </View>
           </View>
 
           {/* Swap Details - if available */}
-          {swapDetails && (
-            <View style={styles.swapDetailsCard}>
-              <Text style={styles.sectionTitle}>Swap Details</Text>
-              <View style={styles.itemsRow}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Swap Details</Text>
+            <View style={styles.detailCard}>
+            <View style={styles.itemsRow}>
                 <View style={styles.itemContainer}>
                   <Image 
                     source={{ uri: itemIAmGiving.image }} 
                     style={styles.itemImage}
                   />
                   <Text style={styles.itemTitle} numberOfLines={1}>
-                    {itemIAmGiving.title}
+                    {itemIAmGiving.title || 'Item'}
                   </Text>
                   <Text style={styles.itemLabel}>You give</Text>
                 </View>
@@ -318,18 +342,21 @@ export default function SwapOngoingScreen({ route, navigation }) {
                     style={styles.itemImage}
                   />
                   <Text style={styles.itemTitle} numberOfLines={1}>
-                    {itemIWillReceive.title}
+                    {itemIWillReceive.title || 'Item'}
                   </Text>
                   <Text style={styles.itemLabel}>You receive</Text>
                 </View>
               </View>
+              </View>
             </View>
-          )}
 
-          {/* Meetup Details - if available */}
-          {route.params?.meetupDetails && (
-            <View style={styles.swapDetailsCard}>
-              <Text style={styles.sectionTitle}>Meetup Details</Text>
+          {/* Meetup Details */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Meetup Details</Text>
+            <View style={styles.detailCard}>
+            {route.params?.meetupDetails && route.params.meetupDetails.dateTime &&
+              typeof route.params.meetupDetails.dateTime === 'number' &&
+              route.params.meetupDetails.dateTime > 0 ? (
               <View style={styles.meetupInfo}>
                 <View style={styles.meetupRow}>
                   <Icon name="calendar" size={20} color={colors.accent} />
@@ -352,28 +379,62 @@ export default function SwapOngoingScreen({ route, navigation }) {
                   </Text>
                 </View>
               </View>
-            </View>
-          )}
-
-          {/* Location Details - if available */}
-          {route.params?.locationDetails && (
-            <View style={styles.swapDetailsCard}>
-              <Text style={styles.sectionTitle}>Meetup Location</Text>
-              <View style={styles.meetupInfo}>
-                <View style={styles.meetupRow}>
-                  <Icon name="location" size={20} color={colors.accent} />
-                  <Text style={styles.meetupText}>
-                    Singapore {route.params.locationDetails.postalCode}
-                  </Text>
-                </View>
+            ) : (
+              <View style={styles.placeholderContainer}>
+                <Icon name="calendar-outline" size={32} color={colors.gray} />
+                <Text style={styles.placeholderText}>
+                  Meetup date and time not set yet.
+                </Text>
               </View>
+            )}
             </View>
-          )}
+          </View>
+
+          {/* Location Details */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Meetup Location</Text>
+            <View style={styles.detailCard}>
+            {(() => {
+              const details = route.params?.locationDetails;
+              const code = details?.postalCode;
+              const swapStatus = swapDetails?.status;
+              // Only show location if swap is completed, otherwise always show placeholder until updated from chat
+              if (
+                swapStatus === 'completed' &&
+                typeof code === 'string' &&
+                code.trim().length > 0 &&
+                code !== '000000' &&
+                code !== '123456' &&
+                code !== 'N/A'
+              ) {
+                return (
+                  <View style={styles.meetupInfo}>
+                    <View style={styles.meetupRow}>
+                      <Icon name="location" size={20} color={colors.accent} />
+                      <Text style={styles.meetupText}>
+                        Singapore {code}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              } else {
+                return (
+                  <View style={styles.placeholderContainer}>
+                    <Icon name="location-outline" size={32} color={colors.gray} />
+                    <Text style={styles.placeholderText}>
+                      Meetup location not set yet.
+                    </Text>
+                  </View>
+                );
+              }
+            })()}
+            </View>
+          </View>
 
           {/* Confirmation Status */}
-          <View style={styles.statusCard}>
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Confirmation Status</Text>
-            
+            <View style={styles.detailCard}>
             <View style={styles.statusRow}>
               <View style={styles.statusItem}>
                 <Icon 
@@ -394,6 +455,7 @@ export default function SwapOngoingScreen({ route, navigation }) {
                 />
                 <Text style={styles.statusText}>You</Text>
               </View>
+            </View>
             </View>
           </View>
 
@@ -467,41 +529,21 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    fontFamily: fonts.header,
-    color: colors.accent,
+    fontSize: 20,
+    fontFamily: fonts.semiBold,
+    fontWeight: '600',
+    color: colors.dark,
+    flex: 1,
+    textAlign: 'center',
   },
   content: {
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  itemImageContainer: {
-    marginTop: spacing.xl,
-    marginBottom: spacing.md,
-    padding: spacing.lg,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: spacing.md,
   },
   largeItemImage: {
-    width: 200,
-    height: 200,
+    width: '100%',
+    height: 250,
     borderRadius: 12,
-  },
-  receiveText: {
-    fontSize: 18,
-    fontWeight: '600',
-    fontFamily: fonts.semiBold,
-    color: colors.dark,
-    textAlign: 'center',
-    marginBottom: spacing.md,
+    alignSelf: 'center',
   },
   title: {
     fontSize: 24,
@@ -519,24 +561,30 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     paddingHorizontal: spacing.md,
   },
-  swapDetailsCard: {
+
+  section: {
     width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: spacing.lg,
     marginBottom: spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
-    fontFamily: fonts.semiBold,
-    color: colors.dark,
-    marginBottom: spacing.md,
+    color: colors.gray,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+    fontFamily: fonts.sub,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  detailCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   itemsRow: {
     flexDirection: 'row',
@@ -578,18 +626,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: fonts.body,
     color: colors.dark,
-  },
-  statusCard: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   statusRow: {
     flexDirection: 'row',
@@ -692,5 +728,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     fontFamily: fonts.semiBold,
+  },
+  placeholderContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+    gap: spacing.sm,
+  },
+  placeholderText: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: colors.gray,
+    textAlign: 'center',
+    paddingHorizontal: spacing.md,
   },
 });
