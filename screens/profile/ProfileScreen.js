@@ -306,7 +306,7 @@ export default function ProfileScreen({ navigation }) {
   const handleDeletePost = async (post) => {
     Alert.alert(
       'Delete Post',
-      'Are you sure you want to delete this post? This action cannot be undone.',
+      'Are you sure you want to delete this post? You can restore it from Recently Deleted within 30 days.',
       [
         {
           text: 'Cancel',
@@ -317,10 +317,19 @@ export default function ProfileScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Move post to deletedPosts collection
+              const postData = {
+                ...post,
+                deletedAt: new Date(),
+              };
+              await setDoc(doc(db, 'deletedPosts', post.id), postData);
+              
+              // Remove from original collection
               await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', post.id));
+              
               // Refresh posts
               await loadUserPosts();
-              Alert.alert('Success', 'Post deleted successfully');
+              Alert.alert('Success', 'Post moved to Recently Deleted');
             } catch (error) {
               console.error('Error deleting post:', error);
               Alert.alert('Error', 'Failed to delete post. Please try again.');

@@ -22,6 +22,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -30,6 +31,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -43,17 +45,24 @@ const ALERT_RED = '#FF6B6B';
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId, username, initialTab } = route.params;
-  
-  // Data State
   const [userPosts, setUserPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab || 'forFun');
-  const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
-  const [userInfo, setUserInfo] = useState({
-    bio: '', location: '', area: '', rating: 0, reviewCount: 0, reviews: [], photoURL: null, username: username || '',
+  const [stats, setStats] = useState({
+    posts: 0,
+    followers: 0,
+    following: 0,
   });
-
-  // UI State
+  const [userInfo, setUserInfo] = useState({
+    bio: '',
+    location: '',
+    area: '',
+    rating: 0,
+    reviewCount: 0,
+    reviews: [],
+    photoURL: null,
+    username: username || '',
+  });
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
@@ -63,7 +72,7 @@ export default function UserProfileScreen({ route, navigation }) {
   // Relation State
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
-  const [followRequestStatus, setFollowRequestStatus] = useState(null); 
+  const [followRequestStatus, setFollowRequestStatus] = useState(null); // null, 'pending', 'accepted', 'rejected'
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
   const [mutualFollowers, setMutualFollowers] = useState([]);
   const [showAllMutuals, setShowAllMutuals] = useState(false);
@@ -290,14 +299,21 @@ export default function UserProfileScreen({ route, navigation }) {
 
   const logProfileView = async () => {
     if (!currentUser || currentUser.uid === userId) return;
+
     try {
+      // Get current user's username
       let viewerName = currentUser.displayName || 'Anonymous';
       try {
         const viewerDocRef = doc(db, 'users', currentUser.uid);
         const viewerDoc = await getDoc(viewerDocRef);
-        if (viewerDoc.exists()) viewerName = viewerDoc.data().username || viewerName;
-      } catch (err) { console.error(err); }
+        if (viewerDoc.exists()) {
+          viewerName = viewerDoc.data().username || viewerName;
+        }
+      } catch (err) {
+        console.error('Error fetching viewer name:', err);
+      }
 
+      // Create notification for profile owner
       await addDoc(collection(db, 'notifications'), {
         userId: userId,
         type: 'profile_view',
@@ -307,7 +323,9 @@ export default function UserProfileScreen({ route, navigation }) {
         read: false,
         createdAt: new Date(),
       });
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      console.error('Error logging profile view:', error);
+    }
   };
 
   // --- ACTION HANDLERS ---
@@ -319,17 +337,155 @@ export default function UserProfileScreen({ route, navigation }) {
       );
     } else { setAndroidMenuVisible(true); }
   };
-  
+
   const renderAndroidMenu = () => (
-    <Modal visible={androidMenuVisible} transparent animationType="fade" onRequestClose={() => setAndroidMenuVisible(false)}>
-      <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setAndroidMenuVisible(false)}>
+    <Modal
+      visible={androidMenuVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setAndroidMenuVisible(false)}
+    >
+      <TouchableOpacity
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}
+        activeOpacity={1}
+        onPress={() => setAndroidMenuVisible(false)}
+      >
         <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 }}>
-          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleReport(); }} style={{ paddingVertical: 16 }}><Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Report User</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleBlock(); }} style={{ paddingVertical: 16 }}><Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Block User</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setAndroidMenuVisible(false)} style={{ paddingVertical: 16 }}><Text style={{ color: '#333', fontSize: 16, textAlign: 'center' }}>Cancel</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleReport(); }} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Report User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleBlock(); }} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Block User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setAndroidMenuVisible(false)} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#333', fontSize: 16, textAlign: 'center' }}>Cancel</Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     </Modal>
+  );
+
+  const loadUserProfile = async () => {
+    try {
+      const userDocRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        // Filter reviews to exclude deleted/inactive users (client-side filtering)
+        // Note: This should ideally be handled by a Cloud Function when a user is deleted
+        const validReviews = (userData.reviews || []).filter(review => review.userId && review.userName);
+        setUserInfo({
+          bio: userData.bio || '',
+          location: userData.location || '',
+          area: userData.area || '',
+          rating: userData.rating || 0,
+          reviewCount: validReviews.length,
+          reviews: validReviews,
+          photoURL: userData.photoURL || null,
+          username: userData.username || username || 'User',
+        });
+        
+        // Load privacy setting
+        setIsPrivateAccount(userData.isPrivate || false);
+        
+        // Load followers and following counts
+        const followers = userData.followers || [];
+        const following = userData.following || [];
+        setStats(prev => ({
+          ...prev,
+          followers: followers.length,
+          following: following.length,
+        }));
+        
+        // Check if current user is following this user
+        if (currentUser) {
+          setIsFollowing(followers.includes(currentUser.uid));
+          
+          // Load mutual followers
+          const currentUserDocRef = doc(db, 'users', currentUser.uid);
+          const currentUserDoc = await getDoc(currentUserDocRef);
+          if (currentUserDoc.exists()) {
+            const currentUserFollowing = currentUserDoc.data().following || [];
+            // Find mutual followers (people that both current user and viewed user follow)
+            const mutuals = followers.filter(followerId => currentUserFollowing.includes(followerId));
+            
+            // Load mutual user details
+            const mutualDetails = await Promise.all(
+              mutuals.map(async (mutualId) => {
+                const mutualDocRef = doc(db, 'users', mutualId);
+                const mutualDoc = await getDoc(mutualDocRef);
+                if (mutualDoc.exists()) {
+                  const mutualData = mutualDoc.data();
+                  return {
+                    uid: mutualId,
+                    username: mutualData.username || 'User',
+                    photoURL: mutualData.photoURL || null,
+                  };
+                }
+                return null;
+              })
+            );
+            
+            setMutualFollowers(mutualDetails.filter(m => m !== null));
+          }
+          
+          // Check follow request status
+          const requestQuery = query(
+            collection(db, 'followRequests'),
+            where('fromUserId', '==', currentUser.uid),
+            where('toUserId', '==', userId)
+          );
+          const requestSnapshot = await getDocs(requestQuery);
+          
+          if (!requestSnapshot.empty) {
+            const requestData = requestSnapshot.docs[0].data();
+            setFollowRequestStatus(requestData.status);
+          } else {
+            setFollowRequestStatus(null);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
+
+  const loadUserPosts = async () => {
+    try {
+      setLoading(true);
+      await loadUserProfile();
+      const q = query(
+        collection(db, 'wardrobe-plug-fyp/user/images'),
+        where('ownerUid', '==', userId)
+      );
+      const querySnapshot = await getDocs(q);
+      const posts = querySnapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .sort((a, b) => {
+          const dateA = a.uploadedAt?.toDate?.() || new Date(0);
+          const dateB = b.uploadedAt?.toDate?.() || new Date(0);
+          return dateB - dateA;
+        });
+      
+      setUserPosts(posts);
+      setStats(prev => ({ ...prev, posts: posts.length }));
+    } catch (error) {
+      console.error('Error loading user posts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUserPosts();
+      logProfileView();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
   );
 
   const openMapWithLocation = async () => {
@@ -401,6 +557,7 @@ export default function UserProfileScreen({ route, navigation }) {
   const handlePostPress = (post) => {
     navigation.navigate('PostDetails', { post });
   };
+
 
   const handleFollowToggle = async () => {
     if (!currentUser) {
@@ -547,11 +704,15 @@ export default function UserProfileScreen({ route, navigation }) {
       }}]);
   };
 
-  // Filter posts
+  // Filter posts based on privacy and follow status
   const forFunPosts = userPosts.filter(post => post.postType === 'forFun');
   const forSwapPosts = userPosts.filter(post => post.postType === 'forSwap');
+  
+  // Show For Fun posts only if account is public OR user is following OR it's the current user's profile
   const canViewForFunPosts = !isPrivateAccount || isFollowing || userId === currentUser?.uid;
-  const displayPosts = activeTab === 'forFun' ? (canViewForFunPosts ? forFunPosts : []) : forSwapPosts;
+  const displayPosts = activeTab === 'forFun' 
+    ? (canViewForFunPosts ? forFunPosts : []) 
+    : forSwapPosts;
 
   if (loading) {
     return (
@@ -561,146 +722,269 @@ export default function UserProfileScreen({ route, navigation }) {
     );
   }
 
-  // --- 1. BLOCKED VIEW ---
-  if (isBlockedByMe) {
-      return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}><Icon name="arrow-back" size={24} color={colors.dark} /></TouchableOpacity>
-                <View style={styles.headerCenter}><Text style={styles.logo}>Blocked User</Text></View>
-                <View style={styles.headerRight} />
-            </View>
-            <View style={[styles.centerContent, {flex: 1, padding: 20}]}>
-                <Icon name="ban" size={64} color={colors.gray} />
-                <Text style={{fontSize: 18, fontWeight: 'bold', marginTop: 20, color: colors.dark}}>Blocked</Text>
-                <Text style={{textAlign: 'center', color: colors.gray, marginTop: 10, marginBottom: 20}}>You have blocked this user.</Text>
-                <TouchableOpacity style={{backgroundColor: colors.dark, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8}} onPress={handleUnblock}>
-                    <Text style={{color: '#fff', fontWeight: 'bold'}}>Unblock</Text>
-                </TouchableOpacity>
-            </View>
-        </SafeAreaView>
-      );
-  }
-
-  // --- 2. BANNED VIEW (NEW) ---
-  if (isUserBanned) {
-      return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
-                    <Icon name="arrow-back" size={24} color={colors.dark} />
-                </TouchableOpacity>
-                <View style={styles.headerCenter}>
-                    <Text style={styles.logo}>Suspended</Text>
-                </View>
-                <View style={styles.headerRight} />
-            </View>
-            <View style={[styles.centerContent, {flex: 1, padding: 20}]}>
-                <Icon name="alert-circle" size={64} color={ALERT_RED} />
-                <Text style={{fontSize: 20, fontWeight: 'bold', marginTop: 20, color: colors.dark}}>
-                    Account Suspended
-                </Text>
-                <Text style={{textAlign: 'center', color: colors.gray, marginTop: 10, fontSize: 14, lineHeight: 20}}>
-                    This user has been banned for violating our community guidelines. Their posts and profile are no longer available.
-                </Text>
-            </View>
-        </SafeAreaView>
-      );
-  }
-
-  // --- 3. NORMAL VIEW ---
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+      
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}><Icon name="arrow-back" size={24} color={colors.dark} /></TouchableOpacity>
-        <View style={styles.headerCenter} pointerEvents="none"><Text style={styles.logo} numberOfLines={1}>{userInfo.username}</Text></View>
-        <TouchableOpacity onPress={showMenu} style={styles.headerRight}><Icon name="ellipsis-vertical" size={24} color={colors.dark} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
+          <Icon name="arrow-back" size={24} color={colors.dark} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter} pointerEvents="none">
+          <Text style={styles.logo} numberOfLines={1}>{userInfo.username}</Text>
+        </View>
+        <TouchableOpacity onPress={showMenu} style={styles.headerRight}>
+          <Icon name="ellipsis-vertical" size={24} color={colors.dark} />
+        </TouchableOpacity>
       </View>
 
       {Platform.OS === 'android' && renderAndroidMenu()}
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Profile Info */}
         <View style={styles.profileSection}>
           <View style={styles.profileTopRow}>
             <View style={styles.profileImageContainer}>
-              {userInfo.photoURL ? <Image source={{ uri: userInfo.photoURL }} style={styles.profileImage} /> : <View style={styles.profileImagePlaceholder}><Icon name="person" size={40} color={colors.gray} /></View>}
+              {userInfo.photoURL ? (
+                <Image source={{ uri: userInfo.photoURL }} style={styles.profileImage} />
+              ) : (
+                <View style={styles.profileImagePlaceholder}>
+                  <Icon name="person" size={40} color={colors.gray} />
+                </View>
+              )}
             </View>
+
             <View style={styles.statsRow}>
-              <View style={styles.statItem}><Text style={styles.statNumber}>{stats.posts}</Text><Text style={styles.statLabel}>posts</Text></View>
-              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'followers' })}><Text style={styles.statNumber}>{stats.followers}</Text><Text style={styles.statLabel}>followers</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'following' })}><Text style={styles.statNumber}>{stats.following}</Text><Text style={styles.statLabel}>following</Text></TouchableOpacity>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{stats.posts}</Text>
+                <Text style={styles.statLabel}>posts</Text>
+              </View>
+              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'followers' })}>
+                <Text style={styles.statNumber}>{stats.followers}</Text>
+                <Text style={styles.statLabel}>followers</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'following' })}>
+                <Text style={styles.statNumber}>{stats.following}</Text>
+                <Text style={styles.statLabel}>following</Text>
+              </TouchableOpacity>
             </View>
           </View>
+
           <Text style={styles.userName}>{userInfo.username}</Text>
+          
+          {/* Bio */}
           <Text style={styles.userBio}>{userInfo.bio}</Text>
+          
+          {/* Location */}
           {(userInfo.location || userInfo.area) && (
             <TouchableOpacity style={styles.locationContainer} onPress={openMapWithLocation}>
               <Icon name="location-outline" size={16} color={colors.dark} />
-              <Text style={styles.locationText}>{userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location}</Text>
+              <Text style={styles.locationText}>
+                {userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location}
+              </Text>
               <Icon name="open-outline" size={14} color={colors.gray} style={{ marginLeft: 4 }} />
             </TouchableOpacity>
           )}
+
+          {/* Action Buttons */}
           <View style={styles.actionButtons}>
-            <TouchableOpacity style={[styles.actionButton, isFollowing && styles.followingButton]} onPress={handleFollowToggle} disabled={followLoading}>
-              {followLoading ? <ActivityIndicator size="small" color={colors.dark} /> : <Text style={styles.actionButtonText}>{isFollowing ? 'Following' : followRequestStatus === 'pending' ? 'Requested' : isPrivateAccount ? 'Request' : 'Follow'}</Text>}
+            <TouchableOpacity 
+              style={[styles.actionButton, isFollowing && styles.followingButton]}
+              onPress={handleFollowToggle}
+              disabled={followLoading}
+            >
+              {followLoading ? (
+                <ActivityIndicator size="small" color={colors.dark} />
+              ) : (
+                <Text style={styles.actionButtonText}>
+                  {isFollowing 
+                    ? 'Following' 
+                    : followRequestStatus === 'pending' 
+                      ? 'Requested' 
+                      : isPrivateAccount 
+                        ? 'Request' 
+                        : 'Follow'}
+                </Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton} onPress={handleMessage}><Text style={styles.actionButtonText}>Message</Text></TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={handleMessage}
+            >
+              <Text style={styles.actionButtonText}>Message</Text>
+            </TouchableOpacity>
           </View>
+
+          {/* Mutual Followers Section */}
           {mutualFollowers.length > 0 && (
             <View style={styles.mutualFollowersSection}>
-               <TouchableOpacity onPress={() => setShowAllMutuals(!showAllMutuals)} style={styles.mutualFollowersHeader}>
-                 <View style={styles.mutualAvatarsRow}>
-                   {mutualFollowers.slice(0, showAllMutuals ? mutualFollowers.length : 1).map((mutual, index) => (
-                     <Image key={mutual.uid} source={mutual.photoURL ? { uri: mutual.photoURL } : null} style={[styles.mutualAvatar, index > 0 && { marginLeft: -8, backgroundColor:'#ccc' }]} />
-                   ))}
-                 </View>
-                 <Text style={styles.mutualFollowersText}>Followed by {mutualFollowers[0].username} {mutualFollowers.length > 1 && `and ${mutualFollowers.length - 1} others`}</Text>
-               </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => setShowAllMutuals(!showAllMutuals)}
+                style={styles.mutualFollowersHeader}
+              >
+                <View style={styles.mutualAvatarsRow}>
+                  {mutualFollowers.slice(0, showAllMutuals ? mutualFollowers.length : 1).map((mutual, index) => (
+                    <TouchableOpacity
+                      key={mutual.uid}
+                      onPress={() => navigation.navigate('UserProfile', { userId: mutual.uid, username: mutual.username })}
+                      style={[styles.mutualAvatar, index > 0 && { marginLeft: -8 }]}
+                    >
+                      {mutual.photoURL ? (
+                        <Image source={{ uri: mutual.photoURL }} style={styles.mutualAvatarImage} />
+                      ) : (
+                        <View style={styles.mutualAvatarPlaceholder}>
+                          <Icon name="person" size={16} color={colors.gray} />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.mutualFollowersText}>
+                  Followed by{' '}
+                  <Text style={styles.mutualFollowersName}>
+                    {mutualFollowers[0].username}
+                  </Text>
+                  {mutualFollowers.length > 1 && (
+                    <Text>
+                      {' '}and {mutualFollowers.length - 1} other{mutualFollowers.length > 2 ? 's' : ''} you follow
+                    </Text>
+                  )}
+                </Text>
+                {mutualFollowers.length > 1 && (
+                  <Icon 
+                    name={showAllMutuals ? 'chevron-up' : 'chevron-down'} 
+                    size={18} 
+                    color={colors.gray} 
+                  />
+                )}
+              </TouchableOpacity>
+
+              {/* Expanded mutual followers list */}
+              {showAllMutuals && mutualFollowers.length > 1 && (
+                <View style={styles.mutualFollowersList}>
+                  {mutualFollowers.slice(1).map((mutual) => (
+                    <TouchableOpacity
+                      key={mutual.uid}
+                      style={styles.mutualFollowerItem}
+                      onPress={() => navigation.navigate('UserProfile', { userId: mutual.uid, username: mutual.username })}
+                    >
+                      {mutual.photoURL ? (
+                        <Image source={{ uri: mutual.photoURL }} style={styles.mutualFollowerItemImage} />
+                      ) : (
+                        <View style={styles.mutualFollowerItemPlaceholder}>
+                          <Icon name="person" size={20} color={colors.gray} />
+                        </View>
+                      )}
+                      <Text style={styles.mutualFollowerItemName}>{mutual.username}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           )}
         </View>
 
+        {/* Rating Section */}
         <View style={styles.ratingSection}>
-            <View style={styles.ratingHeader}>
-                <View style={styles.ratingLeft}>
-                    <Text style={styles.ratingScore}>{userInfo.rating.toFixed(1)}</Text>
-                    <View style={styles.starsContainer}>
-                        {[1, 2, 3, 4, 5].map(star => <Icon key={star} name={star <= Math.floor(userInfo.rating) ? 'star' : 'star-outline'} size={20} color={colors.highlight} />)}
-                    </View>
-                </View>
-                <TouchableOpacity style={styles.rateButton} onPress={handleRateUser}><Text style={styles.rateButtonText}>Rate</Text></TouchableOpacity>
+          <View style={styles.ratingHeader}>
+            <View style={styles.ratingLeft}>
+              <Text style={styles.ratingScore}>{userInfo.rating.toFixed(1)}</Text>
+              <View style={styles.starsContainer}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <Icon 
+                    key={star}
+                    name={star <= Math.floor(userInfo.rating) ? 'star' : star === Math.ceil(userInfo.rating) ? 'star-half' : 'star-outline'}
+                    size={20}
+                    color={colors.highlight}
+                  />
+                ))}
+              </View>
             </View>
-            <Text style={styles.reviewsTitle}>Reviews ({userInfo.reviewCount})</Text>
-            {userInfo.reviews.map((r, i) => (
-                <View key={i} style={styles.reviewItem}>
-                    <Image source={r.userPhoto ? {uri: r.userPhoto} : null} style={styles.reviewUserImage} />
-                    <View style={styles.reviewContent}>
-                        <View style={styles.reviewHeader}>
-                            <Text style={styles.reviewAuthor}>{r.userName}</Text>
-                            {r.userId === currentUser?.uid && <TouchableOpacity onPress={()=>handleDeleteReview(r)}><Icon name="trash-outline" size={18} color={colors.gray}/></TouchableOpacity>}
-                        </View>
-                        <Text style={styles.reviewText}>{r.text}</Text>
-                        <View style={styles.reviewStars}>{[1,2,3,4,5].map(s=><Icon key={s} name={s<=r.rating?'star':'star-outline'} size={14} color={colors.highlight}/>)}</View>
-                    </View>
+            <TouchableOpacity style={styles.rateButton} onPress={handleRateUser}>
+              <Text style={styles.rateButtonText}>Rate</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.reviewsTitle}>Reviews ({userInfo.reviewCount})</Text>
+          {userInfo.reviewCount === 0 ? (
+            <View style={styles.noReviewsContainer}>
+              <Text style={styles.noReviewsText}>No reviews yet</Text>
+            </View>
+          ) : (
+            userInfo.reviews.map((review, index) => (
+              <View key={index} style={styles.reviewItem}>
+                {review.userPhoto ? (
+                  <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />
+                ) : (
+                  <Icon name="person-circle" size={40} color={colors.gray} />
+                )}
+                <View style={styles.reviewContent}>
+                  <View style={styles.reviewHeader}>
+                    <Text style={styles.reviewAuthor}>{review.userName}</Text>
+                    {review.userId === currentUser?.uid && (
+                      <TouchableOpacity onPress={() => handleDeleteReview(review)}>
+                        <Icon name="trash-outline" size={18} color={colors.gray} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <Text style={styles.reviewText}>{review.text}</Text>
+                  <View style={styles.reviewStars}>
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <Icon 
+                        key={star}
+                        name={star <= review.rating ? 'star' : 'star-outline'}
+                        size={14}
+                        color={colors.highlight}
+                      />
+                    ))}
+                  </View>
                 </View>
-            ))}
+              </View>
+            ))
+          )}
         </View>
 
+        {/* Tabs */}
         <View style={styles.tabsContainer}>
-          <TouchableOpacity style={[styles.tab, activeTab === 'forFun' && styles.activeTab]} onPress={() => setActiveTab('forFun')}><Text style={styles.tabText}>For Fun</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.tab, activeTab === 'forSwap' && styles.activeTab]} onPress={() => setActiveTab('forSwap')}><Text style={styles.tabText}>For Swap</Text></TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'forFun' && styles.activeTab]}
+            onPress={() => setActiveTab('forFun')}
+          >
+            <Icon name="happy-outline" size={20} color={colors.dark} />
+            <Text style={styles.tabText}>For Fun</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'forSwap' && styles.activeTab]}
+            onPress={() => setActiveTab('forSwap')}
+          >
+            <Icon name="swap-horizontal-outline" size={20} color={colors.dark} />
+            <Text style={styles.tabText}>For Swap</Text>
+          </TouchableOpacity>
         </View>
 
+        {/* Posts Grid */}
         <View style={styles.postsContainer}>
           {displayPosts.length === 0 ? (
             <View style={styles.emptyState}>
-                <Icon name={activeTab === 'forFun' && !canViewForFunPosts ? 'lock-closed-outline' : 'images-outline'} size={64} color={colors.gray} />
-                <Text style={styles.emptyStateText}>{activeTab === 'forFun' && !canViewForFunPosts ? 'This Account is Private' : `No ${activeTab === 'forFun' ? 'Fun' : 'Swap'} Posts`}</Text>
+              <Icon name={activeTab === 'forFun' && !canViewForFunPosts ? 'lock-closed-outline' : 'images-outline'} size={64} color={colors.gray} />
+              <Text style={styles.emptyStateText}>
+                {activeTab === 'forFun' && !canViewForFunPosts 
+                  ? 'This Account is Private'
+                  : `No ${activeTab === 'forFun' ? 'Fun' : 'Swap'} Posts`}
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                {activeTab === 'forFun' && !canViewForFunPosts 
+                  ? 'Follow this account to see their For Fun posts'
+                  : 'This user hasn\'t posted anything yet'}
+              </Text>
             </View>
           ) : (
             <View style={styles.postsGrid}>
               {displayPosts.map(post => (
-                <TouchableOpacity key={post.id} style={styles.postItem} onPress={() => handlePostPress(post)}>
+                <TouchableOpacity
+                  key={post.id}
+                  style={styles.postItem}
+                  onPress={() => handlePostPress(post)}
+                >
                   <Image source={{ uri: post.url }} style={styles.postImage} />
                   {activeTab === 'forSwap' && (
                     <View style={[
@@ -723,6 +1007,73 @@ export default function UserProfileScreen({ route, navigation }) {
           )}
         </View>
       </ScrollView>
+
+      {/* Review Modal */}
+      <Modal
+        visible={showReviewModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowReviewModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay} 
+            activeOpacity={1} 
+            onPress={() => setShowReviewModal(false)}
+          >
+            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+              <ScrollView 
+                contentContainerStyle={styles.modalScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.modalContent}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Rate</Text>
+                    <TouchableOpacity onPress={() => setShowReviewModal(false)}>
+                      <Icon name="close" size={24} color={colors.dark} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Rating Stars */}
+                  <Text style={styles.modalLabel}>Your Rating</Text>
+                  <View style={styles.modalStarsContainer}>
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <TouchableOpacity key={star} onPress={() => setReviewRating(star)}>
+                        <Icon 
+                          name={star <= reviewRating ? 'star' : 'star-outline'}
+                          size={36}
+                          color={colors.highlight}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Review Text */}
+                  <Text style={styles.modalLabel}>Your Review</Text>
+                  <TextInput
+                    style={styles.reviewInput}
+                    placeholder="Write your review here..."
+                    value={reviewText}
+                    onChangeText={setReviewText}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+
+                  {/* Submit Button */}
+                  <TouchableOpacity style={styles.submitButton} onPress={handleSubmitReview}>
+                    <Text style={styles.submitButtonText}>Submit Review</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <BottomNavBar navigation={navigation} activeRoute="Home" />
     </SafeAreaView>
   );

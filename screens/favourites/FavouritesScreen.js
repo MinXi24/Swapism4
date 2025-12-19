@@ -2,15 +2,18 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    getFirestore,
-    orderBy,
-    query,
-    where
+  collection,
+<<<<<<<<< Temporary merge branch 1
+=========
+  deleteDoc,
+  doc,
+  getDoc,
+>>>>>>>>> Temporary merge branch 2
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+  where
 } from 'firebase/firestore';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
