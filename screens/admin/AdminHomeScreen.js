@@ -8,7 +8,6 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View
@@ -32,7 +31,7 @@ import { colors, fonts, spacing } from '../../lib/theme';
 const ACTIVE_YELLOW = '#FDD835'; 
 
 export default function AdminHomeScreen({ navigation }) {
-  const [searchQuery, setSearchQuery] = useState('');
+  // Removed local searchQuery state since we use a dedicated screen now
   const [activeTab, setActiveTab] = useState('home');
 
   // --- DATA STATE ---
@@ -52,7 +51,7 @@ export default function AdminHomeScreen({ navigation }) {
 
   const db = getFirestore();
 
-  // --- FETCH REPORTS LOGIC (SIMPLIFIED) ---
+  // --- FETCH REPORTS LOGIC ---
   useFocusEffect(
     useCallback(() => {
       loadReports();
@@ -63,17 +62,14 @@ export default function AdminHomeScreen({ navigation }) {
     try {
       setLoading(true);
       
-      // 1. Define Queries (Pending Status Only)
       const postsQuery = query(collection(db, 'report'), where('status', '==', 'pending'));
-      const commentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'pending'));
+      const commentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'pending')); 
       const usersReportQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
       
-      // 2. Define Stats Queries
       const usersColl = collection(db, 'users');
-      const clothesColl = collection(db, 'clothes'); // Just counting total items
+      const clothesColl = collection(db, 'clothes'); 
       const resolvedQuery = query(collection(db, 'report'), where('status', '==', 'resolved'));
 
-      // 3. Run all fetches in parallel (Fastest method)
       const [
         postSnap, 
         commentSnap,
@@ -90,17 +86,14 @@ export default function AdminHomeScreen({ navigation }) {
         getCountFromServer(resolvedQuery)
       ]);
       
-      // 4. Process Lists (Direct Mapping - No Extra Fetches)
-      
-      // A. Post Reports
+      // Process Lists
       const formattedPosts = postSnap.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
             reportType: 'post',
-            // Display Info
-            name: 'Reported Post', // Generic name until reviewed
+            name: 'Reported Post',
             detail: `Reason: ${data.reason || 'Flagged Content'}`,
             timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
             icon: 'alert-circle',
@@ -108,14 +101,12 @@ export default function AdminHomeScreen({ navigation }) {
         };
       });
 
-      // B. Comment Reports
       const formattedComments = commentSnap.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
             reportType: 'comment',
-            // Display Info
             name: data.targetOwnerName || 'Unknown User',
             detail: `Comment: "${data.targetContent || 'Hidden'}"`, 
             timestamp: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(0),
@@ -124,14 +115,12 @@ export default function AdminHomeScreen({ navigation }) {
         };
       });
 
-      // C. User Reports
       const formattedUserReports = userReportSnap.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
             reportType: 'user', 
-            // Display Info
             name: data.reported_user_name || 'Reported User',
             detail: `Reason: ${data.reason || 'User Behavior'}`, 
             timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
@@ -140,14 +129,11 @@ export default function AdminHomeScreen({ navigation }) {
         };
       });
 
-      // 5. Combine & Sort
       const allReports = [...formattedPosts, ...formattedComments, ...formattedUserReports];
-      allReports.sort((a, b) => b.timestamp - a.timestamp); // Newest first
+      allReports.sort((a, b) => b.timestamp - a.timestamp); 
 
       setReports(allReports);
 
-      // 6. Update Stats
-      // Note: We calculate "Pending" by adding the actual list sizes to ensure they tally perfectly.
       const totalPending = postSnap.size + commentSnap.size + userReportSnap.size;
 
       setStats({
@@ -165,20 +151,15 @@ export default function AdminHomeScreen({ navigation }) {
   };
 
   const handleViewItem = (item) => {
-    // Navigate based on type
-    if (item.reportType === 'comment') {
-        navigation.navigate('ManageComments'); 
-    } else {
-        navigation.navigate('ManageAccount', { report: item });
-    }
+    navigation.navigate('ManageReport', { report: item });
   };
 
   const handleNavigation = (tab) => {
     setActiveTab(tab);
     switch(tab) {
       case 'home': break;
-      case 'profiles': navigation.navigate('ManageAccount'); break;
-      case 'comments': navigation.navigate('ManageComments'); break;
+      case 'profiles': navigation.navigate('ManageReport'); break;
+      case 'comments': navigation.navigate('ManageFeedback'); break;
     }
   };
 
@@ -186,10 +167,10 @@ export default function AdminHomeScreen({ navigation }) {
     navigation.navigate('Welcome');
   };
 
-  // --- STATS & MODAL LOGIC ---
   const handleStatPress = (stat) => {
     let breakdown = [];
     let description = "";
+    let showDetailsButton = false; 
 
     switch (stat.label) {
         case 'Pending':
@@ -198,6 +179,7 @@ export default function AdminHomeScreen({ navigation }) {
             const userReportCount = reports.filter(r => r.reportType === 'user').length;
 
             description = "Items currently awaiting moderator review.";
+            showDetailsButton = true; 
             breakdown = [
                 { label: 'Reported Posts', value: postCount },
                 { label: 'Reported Comments', value: commentCount },
@@ -227,8 +209,13 @@ export default function AdminHomeScreen({ navigation }) {
             break;
     }
 
-    setSelectedStatData({ ...stat, description, breakdown });
+    setSelectedStatData({ ...stat, description, breakdown, showDetailsButton });
     setModalVisible(true);
+  };
+
+  const handleSeeMoreDetails = () => {
+    setModalVisible(false);
+    navigation.navigate('ManageReport'); 
   };
 
   const statsData = [
@@ -238,21 +225,10 @@ export default function AdminHomeScreen({ navigation }) {
     { label: 'Resolved', value: stats.resolved, icon: 'checkmark-done-circle-outline', color: '#FCE77D' },
   ];
 
-  // --- FILTERING ---
-  const filteredReports = reports.filter(item => {
-      const searchLower = searchQuery.toLowerCase();
-      return (
-          item.name?.toLowerCase().includes(searchLower) ||
-          item.detail?.toLowerCase().includes(searchLower) ||
-          item.reportType?.toLowerCase().includes(searchLower)
-      );
-  });
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       
-      {/* --- HEADER --- */}
       <View style={styles.header}>
         <Text style={styles.logo}>Swapism Admin</Text>
         <View style={styles.headerIcons}>
@@ -270,21 +246,18 @@ export default function AdminHomeScreen({ navigation }) {
         }
       >
         
-        {/* --- SEARCH BAR --- */}
-        <View style={styles.searchContainer}>
+        {/* --- SEARCH BAR (NAVIGATES TO ADMIN SEARCH) --- */}
+        <TouchableOpacity 
+            style={styles.searchContainer} 
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('AdminSearch')} 
+        >
             <View style={styles.searchBar}>
                 <Icon name="search-outline" size={20} color={colors.gray} style={styles.searchIcon}/>
-                <TextInput
-                    placeholder="Search reports, users..."
-                    placeholderTextColor={colors.gray}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    style={styles.searchInput}
-                />
+                <Text style={styles.placeholderText}>Search reports, users...</Text>
             </View>
-        </View>
+        </TouchableOpacity>
 
-        {/* --- HERO SECTION --- */}
         <View style={styles.heroContainer}>
            <View style={styles.heroTextContainer}>
                 <Text style={styles.greetingText}>Hello, Admin 👋</Text>
@@ -295,7 +268,6 @@ export default function AdminHomeScreen({ navigation }) {
            </View>
         </View>
 
-        {/* --- STATS GRID --- */}
         <View style={styles.statsGrid}>
             {statsData.map((stat, index) => (
                 <TouchableOpacity 
@@ -316,7 +288,6 @@ export default function AdminHomeScreen({ navigation }) {
             ))}
         </View>
 
-        {/* --- REPORTS SECTION --- */}
         <View style={styles.sectionHeaderRow}>
              <Text style={styles.sectionTitle}>Recent Reports</Text>
              <TouchableOpacity onPress={loadReports}>
@@ -327,12 +298,12 @@ export default function AdminHomeScreen({ navigation }) {
         <View style={styles.listContainer}>
             {loading ? (
                 <ActivityIndicator size="small" color={colors.dark} style={{padding:20}} />
-            ) : filteredReports.length === 0 ? (
+            ) : reports.length === 0 ? (
                 <Text style={styles.emptyText}>
-                    {searchQuery.length > 0 ? "No results found." : "No pending reports."}
+                    No pending reports.
                 </Text>
             ) : (
-                filteredReports.map((item) => (
+                reports.map((item) => (
                 <View key={item.id} style={styles.listItem}>
                     <View style={styles.listItemLeft}>
                         <View style={[styles.statusIndicator, { backgroundColor: item.iconColor }]} />
@@ -390,11 +361,22 @@ export default function AdminHomeScreen({ navigation }) {
                                 <Text style={styles.breakdownHeader}>INSIGHTS</Text>
                                 {selectedStatData.breakdown.map((item, i) => (
                                     <View key={i} style={styles.breakdownRow}>
-                                        <Text style={styles.breakdownLabel}>{item.label}</Text>
+                                        <View style={{flexDirection:'row', alignItems:'center'}}>
+                                            <Text style={styles.breakdownLabel}>{item.label}</Text>
+                                        </View>
                                         <Text style={styles.breakdownValue}>{item.value}</Text>
                                     </View>
                                 ))}
                             </View>
+
+                            {selectedStatData.showDetailsButton && (
+                                <TouchableOpacity 
+                                    style={styles.detailsButton}
+                                    onPress={handleSeeMoreDetails}
+                                >
+                                    <Text style={styles.detailsButtonText}>See More Details</Text>
+                                </TouchableOpacity>
+                            )}
 
                             <TouchableOpacity 
                                 style={styles.closeButton}
@@ -474,12 +456,11 @@ const styles = StyleSheet.create({
   searchIcon: {
     marginRight: 10,
   },
-  searchInput: {
+  placeholderText: {
     flex: 1,
     fontSize: 14,
     fontFamily: fonts.body,
-    color: colors.dark,
-    height: '100%',
+    color: colors.gray, 
   },
   heroContainer: {
     flexDirection: 'row',
@@ -725,7 +706,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9f9f9',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 20,
+    marginBottom: 15, 
   },
   breakdownHeader: {
     fontFamily: fonts.body,
@@ -738,7 +719,8 @@ const styles = StyleSheet.create({
   breakdownRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 2, 
+    paddingVertical: 4, 
   },
   breakdownLabel: {
     fontFamily: fonts.body,
@@ -751,14 +733,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.dark,
   },
-  closeButton: {
+  detailsButton: {
     backgroundColor: '#9abeaa',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  detailsButtonText: {
+    color: '#fff',
+    fontFamily: fonts.header,
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  closeButton: {
+    backgroundColor: '#fff',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#eee',
   },
   closeButtonText: {
-    color: '#fff',
+    color: colors.gray,
     fontFamily: fonts.header,
     fontWeight: '600',
     fontSize: 16,
