@@ -1,16 +1,16 @@
 import { getAuth } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, serverTimestamp, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  Modal,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    FlatList,
+    Modal,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -27,6 +27,7 @@ export default function SwapScreen({ navigation }) {
   const [selectedSort, setSelectedSort] = useState('Newest to Oldest');
   const [selectedSizes, setSelectedSizes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [favoriteItemIds, setFavoriteItemIds] = useState(new Set());
 
   const db = getFirestore();
   const auth = getAuth();
@@ -103,7 +104,21 @@ export default function SwapScreen({ navigation }) {
         };
       });
       
-      const items = await Promise.all(itemsPromises);
+      let items = await Promise.all(itemsPromises);
+      
+      // Filter out current user's own items
+      if (auth.currentUser) {
+        items = items.filter(item => item.ownerUid !== auth.currentUser.uid);
+        
+        // Load favorite status
+        const favQuery = query(
+          collection(db, 'favoriteSwaps'),
+          where('userId', '==', auth.currentUser.uid)
+        );
+        const favSnapshot = await getDocs(favQuery);
+        const favIds = new Set(favSnapshot.docs.map(doc => doc.data().itemId));
+        setFavoriteItemIds(favIds);
+      }
       
       setAllItems(items);
       const sorted = applySorting(items, selectedSort);
@@ -190,8 +205,8 @@ export default function SwapScreen({ navigation }) {
   const handleHistory = () => {
     if (!auth.currentUser) {
       Alert.alert(
-        'Login to view swap history!',
-        '',
+        'Login Required',
+        'You must be logged in to view swap history!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -202,11 +217,11 @@ export default function SwapScreen({ navigation }) {
     navigation.navigate('SwapHistory');
   };
 
-  const handleFavorite = (item) => {
+  const handleFavorite = async (item) => {
     if (!auth.currentUser) {
       Alert.alert(
-        'Login to start saving favorites!',
-        '',
+        'Login Required',
+        'You must be logged in to save favorites!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -214,15 +229,57 @@ export default function SwapScreen({ navigation }) {
       );
       return false; // Return false to prevent visual state change
     }
-    console.log('Favorited:', item.title);
-    return true; // Return true to allow visual state change
+    
+    try {
+      // Check if already favorited
+      const favQuery = query(
+        collection(db, 'favoriteSwaps'),
+        where('userId', '==', auth.currentUser.uid),
+        where('itemId', '==', item.id)
+      );
+      
+      const favSnapshot = await getDocs(favQuery);
+      
+      if (!favSnapshot.empty) {
+        // Already favorited, remove it
+        await deleteDoc(doc(db, 'favoriteSwaps', favSnapshot.docs[0].id));
+        setFavoriteItemIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(item.id);
+          return newSet;
+        });
+        console.log('Removed from favorites:', item.title);
+        return true;
+      }
+      
+      // Not favorited yet, add it
+      await addDoc(collection(db, 'favoriteSwaps'), {
+        userId: auth.currentUser.uid,
+        itemId: item.id,
+        itemTitle: item.title,
+        itemImage: item.image?.uri || item.url,
+        ownerUid: item.ownerUid,
+        userName: item.userName,
+        userRating: item.userRating || 0,
+        reviews: item.reviews || 0,
+        createdAt: serverTimestamp(),
+      });
+      
+      setFavoriteItemIds(prev => new Set([...prev, item.id]));
+      console.log('Added to favorites:', item.title);
+      return true; // Return true to allow visual state change
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Error', 'Failed to update favorites. Please try again.');
+      return false;
+    }
   };
 
-  const handleSwap = (item) => {
+  const handleSwap = async (item) => {
     if (!auth.currentUser) {
       Alert.alert(
-        'Login to start swapping items!',
-        '',
+        'Login Required',
+        'You must be logged in to swap items!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -230,16 +287,92 @@ export default function SwapScreen({ navigation }) {
       );
       return;
     }
-    console.log('Swap:', item.title);
+
+    // Check if trying to swap with yourself
+    if (item.ownerUid === auth.currentUser.uid) {
+      Alert.alert('Error', 'You cannot swap with yourself!');
+      return;
+    }
+
+    try {
+      console.log('Starting swap with item:', item.title);
+      console.log('Item owner:', item.ownerUid);
+      
+      // Check if current user has any available items to swap
+      const myItemsQuery = query(
+        collection(db, 'wardrobe-plug-fyp/user/images'),
+        where('ownerUid', '==', auth.currentUser.uid),
+        where('postType', '==', 'forSwap'),
+        where('swapStatus', '==', 'available')
+      );
+      const myItemsSnapshot = await getDocs(myItemsQuery);
+      
+      if (myItemsSnapshot.empty) {
+        Alert.alert(
+          'No Items Available',
+          'You don\'t have any items available for swapping. Please add items marked "For Swap" with status "Available" to your wardrobe.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      // Get the item owner's profile data
+      const userDoc = await getDoc(doc(db, 'users', item.ownerUid));
+      
+      if (!userDoc.exists()) {
+        Alert.alert('Error', 'Could not find user profile.');
+        return;
+      }
+      
+      const userData = userDoc.data();
+      console.log('Owner data:', userData);
+
+      const swapRequestData = {
+        theirItemId: item.id,
+        theirItemImage: item.image?.uri || item.url,
+        theirItemTitle: item.title
+      };
+      
+      console.log('Navigating to Chat with swapRequest:', swapRequestData);
+
+      // Navigate to chat with swap data
+      navigation.navigate('Chat', {
+        user: {
+          id: item.ownerUid,
+          uid: item.ownerUid,
+          name: userData.username || item.userName,
+          photoURL: userData.photoURL
+        },
+        swapRequest: swapRequestData
+      });
+    } catch (error) {
+      console.error('Error initiating swap:', error);
+      Alert.alert('Error', 'Could not start swap request. Please try again.');
+    }
   };
 
   const handleItemPress = (item) => {
-    navigation.navigate('ItemDetails', { item });
+    const post = {
+      id: item.id,
+      url: item.image?.uri || item.url,
+      description: item.description || item.title,
+      title: item.title,
+      ownerUid: item.ownerUid,
+      userName: item.userName || 'User',
+      userPhotoURL: item.userPhotoURL || null,
+      uploadedAt: item.uploadedAt || item.datePosted || new Date(),
+      swapStatus: item.swapStatus || 'available',
+      condition: item.condition || null,
+      size: item.size || null,
+      postType: item.postType || 'forSwap',
+    };
+    navigation.navigate('PostDetails', { post });
   };
 
   const renderItem = ({ item, index }) => (
     <Card
       item={item}
+      isFavorited={favoriteItemIds.has(item.id)}
       onPress={() => handleItemPress(item)}
       onFavorite={handleFavorite}
       onSwap={handleSwap}

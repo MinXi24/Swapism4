@@ -2,34 +2,34 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Calendar from 'expo-calendar';
 import { getAuth } from 'firebase/auth';
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  getFirestore,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDocs,
+    getFirestore,
+    orderBy,
+    query,
+    serverTimestamp,
+    updateDoc,
+    where
 } from 'firebase/firestore';
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  Alert,
-  Clipboard,
-  Image,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  SafeAreaView,
-  SectionList,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Clipboard,
+    Image,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    SafeAreaView,
+    SectionList,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import RNModalDateTimePicker from 'react-native-modal-datetime-picker';
 import Icon from '../../assets/icons/icons';
@@ -161,18 +161,6 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   const handleSendMessage = async () => {
-    if (!currentUser) {
-      Alert.alert(
-        'Login to start messaging!',
-        '',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => navigation.navigate('Login') }
-        ]
-      );
-      return;
-    }
-
     if (!newMessage.trim()) return;
 
     try {
@@ -589,9 +577,15 @@ export default function ChatScreen({ route, navigation }) {
       }
     });
 
-    return Object.keys(grouped).map(date => ({
+    const sections = Object.keys(grouped).map(date => ({
       title: date,
       data: grouped[date]
+    }));
+
+    // Reverse for inverted list: newest date section first, newest messages first within each section
+    return sections.reverse().map(section => ({
+      ...section,
+      data: section.data.slice().reverse()
     }));
   };
 
@@ -747,14 +741,14 @@ export default function ChatScreen({ route, navigation }) {
                   <TouchableOpacity
                     style={[
                       styles.calendarAcceptButton,
-                      { backgroundColor: isMyMessage ? '#fff' : '#4caf50' }
+                      { backgroundColor: '#fff' }
                     ]}
                     onPress={() => addEventToCalendar(item.calendarDetails, item.id)}
                   >
-                    <Icon name="calendar" size={18} color={isMyMessage ? colors.dark : '#fff'} />
+                    <Icon name="calendar" size={18} color={colors.dark} />
                     <Text style={[
                       styles.calendarAcceptText,
-                      { color: isMyMessage ? colors.dark : '#fff' }
+                      { color: colors.dark }
                     ]}>Add to Calendar</Text>
                   </TouchableOpacity>
                 ) : (
@@ -791,6 +785,18 @@ export default function ChatScreen({ route, navigation }) {
         <View style={styles.statusMessageContainer}>
           <View style={styles.statusMessageBubble}>
             <Text style={styles.statusMessageText}>{item.text}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Render reminder badge message
+    if (item.type === 'reminder') {
+      return (
+        <View style={styles.reminderMessageContainer}>
+          <View style={styles.reminderMessageBubble}>
+            <Icon name="information-circle" size={20} color={colors.accent} />
+            <Text style={styles.reminderMessageText}>{item.text}</Text>
           </View>
         </View>
       );
@@ -902,12 +908,6 @@ export default function ChatScreen({ route, navigation }) {
             }
             return null;
           })()}
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('SwapHistory')} 
-            style={styles.headerIconButton}
-          >
-            <Icon name="time-outline" size={24} color={colors.dark} />
-          </TouchableOpacity>
         </View>
 
         {/* Messages List */}
@@ -915,16 +915,17 @@ export default function ChatScreen({ route, navigation }) {
           ref={flatListRef}
           sections={groupMessagesByDate(messages)}
           renderItem={renderMessage}
-          renderSectionHeader={({ section: { title } }) => (
+          renderSectionFooter={({ section: { title } }) => (
             <View style={styles.dateHeader}>
-              <View style={styles.dateBadge}>
-                <Text style={styles.dateText}>{title}</Text>
-              </View>
+              <View style={styles.dateDividerLine} />
+              <Text style={styles.dateText}>{title}</Text>
+              <View style={styles.dateDividerLine} />
             </View>
           )}
           keyExtractor={(item) => `${item.id}`}
           contentContainerStyle={styles.messagesList}
-          stickySectionHeadersEnabled={true}
+          inverted
+          stickySectionHeadersEnabled={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Icon name="chatbubbles-outline" size={64} color={colors.gray} />
@@ -948,23 +949,19 @@ export default function ChatScreen({ route, navigation }) {
               maxLength={500}
               textAlignVertical="center"
             />
-            <TouchableOpacity style={styles.iconButton} onPress={() => setShowLocationModal(true)}>
-              <Icon name="location-outline" size={24} color={colors.accent} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={() => setShowCalendarModal(true)}>
-              <Icon name="calendar-outline" size={24} color={colors.accent} />
-            </TouchableOpacity>
+            <View style={styles.inputActions}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => {
+                setShowLocationModal(true);
+              }}>
+                <Icon name="location-outline" size={20} color={colors.gray} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconButton} onPress={() => {
+                setShowCalendarModal(true);
+              }}>
+                <Icon name="calendar-outline" size={20} color={colors.gray} />
+              </TouchableOpacity>
+            </View>
           </View>
-=========
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            placeholder="Type a message..."
-            placeholderTextColor="#585555ff"
-            value={newMessage}
-            onChangeText={setNewMessage}
-            multiline
-          />
           <TouchableOpacity
             style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
             onPress={handleSendMessage}
@@ -1156,6 +1153,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginLeft: spacing.sm,
     marginRight: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
   },
   swapOngoingButtonText: {
     color: '#fff',
@@ -1190,10 +1192,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     borderRadius: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   myMessageBubble: {
     backgroundColor: colors.accent,
@@ -1206,6 +1208,7 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 15,
     lineHeight: 20,
+    fontFamily: fonts.sub,
   },
   myMessageText: {
     color: colors.dark,
@@ -1216,6 +1219,7 @@ const styles = StyleSheet.create({
   messageTime: {
     fontSize: 11,
     marginTop: spacing.xs,
+    fontFamily: fonts.sub,
   },
   myMessageTime: {
     color: colors.gray,
@@ -1231,18 +1235,51 @@ const styles = StyleSheet.create({
   statusMessageBubble: {
     backgroundColor: '#E8E8E8',
     borderRadius: 16,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   statusMessageText: {
     fontSize: 13,
     color: '#666',
     fontStyle: 'italic',
+    fontFamily: fonts.sub,
+    textAlign: 'center',
+  },
+  reminderMessageContainer: {
+    alignItems: 'center',
+    marginVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  reminderMessageBubble: {
+    backgroundColor: colors.secondary,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  reminderMessageText: {
+    fontSize: 13,
+    color: colors.dark,
+    flex: 1,
+    lineHeight: 18,
+    fontFamily: fonts.sub,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -1300,10 +1337,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     maxWidth: '75%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   locationHeader: {
     flexDirection: 'row',
@@ -1340,6 +1377,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.dark,
     fontWeight: '600',
+    fontFamily: fonts.header,
   },
   locationAcceptButton: {
     flexDirection: 'row',
@@ -1368,26 +1406,28 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: spacing.lg,
     width: '80%',
     maxWidth: 400,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.dark,
     marginBottom: spacing.sm,
+    fontFamily: fonts.header,
   },
   modalSubtitle: {
     fontSize: 14,
     color: colors.gray,
     marginBottom: spacing.md,
+    fontFamily: fonts.sub,
   },
   modalInput: {
     borderWidth: 1,
@@ -1409,6 +1449,7 @@ const styles = StyleSheet.create({
   modalCancelText: {
     color: colors.gray,
     fontSize: 16,
+    fontFamily: fonts.sub,
   },
   modalSendButton: {
     backgroundColor: colors.accent,
@@ -1420,6 +1461,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+    fontFamily: fonts.header,
   },
   emptyContainer: {
     flex: 1,
@@ -1432,42 +1474,41 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.dark,
     marginTop: spacing.md,
+    fontFamily: fonts.header,
   },
   emptySubtext: {
     fontSize: 14,
     color: colors.gray,
     marginTop: spacing.xs,
+    fontFamily: fonts.sub,
   },
   dateHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
     marginVertical: spacing.md,
-  },
-  dateBadge: {
-    backgroundColor: '#fff',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+  },
+  dateDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0E0E0',
   },
   dateText: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.gray,
     fontFamily: fonts.sub,
+    paddingHorizontal: spacing.md,
   },
   calendarBubble: {
     padding: spacing.md,
     borderRadius: 12,
     maxWidth: '80%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -1511,6 +1552,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#fff',
     fontWeight: '600',
+    fontFamily: fonts.header,
   },
   calendarDeclineButton: {
     alignItems: 'center',

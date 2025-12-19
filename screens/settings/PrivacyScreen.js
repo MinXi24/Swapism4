@@ -26,10 +26,6 @@ export default function PrivacyScreen({ navigation }) {
   const currentUser = auth.currentUser;
 
   const loadPrivacySettings = async () => {
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
 
     try {
       const userDocRef = doc(db, 'users', currentUser.uid);
@@ -52,10 +48,6 @@ export default function PrivacyScreen({ navigation }) {
   }, []);
 
   const handlePrivacyToggle = async (value) => {
-    if (!currentUser) {
-      Alert.alert('Error', 'Please log in to change settings');
-      return;
-    }
 
     try {
       setUpdating(true);
