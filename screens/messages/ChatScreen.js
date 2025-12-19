@@ -6,6 +6,7 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDoc,
     getDocs,
     getFirestore,
     orderBy,
@@ -807,6 +808,61 @@ export default function ChatScreen({ route, navigation }) {
               {formatTime(item.createdAt)}
             </Text>
           </View>
+        </View>
+      );
+    }
+
+    // Render shared post message
+    if (item.type === 'shared_post' && item.postData) {
+      return (
+        <View style={[
+          styles.messageContainer,
+          isMyMessage ? styles.myMessage : styles.theirMessage
+        ]}>
+          <TouchableOpacity
+            style={[
+              styles.sharedPostBubble,
+              isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
+            ]}
+            onPress={async () => {
+              try {
+                const postRef = doc(db, 'wardrobe-plug-fyp/user/images', item.postData.id);
+                const postSnap = await getDoc(postRef);
+                
+                if (postSnap.exists()) {
+                  const post = { id: postSnap.id, ...postSnap.data() };
+                  navigation.navigate('PostDetails', { post });
+                } else {
+                  Alert.alert('Error', 'This post is no longer available');
+                }
+              } catch (error) {
+                console.error('Error loading post:', error);
+                Alert.alert('Error', 'Failed to load post');
+              }
+            }}
+          >
+            <Image source={{ uri: item.postData.url }} style={styles.sharedPostImage} />
+            <View style={styles.sharedPostInfo}>
+              <Text style={[
+                styles.sharedPostTitle,
+                isMyMessage ? styles.myMessageText : styles.theirMessageText
+              ]} numberOfLines={2}>
+                {item.postData.title || 'Shared Post'}
+              </Text>
+              <Text style={[
+                styles.sharedPostLabel,
+                isMyMessage ? styles.myMessageText : styles.theirMessageText
+              ]}>
+                Tap to view
+              </Text>
+            </View>
+            <Text style={[
+              styles.messageTime,
+              isMyMessage ? styles.myMessageTime : styles.theirMessageTime
+            ]}>
+              {formatTime(item.createdAt)}
+            </Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -1645,6 +1701,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.dark,
   },
+  sharedPostBubble: {
+    padding: spacing.md,
+    borderRadius: 12,
+    maxWidth: '80%',
+    minWidth: 200,
+  },
   sharedPostPreview: {
     backgroundColor: '#fff',
     borderTopWidth: 1,
@@ -1658,9 +1720,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sharedPostImage: {
-    width: 60,
-    height: 60,
+    width: '100%',
+    height: 120,
     borderRadius: 8,
+    marginBottom: spacing.sm,
   },
   sharedPostInfo: {
     flex: 1,
@@ -1668,12 +1731,11 @@ const styles = StyleSheet.create({
   sharedPostTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.dark,
     marginBottom: 4,
   },
   sharedPostLabel: {
     fontSize: 12,
-    color: colors.gray,
+    opacity: 0.7,
   },
   sharedPostActions: {
     flexDirection: 'row',
