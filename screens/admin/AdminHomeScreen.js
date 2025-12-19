@@ -62,38 +62,55 @@ export default function AdminHomeScreen({ navigation }) {
     }, [])
   );
 
+  /**
+   * STRICT FILTERING LOGIC
+   * Updated to specifically check for Comment existence.
+   */
   const verifyExistence = async (item) => {
-    const deletedId = 'm9';
-    // STRICT SCRUB: If m9 is anywhere in this report, kill it immediately
-    if (
-        item.id === deletedId || 
-        item.targetId === deletedId || 
-        item.reported_user_id === deletedId || 
-        item.userId === deletedId ||
-        item.reporter_id === deletedId ||
-        item.targetOwnerUid === deletedId ||
-        item.ownerUid === deletedId ||
-        item.reported_clothes_id === deletedId
-    ) {
-      return false;
+    const deletedId = 'm9'; 
+    if (item.id === deletedId || item.reported_user_id === deletedId || item.targetId === deletedId || item.userId === deletedId) {
+        return false;
     }
 
     try {
+      // 1. POST CHECK: Check image existence & owner status
       if (item.reportType === 'post') {
-        const postRef = doc(db, 'wardrobe-plug-fyp/user/images', item.reported_clothes_id || item.targetId || item.id);
+        const postID = item.reported_clothes_id || item.targetId || item.id;
+        const postRef = doc(db, 'wardrobe-plug-fyp/user/images', postID);
         const postSnap = await getDoc(postRef);
         if (!postSnap.exists()) return false;
 
         const ownerUid = postSnap.data().ownerUid;
-        const ownerRef = doc(db, 'users', ownerUid);
-        const ownerSnap = await getDoc(ownerRef);
+        const ownerSnap = await getDoc(doc(db, 'users', ownerUid));
         if (!ownerSnap.exists()) return false;
         
         const ownerData = ownerSnap.data();
         return !(ownerData.deleted === true || ownerData.active === false || ownerData.isBanned === true);
       } 
       
-      if (item.reportType === 'user' || item.reportType === 'comment') {
+      // 2. COMMENT CHECK: Check if the actual comment document exists
+      if (item.reportType === 'comment') {
+        // A. Check author status first
+        const targetUid = item.reported_user_id || item.targetOwnerUid || item.userId;
+        if (targetUid) {
+          const userSnap = await getDoc(doc(db, 'users', targetUid));
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            if (userData.deleted === true || userData.isBanned === true) return false;
+          }
+        }
+
+        // B. Check if the actual comment document exists in your comments collection
+        // NOTE: Ensure 'comments' matches your actual collection name
+        const commentId = item.targetId || item.comment_id;
+        if (commentId) {
+            const commentSnap = await getDoc(doc(db, 'comments', commentId));
+            if (!commentSnap.exists()) return false;
+        }
+      }
+
+      // 3. USER CHECK: Check if target user is active
+      if (item.reportType === 'user') {
         const targetUid = item.reported_user_id || item.targetOwnerUid || item.userId;
         if (!targetUid) return true; 
 
@@ -107,123 +124,80 @@ export default function AdminHomeScreen({ navigation }) {
 
       return true; 
     } catch (e) {
-      return false;
+      return true; // Default to show on error to prevent losing data
     }
+  };
+
+  /**
+   * PROCESS, CLEAN & DEDUPLICATE
+   */
+  const processAndClean = async (items) => {
+    items.sort((a, b) => b.timestamp - a.timestamp);
+
+    const verifiedResults = await Promise.all(items.map(async (item) => {
+        const isValid = await verifyExistence(item);
+        return isValid ? item : null;
+    }));
+
+    const seenTargets = new Set();
+    const finalItems = [];
+
+    for (const item of verifiedResults) {
+        if (!item) continue;
+        let uniqueKey;
+        if (item.reportType === 'post') uniqueKey = `post_${item.reported_clothes_id || item.targetId || item.id}`;
+        else if (item.reportType === 'user') uniqueKey = `user_${item.reported_user_id || item.userId}`;
+        else uniqueKey = item.id; 
+
+        if (!seenTargets.has(uniqueKey)) {
+            seenTargets.add(uniqueKey);
+            finalItems.push(item);
+        }
+    }
+    return finalItems;
   };
 
   const loadReports = async () => {
     try {
       setLoading(true);
       
-      const postsQuery = query(collection(db, 'report'), where('status', '==', 'pending'));
-      const commentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'pending')); 
-      const usersReportQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
+      const pQuery = query(collection(db, 'report'), where('status', '==', 'pending'));
+      const cQuery = query(collection(db, 'reported_comments'), where('status', '==', 'pending')); 
+      const uQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
       
-      const resPostsQuery = query(collection(db, 'report'), where('status', '==', 'resolved'), limit(20));
-      const resCommentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'resolved'), limit(20));
-      const resUsersQuery = query(collection(db, 'reported_users'), where('status', '==', 'resolved'), limit(20));
+      const resPQuery = query(collection(db, 'report'), where('status', '==', 'resolved'), limit(20));
+      const resCQuery = query(collection(db, 'reported_comments'), where('status', '==', 'resolved'), limit(20));
+      const resUQuery = query(collection(db, 'reported_users'), where('status', '==', 'resolved'), limit(20));
 
-      const usersColl = collection(db, 'users');
-      const clothesColl = collection(db, 'clothes'); 
-
-      const [
-        postSnap, commentSnap, userReportSnap,
-        totalUsersSnap, totalClothesSnap,
-        historyPostSnap, historyCommentSnap, historyUserSnap
-      ] = await Promise.all([
-        getDocs(postsQuery), getDocs(commentsQuery), getDocs(usersReportQuery),
-        getCountFromServer(usersColl), getCountFromServer(clothesColl),
-        getDocs(resPostsQuery), getDocs(resCommentsQuery), getDocs(resUsersQuery)
+      const [pSnap, cSnap, uSnap, uTotal, cTotal, hPSnap, hCSnap, hUSnap] = await Promise.all([
+        getDocs(pQuery), getDocs(cQuery), getDocs(uQuery),
+        getCountFromServer(collection(db, 'users')), getCountFromServer(collection(db, 'clothes')),
+        getDocs(resPQuery), getDocs(resCQuery), getDocs(resUQuery)
       ]);
       
-      // Process Pending
       const rawPending = [
-        ...postSnap.docs.map(doc => ({
-            id: doc.id, ...doc.data(), reportType: 'post', name: 'Reported Post',
-            detail: `Reason: ${doc.data().reason || 'Flagged Content'}`,
-            timestamp: doc.data().created_at?.toDate ? doc.data().created_at.toDate() : new Date(0),
-            icon: 'alert-circle', iconColor: '#FF6B6B' 
-        })),
-        ...commentSnap.docs.map(doc => ({
-            id: doc.id, ...doc.data(), reportType: 'comment', name: doc.data().targetOwnerName || 'Unknown User',
-            detail: `Comment: "${doc.data().targetContent || 'Hidden'}"`, 
-            timestamp: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(0),
-            icon: 'chatbubble-ellipses', iconColor: '#FDD835'
-        })),
-        ...userReportSnap.docs.map(doc => ({
-            id: doc.id, ...doc.data(), reportType: 'user', name: doc.data().reported_user_name || 'Reported User',
-            detail: `Reason: ${doc.data().reason || 'User Behavior'}`, 
-            timestamp: doc.data().created_at?.toDate ? doc.data().created_at.toDate() : new Date(0),
-            icon: 'person-remove', iconColor: '#FF6B6B'
-        }))
+        ...pSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'post', name: 'Reported Post', detail: `Reason: ${doc.data().reason || 'Flagged'}`, timestamp: doc.data().created_at?.toDate() || new Date(0), icon: 'alert-circle', iconColor: '#FF6B6B' })),
+        ...cSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'comment', name: doc.data().targetOwnerName || 'Unknown User', detail: `Comment: "${doc.data().targetContent || 'Hidden'}"`, timestamp: doc.data().createdAt?.toDate() || new Date(0), icon: 'chatbubble-ellipses', iconColor: '#FDD835' })),
+        ...uSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), reportType: 'user', name: doc.data().reported_user_name || 'Reported User', detail: `Reason: ${doc.data().reason || 'Behavior'}`, timestamp: doc.data().created_at?.toDate() || new Date(0), icon: 'person-remove', iconColor: '#FF6B6B' }))
       ];
 
-      // Process Resolved
       const rawHistory = [
-        ...historyPostSnap.docs.map(d => ({
-          ...d.data(), id: d.id, reportType: 'post', name: 'Resolved Post',
-          detail: `Action: ${d.data().actionTaken || 'Resolved'}`,
-          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().created_at?.toDate ? d.data().created_at.toDate() : new Date(0),
-          icon: 'checkmark-circle', iconColor: '#9abeaa'
-        })),
-        ...historyCommentSnap.docs.map(d => ({
-          ...d.data(), id: d.id, reportType: 'comment', name: d.data().targetOwnerName || 'Comment',
-          detail: `Comment: "${d.data().targetContent || 'Hidden'}"`,
-          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(0),
-          icon: 'checkmark-circle', iconColor: '#9abeaa'
-        })),
-        ...historyUserSnap.docs.map(d => ({
-          ...d.data(), id: d.id, reportType: 'user', name: d.data().reported_user_name || 'User',
-          detail: `Action: ${d.data().actionTaken || 'Reviewed'}`,
-          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().created_at?.toDate ? d.data().created_at.toDate() : new Date(0),
-          icon: 'checkmark-circle', iconColor: '#9abeaa'
-        }))
+        ...hPSnap.docs.map(d => ({ id: d.id, ...d.data(), reportType: 'post', name: 'Resolved Post', detail: `Action: ${d.data().actionTaken || 'Closed'}`, timestamp: d.data().resolvedAt?.toDate() || new Date(0), icon: 'checkmark-circle', iconColor: '#9abeaa' })),
+        ...hCSnap.docs.map(d => ({ id: d.id, ...d.data(), reportType: 'comment', name: d.data().targetOwnerName || 'Comment', detail: `Resolved`, timestamp: d.data().resolvedAt?.toDate() || new Date(0), icon: 'checkmark-circle', iconColor: '#9abeaa' })),
+        ...hUSnap.docs.map(d => ({ id: d.id, ...d.data(), reportType: 'user', name: d.data().reported_user_name || 'User Review', detail: `Action: Reviewed`, timestamp: d.data().resolvedAt?.toDate() || new Date(0), icon: 'checkmark-circle', iconColor: '#9abeaa' }))
       ];
 
-      /**
-       * REFACTORED CLEANING LOGIC:
-       * Uses a sequential loop to ensure database existence is confirmed 
-       * BEFORE rendering the list.
-       */
-      const processAndClean = async (items) => {
-        items.sort((a, b) => b.timestamp - a.timestamp);
+      const cleanPending = await processAndClean(rawPending);
+      const cleanHistory = await processAndClean(rawHistory);
 
-        const seenTargets = new Set();
-        const validItems = [];
-
-        for (const item of items) {
-          // 1. Deduplicate check
-          let key;
-          if (item.reportType === 'post') key = `post_${item.reported_clothes_id || item.targetId || item.id}`;
-          else if (item.reportType === 'user') key = `user_${item.reported_user_id || item.userId}`;
-          else key = item.id;
-
-          if (seenTargets.has(key)) continue;
-
-          // 2. Existence/Deletion check (Wait for DB response)
-          const exists = await verifyExistence(item);
-          if (exists) {
-            seenTargets.add(key);
-            validItems.push(item);
-          }
-        }
-        
-        return validItems;
-      };
-
-      const finalPending = await processAndClean(rawPending);
-      const finalHistory = await processAndClean(rawHistory);
-
-      setReports(finalPending);
-      setResolvedHistory(finalHistory);
-
+      setReports(cleanPending);
+      setResolvedHistory(cleanHistory);
       setStats({
-        pending: finalPending.length,
-        users: totalUsersSnap.data().count,
-        listings: totalClothesSnap.data().count,
-        resolved: finalHistory.length
+        pending: cleanPending.length,
+        users: uTotal.data().count,
+        listings: cTotal.data().count,
+        resolved: cleanHistory.length
       });
-
     } catch (error) {
       console.error('Error loading admin data:', error);
     } finally {
@@ -253,7 +227,6 @@ export default function AdminHomeScreen({ navigation }) {
         setListFilter('resolved');
         return;
     }
-
     let description = "";
     let showDetailsButton = false; 
 
@@ -269,14 +242,8 @@ export default function AdminHomeScreen({ navigation }) {
             description = "Total active wardrobe items.";
             break;
     }
-
-    setSelectedStatData({ ...stat, description, showDetailsButton });
+    setSelectedStatData({ ...stat, description, breakdown: [], showDetailsButton });
     setModalVisible(true);
-  };
-
-  const handleSeeMoreDetails = () => {
-    setModalVisible(false);
-    navigation.navigate('ManageReport'); 
   };
 
   const statsData = [
@@ -304,17 +271,10 @@ export default function AdminHomeScreen({ navigation }) {
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={loadReports} />
-        }
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={loadReports} />}
       >
         
-        {/* --- SEARCH BAR --- */}
-        <TouchableOpacity 
-            style={styles.searchContainer} 
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('AdminSearch')} 
-        >
+        <TouchableOpacity style={styles.searchContainer} activeOpacity={0.9} onPress={() => navigation.navigate('AdminSearch')}>
             <View style={styles.searchBar}>
                 <Icon name="search-outline" size={20} color={colors.gray} style={styles.searchIcon}/>
                 <Text style={styles.placeholderText}>Search reports, users...</Text>
@@ -333,16 +293,9 @@ export default function AdminHomeScreen({ navigation }) {
 
         <View style={styles.statsGrid}>
             {statsData.map((stat, index) => (
-                <TouchableOpacity 
-                    key={index} 
-                    style={styles.statCard}
-                    onPress={() => handleStatPress(stat)}
-                    activeOpacity={0.7}
-                >
+                <TouchableOpacity key={index} style={styles.statCard} onPress={() => handleStatPress(stat)} activeOpacity={0.7}>
                     <View style={styles.statHeader}>
-                        <Text style={styles.statValue}>
-                            {loading && stat.value === 0 ? '...' : stat.value}
-                        </Text>
+                        <Text style={styles.statValue}>{loading && stat.value === 0 ? '...' : stat.value}</Text>
                         <Icon name={stat.icon} size={20} color={stat.color} />
                     </View>
                     <Text style={styles.statLabel}>{stat.label}</Text>
@@ -370,48 +323,32 @@ export default function AdminHomeScreen({ navigation }) {
             {loading ? (
                 <ActivityIndicator size="small" color={colors.dark} style={{padding:20}} />
             ) : currentDisplayList.length === 0 ? (
-                <Text style={styles.emptyText}>
-                    No {listFilter} items found.
-                </Text>
+                <Text style={styles.emptyText}>No {listFilter} items found.</Text>
             ) : (
                 currentDisplayList.map((item) => (
                 <View key={item.id} style={styles.listItem}>
                     <View style={styles.listItemLeft}>
                         <View style={[styles.statusIndicator, { backgroundColor: item.iconColor }]} />
                         <View style={styles.avatar}>
-                            <Icon name={item.icon || 'alert-circle'} size={20} color={colors.gray} />
+                            <Icon name={item.icon} size={20} color={colors.gray} />
                         </View>
                         <View style={styles.textContainer}>
                             <Text style={styles.nameText}>{item.name}</Text>
                             <Text style={styles.detailText} numberOfLines={1}>{item.detail}</Text>
                         </View>
                     </View>
-                    
-                    <TouchableOpacity 
-                        style={styles.reviewButton}
-                        onPress={() => handleViewItem(item)}
-                    >
+                    <TouchableOpacity style={styles.reviewButton} onPress={() => handleViewItem(item)}>
                         <Text style={styles.reviewButtonText}>{listFilter === 'pending' ? 'Review' : 'View'}</Text>
                     </TouchableOpacity>
                 </View>
                 ))
             )}
         </View>
-
       </ScrollView>
 
       {/* --- STAT DETAILS MODAL --- */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <TouchableOpacity 
-            style={styles.modalOverlay} 
-            activeOpacity={1} 
-            onPress={() => setModalVisible(false)}
-        >
+      <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
             <TouchableWithoutFeedback>
                 <View style={styles.modalContent}>
                     {selectedStatData && (
@@ -425,22 +362,8 @@ export default function AdminHomeScreen({ navigation }) {
                                     <Text style={styles.modalBigValue}>{selectedStatData.value}</Text>
                                 </View>
                             </View>
-                            
                             <Text style={styles.modalDescription}>{selectedStatData.description}</Text>
-                            
-                            {selectedStatData.showDetailsButton && (
-                                <TouchableOpacity 
-                                    style={styles.detailsButton}
-                                    onPress={handleSeeMoreDetails}
-                                >
-                                    <Text style={styles.detailsButtonText}>See More Details</Text>
-                                </TouchableOpacity>
-                            )}
-
-                            <TouchableOpacity 
-                                style={styles.closeButton}
-                                onPress={() => setModalVisible(false)}
-                            >
+                            <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
                                 <Text style={styles.closeButtonText}>Close</Text>
                             </TouchableOpacity>
                         </>
@@ -759,19 +682,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 20,
     lineHeight: 20,
-  },
-  detailsButton: {
-    backgroundColor: '#9abeaa',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  detailsButtonText: {
-    color: '#fff',
-    fontFamily: fonts.header,
-    fontWeight: '600',
-    fontSize: 16,
   },
   closeButton: {
     backgroundColor: '#fff',
