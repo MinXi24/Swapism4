@@ -4,6 +4,7 @@ import { collection, doc, getDoc, getDocs, getFirestore, query, where } from 'fi
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Image,
   Modal,
@@ -16,6 +17,13 @@ import {
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ITEM_SPACING = 2;
+const ITEMS_PER_ROW = 3;
+const TOTAL_SPACING = ITEM_SPACING * (ITEMS_PER_ROW - 1);
+const ITEM_WIDTH = (SCREEN_WIDTH - TOTAL_SPACING) / ITEMS_PER_ROW;
+const ITEM_HEIGHT = ITEM_WIDTH * 1.33; // 3:4 aspect ratio
 
 export default function ActivityScreen({ navigation }) {
   const [likedPosts, setLikedPosts] = useState([]);
@@ -133,19 +141,13 @@ export default function ActivityScreen({ navigation }) {
           <Icon name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Likes</Text>
-        <TouchableOpacity onPress={() => {/* Add Select functionality if needed */}} style={styles.selectButton}>
-          <Text style={styles.selectText}>Select</Text>
-        </TouchableOpacity>
+        <View style={{ width: 24 }} />
       </View>
 
       {/* Filter Buttons */}
       <View style={styles.filterContainer}>
         <TouchableOpacity style={styles.filterButton} onPress={() => setShowSortModal(true)}>
           <Text style={styles.filterText}>{sortOrder === 'newest' ? 'Newest to oldest' : 'Oldest to newest'}</Text>
-          <Icon name="chevron-down" size={16} color="#000" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.filterButton}>
-          <Text style={styles.filterText}>All dates</Text>
           <Icon name="chevron-down" size={16} color="#000" />
         </TouchableOpacity>
       </View>
@@ -293,17 +295,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   gridContainer: {
-    paddingHorizontal: 2,
     paddingBottom: 20,
   },
   gridRow: {
-    gap: 4,
+    justifyContent: 'flex-start',
   },
   postItem: {
-    flex: 1,
-    aspectRatio: 0.75,
+    width: ITEM_WIDTH,
+    height: ITEM_HEIGHT,
     backgroundColor: '#f0f0f0',
-    marginBottom: 4,
+    marginRight: ITEM_SPACING,
+    marginBottom: ITEM_SPACING,
     position: 'relative',
   },
   postImage: {

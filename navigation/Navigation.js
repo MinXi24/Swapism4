@@ -4,6 +4,7 @@ import AdminSearchScreen from '../screens/admin/AdminSearchScreen';
 import ManageFeedback from '../screens/admin/manageFeedbackScreen';
 import ManageReportsScreen from '../screens/admin/manageReportsScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
+import ProfileSetupScreen from '../screens/auth/ProfileSetupScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import FavouritesScreen from '../screens/favourites/FavouritesScreen';
@@ -29,6 +30,7 @@ import RecentlyDeletedScreen from '../screens/settings/RecentlyDeletedScreen';
 import SendFeedbackScreen from '../screens/settings/SendFeedbackScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ItemDetailsScreen from '../screens/swap/ItemDetailsScreen';
+import SwapOngoingScreen from '../screens/swap/SwapOngoingScreen';
 import SwapScreen from '../screens/swap/SwapScreen';
 
 const Stack = createNativeStackNavigator();
@@ -44,10 +46,12 @@ export default function Navigation() {
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
+      <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="Swap" component={SwapScreen} />
       <Stack.Screen name="ItemDetails" component={ItemDetailsScreen} />
+      <Stack.Screen name="SwapOngoing" component={SwapOngoingScreen} />
       <Stack.Screen name="Messages" component={MessagesScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="SwapHistory" component={SwapHistoryScreen} />

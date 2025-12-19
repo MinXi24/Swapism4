@@ -161,7 +161,19 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !currentUser) return;
+    if (!currentUser) {
+      Alert.alert(
+        'Login to start messaging!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
+    if (!newMessage.trim()) return;
 
     try {
       await addDoc(collection(db, 'messages'), {
@@ -245,6 +257,91 @@ export default function ChatScreen({ route, navigation }) {
   const copyToClipboard = (text) => {
     Clipboard.setString(text);
     Alert.alert('Copied', 'Postal code copied to clipboard!');
+  };
+
+  const handleAcceptLocation = async (message) => {
+    Alert.alert(
+      'Accept Location',
+      'Do you want to accept this location for the swap meetup?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Accept',
+          onPress: async () => {
+            try {
+              const msgRef = doc(db, 'messages', message.id);
+              await updateDoc(msgRef, {
+                locationAccepted: true,
+                updatedAt: serverTimestamp(),
+              });
+              
+              // Send status confirmation message
+              await addDoc(collection(db, 'messages'), {
+                senderId: currentUser.uid,
+                receiverId: otherUserId,
+                text: 'The location was accepted',
+                createdAt: serverTimestamp(),
+                participants: [currentUser.uid, otherUserId],
+                read: false,
+                type: 'status',
+              });
+              
+              await loadMessages();
+              Alert.alert('Success', 'Location accepted!');
+            } catch (e) {
+              console.error('Error accepting location:', e);
+              Alert.alert('Error', 'Failed to accept location.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeclineLocation = async (message) => {
+    Alert.alert(
+      'Decline Location',
+      'Are you sure you want to decline this location?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Decline',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const msgRef = doc(db, 'messages', message.id);
+              await updateDoc(msgRef, {
+                locationDeclined: true,
+                updatedAt: serverTimestamp(),
+              });
+              
+              // Send status confirmation message
+              await addDoc(collection(db, 'messages'), {
+                senderId: currentUser.uid,
+                receiverId: otherUserId,
+                text: 'The location was declined',
+                createdAt: serverTimestamp(),
+                participants: [currentUser.uid, otherUserId],
+                read: false,
+                type: 'status',
+              });
+              
+              await loadMessages();
+              Alert.alert('Declined', 'Location declined.');
+            } catch (e) {
+              console.error('Error declining location:', e);
+              Alert.alert('Error', 'Failed to decline location.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Calendar permission
@@ -352,33 +449,90 @@ export default function ChatScreen({ route, navigation }) {
 
   // Handle accept calendar invite
   const handleAcceptCalendarInvite = async (message) => {
-    // Update Firestore status to 'accepted'
-    try {
-      const msgRef = doc(db, 'messages', message.id);
-      await updateDoc(msgRef, {
-        'calendarDetails.status': 'accepted',
-        updatedAt: serverTimestamp(),
-      });
-      await loadMessages();
-    } catch (e) {
-      console.error('Error updating event status:', e);
-      Alert.alert('Error', 'Failed to update event status.');
-    }
+    Alert.alert(
+      'Accept Meetup',
+      'Do you want to accept this swap meetup invitation?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Accept',
+          onPress: async () => {
+            // Update Firestore status to 'accepted'
+            try {
+              const msgRef = doc(db, 'messages', message.id);
+              await updateDoc(msgRef, {
+                'calendarDetails.status': 'accepted',
+                updatedAt: serverTimestamp(),
+              });
+              
+              // Send status confirmation message
+              await addDoc(collection(db, 'messages'), {
+                senderId: currentUser.uid,
+                receiverId: otherUserId,
+                text: 'The meetup invitation was accepted',
+                createdAt: serverTimestamp(),
+                participants: [currentUser.uid, otherUserId],
+                read: false,
+                type: 'status',
+              });
+              
+              await loadMessages();
+              Alert.alert('Success', 'Meetup invitation accepted!');
+            } catch (e) {
+              console.error('Error updating event status:', e);
+              Alert.alert('Error', 'Failed to update event status.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleDeclineCalendarInvite = async (message) => {
-    // Update Firestore status to 'declined'
-    try {
-      const msgRef = doc(db, 'messages', message.id);
-      await updateDoc(msgRef, {
-        'calendarDetails.status': 'declined',
-        updatedAt: serverTimestamp(),
-      });
-      await loadMessages();
-    } catch (e) {
-      console.error('Error updating event status:', e);
-      Alert.alert('Error', 'Failed to update event status.');
-    }
+    Alert.alert(
+      'Decline Meetup',
+      'Are you sure you want to decline this swap meetup invitation?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Decline',
+          style: 'destructive',
+          onPress: async () => {
+            // Update Firestore status to 'declined'
+            try {
+              const msgRef = doc(db, 'messages', message.id);
+              await updateDoc(msgRef, {
+                'calendarDetails.status': 'declined',
+                updatedAt: serverTimestamp(),
+              });
+              
+              // Send status confirmation message
+              await addDoc(collection(db, 'messages'), {
+                senderId: currentUser.uid,
+                receiverId: otherUserId,
+                text: 'The meetup invitation was declined',
+                createdAt: serverTimestamp(),
+                participants: [currentUser.uid, otherUserId],
+                read: false,
+                type: 'status',
+              });
+              
+              await loadMessages();
+              Alert.alert('Declined', 'Meetup invitation declined.');
+            } catch (e) {
+              console.error('Error updating event status:', e);
+              Alert.alert('Error', 'Failed to update event status.');
+            }
+          },
+        },
+      ]
+    );
   };
 
 
@@ -444,8 +598,13 @@ export default function ChatScreen({ route, navigation }) {
   const renderMessage = ({ item }) => {
     const isMyMessage = item.senderId === currentUser?.uid;
     
-    // Render swap request card
+    // Render swap request card (hide if completed or withdrawn)
     if (item.type === 'swap_request' && item.swapDetails) {
+      // Don't show completed or withdrawn swap cards
+      if (item.swapDetails.status === 'completed' || item.swapDetails.status === 'withdrawn') {
+        return null;
+      }
+      
       return (
         <SwapRequestCard
           message={item}
@@ -457,17 +616,6 @@ export default function ChatScreen({ route, navigation }) {
         />
       );
     }
-
-    // Render status message
-    if (item.type === 'status') {
-      return (
-        <View style={styles.statusMessageContainer}>
-          <View style={styles.statusMessageBubble}>
-            <Text style={styles.statusMessageText}>{item.text}</Text>
-          </View>
-        </View>
-      );
-    }
     
     // Render location message
     if (item.type === 'location') {
@@ -476,34 +624,49 @@ export default function ChatScreen({ route, navigation }) {
           styles.messageContainer,
           isMyMessage ? styles.myMessage : styles.theirMessage
         ]}>
-          {!isMyMessage && user?.photoURL && (
-            <Image source={{ uri: user.photoURL }} style={styles.messageAvatar} />
-          )}
           <View style={[
             styles.locationBubble,
             isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
           ]}>
             <View style={styles.locationHeader}>
-              <Icon name="location" size={20} color={isMyMessage ? '#fff' : colors.accent} />
-              <Text style={styles.locationTitle}>Location Shared</Text>
+              <Icon name="location" size={20} color={colors.dark} />
+              <Text style={[styles.locationTitle, { color: colors.dark }]}>Location Shared</Text>
             </View>
-            <Text style={styles.locationText}>Postal Code: {item.text}</Text>
-            <View style={styles.locationButtons}>
+            <Text style={[styles.locationText, { color: colors.dark }]}>Postal Code: {item.text}</Text>
+            <View style={[styles.locationButtons, { marginBottom: spacing.sm }]}>
               <TouchableOpacity
                 style={styles.locationButton}
                 onPress={() => copyToClipboard(item.text)}
               >
-                <Icon name="copy-outline" size={16} color={colors.accent} />
+                <Icon name="copy-outline" size={16} color={colors.dark} />
                 <Text style={styles.locationButtonText}>Copy</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.locationButton}
                 onPress={() => openInMapApp(item.text)}
               >
-                <Icon name="map-outline" size={16} color={colors.accent} />
+                <Icon name="map-outline" size={16} color={colors.dark} />
                 <Text style={styles.locationButtonText}>Open in Map</Text>
               </TouchableOpacity>
             </View>
+            {!item.locationAccepted && !item.locationDeclined && !isMyMessage && (
+              <View style={{ flexDirection: 'column', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.md }}>
+                <TouchableOpacity
+                  style={[styles.locationAcceptButton, { backgroundColor: '#4caf50', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs }]}
+                  onPress={() => handleAcceptLocation(item)}
+                >
+                  <Icon name="checkmark-circle" size={18} color="#fff" />
+                  <Text style={[styles.locationAcceptText, { color: '#fff', fontSize: 14, fontWeight: '600' }]}>Accept</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ backgroundColor: '#f44336', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs }}
+                  onPress={() => handleDeclineLocation(item)}
+                >
+                  <Icon name="close-circle" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Decline</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <Text style={[
               styles.messageTime,
               isMyMessage ? styles.myMessageTime : styles.theirMessageTime
@@ -537,37 +700,44 @@ export default function ChatScreen({ route, navigation }) {
           styles.messageContainer,
           isMyMessage ? styles.myMessage : styles.theirMessage
         ]}>
-          {!isMyMessage && user?.photoURL && (
-            <Image source={{ uri: user.photoURL }} style={styles.messageAvatar} />
-          )}
           <View style={[
             styles.calendarBubble,
             isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble
           ]}>
             <View style={styles.calendarHeader}>
-              <Icon name="calendar" size={20} color={isMyMessage ? '#fff' : colors.accent} />
-              <Text style={styles.calendarTitle}>Swap Meetup Invitation</Text>
+              <Icon name="calendar" size={20} color={colors.dark} />
+              <Text style={[styles.calendarTitle, { color: colors.dark }]}>Swap Meetup Invitation</Text>
             </View>
             <View style={styles.calendarDetails}>
               <View style={styles.calendarDetailRow}>
-                <Icon name="time-outline" size={16} color={colors.gray} />
-                <Text style={styles.calendarDetailText}>{dateStr} at {timeStr}</Text>
+                <Icon name="time-outline" size={16} color={colors.dark} />
+                <Text style={[styles.calendarDetailText, { color: colors.dark }]}>{dateStr} at {timeStr}</Text>
               </View>
             </View>
             {status === 'pending' && !isMyMessage && (
               <View style={styles.calendarActions}>
                 <TouchableOpacity
-                  style={styles.calendarAcceptButton}
+                  style={[
+                    styles.calendarAcceptButton,
+                    { backgroundColor: '#4caf50' }
+                  ]}
                   onPress={() => handleAcceptCalendarInvite(item)}
                 >
                   <Icon name="checkmark-circle" size={18} color="#fff" />
-                  <Text style={styles.calendarAcceptText}>Accept & Add to Calendar</Text>
+                  <Text style={[
+                    styles.calendarAcceptText,
+                    { color: '#fff' }
+                  ]}>Accept</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.calendarDeclineButton}
+                  style={[
+                    styles.calendarDeclineButton,
+                    { backgroundColor: '#f44336', paddingHorizontal: spacing.md, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm }
+                  ]}
                   onPress={() => handleDeclineCalendarInvite(item)}
                 >
-                  <Text style={styles.calendarDeclineText}>Decline</Text>
+                  <Icon name="close-circle" size={16} color="#fff" />
+                  <Text style={[styles.calendarDeclineText, { color: '#fff' }]}>Decline</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -575,11 +745,17 @@ export default function ChatScreen({ route, navigation }) {
               <View style={styles.calendarActions}>
                 {!isAdded ? (
                   <TouchableOpacity
-                    style={styles.calendarAcceptButton}
+                    style={[
+                      styles.calendarAcceptButton,
+                      { backgroundColor: isMyMessage ? '#fff' : '#4caf50' }
+                    ]}
                     onPress={() => addEventToCalendar(item.calendarDetails, item.id)}
                   >
-                    <Icon name="calendar" size={18} color="#fff" />
-                    <Text style={styles.calendarAcceptText}>Add to Calendar</Text>
+                    <Icon name="calendar" size={18} color={isMyMessage ? colors.dark : '#fff'} />
+                    <Text style={[
+                      styles.calendarAcceptText,
+                      { color: isMyMessage ? colors.dark : '#fff' }
+                    ]}>Add to Calendar</Text>
                   </TouchableOpacity>
                 ) : (
                   <Text
@@ -604,6 +780,17 @@ export default function ChatScreen({ route, navigation }) {
             ]}>
               {formatTime(item.createdAt)}
             </Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Render status message
+    if (item.type === 'status') {
+      return (
+        <View style={styles.statusMessageContainer}>
+          <View style={styles.statusMessageBubble}>
+            <Text style={styles.statusMessageText}>{item.text}</Text>
           </View>
         </View>
       );
@@ -651,7 +838,11 @@ export default function ChatScreen({ route, navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Icon name="arrow-back" size={24} color={colors.dark} />
           </TouchableOpacity>
-          <View style={styles.headerUser}>
+          <TouchableOpacity 
+            style={styles.headerUser}
+            onPress={() => navigation.navigate('UserProfile', { userId: otherUserId, username: otherUserName })}
+            activeOpacity={0.7}
+          >
             {user?.photoURL ? (
               <Image source={{ uri: user.photoURL }} style={styles.headerAvatar} />
             ) : (
@@ -660,7 +851,57 @@ export default function ChatScreen({ route, navigation }) {
               </View>
             )}
             <Text style={styles.headerName}>{user?.name}</Text>
-          </View>
+          </TouchableOpacity>
+          {(() => {
+            // Find the accepted swap request from messages (only if not completed or withdrawn)
+            const acceptedSwap = messages.find(
+              msg => msg.type === 'swap_request' && 
+              msg.swapDetails && 
+              msg.swapDetails.status === 'accepted'
+            );
+            
+            // Only show button if there's an ongoing accepted swap
+            if (acceptedSwap) {
+              return (
+                <TouchableOpacity 
+                  style={styles.swapOngoingButton}
+                  onPress={() => {
+                    // Find the most recent accepted calendar invite
+                    const acceptedMeetups = messages.filter(
+                      msg => msg.type === 'calendar_invite' && 
+                      msg.calendarDetails && 
+                      msg.calendarDetails.status === 'accepted'
+                    );
+                    const acceptedMeetup = acceptedMeetups.length > 0 
+                      ? acceptedMeetups[acceptedMeetups.length - 1] 
+                      : null;
+                    
+                    // Find the most recent accepted location
+                    const acceptedLocations = messages.filter(
+                      msg => msg.type === 'location' && msg.locationAccepted
+                    );
+                    const acceptedLocation = acceptedLocations.length > 0 
+                      ? acceptedLocations[acceptedLocations.length - 1] 
+                      : null;
+                    
+                    navigation.navigate('SwapOngoing', {
+                      otherUser: {
+                        id: otherUserId,
+                        name: otherUserName
+                      },
+                      swapDetails: acceptedSwap?.swapDetails,
+                      swapSenderId: acceptedSwap?.senderId,
+                      meetupDetails: acceptedMeetup?.calendarDetails,
+                      locationDetails: acceptedLocation ? { postalCode: acceptedLocation.text } : null
+                    });
+                  }}
+                >
+                  <Text style={styles.swapOngoingButtonText}>Swap Ongoing</Text>
+                </TouchableOpacity>
+              );
+            }
+            return null;
+          })()}
           <TouchableOpacity 
             onPress={() => navigation.navigate('SwapHistory')} 
             style={styles.headerIconButton}
@@ -705,6 +946,7 @@ export default function ChatScreen({ route, navigation }) {
               placeholderTextColor={colors.gray}
               multiline
               maxLength={500}
+              textAlignVertical="center"
             />
             <TouchableOpacity style={styles.iconButton} onPress={() => setShowLocationModal(true)}>
               <Icon name="location-outline" size={24} color={colors.accent} />
@@ -713,6 +955,16 @@ export default function ChatScreen({ route, navigation }) {
               <Icon name="calendar-outline" size={24} color={colors.accent} />
             </TouchableOpacity>
           </View>
+=========
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            placeholder="Type a message..."
+            placeholderTextColor="#585555ff"
+            value={newMessage}
+            onChangeText={setNewMessage}
+            multiline
+          />
           <TouchableOpacity
             style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
             onPress={handleSendMessage}
@@ -897,6 +1149,20 @@ const styles = StyleSheet.create({
   headerIconButton: {
     padding: spacing.xs,
   },
+  swapOngoingButton: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 16,
+    marginLeft: spacing.sm,
+    marginRight: spacing.md,
+  },
+  swapOngoingButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: fonts.semiBold,
+  },
   messagesList: {
     padding: spacing.md,
     flexGrow: 1,
@@ -967,6 +1233,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   statusMessageText: {
     fontSize: 13,
@@ -975,11 +1246,13 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     padding: spacing.md,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
     backgroundColor: '#fff',
+    gap: spacing.sm,
   },
   inputWrapper: {
     flex: 1,
@@ -987,14 +1260,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F5F3E4',
     borderRadius: 20,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginRight: spacing.sm,
+    maxHeight: 100,
   },
   input: {
     flex: 1,
+    fontSize: 16,
+    lineHeight: 20,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
+    minHeight: 32,
     maxHeight: 100,
+    fontFamily: fonts.body,
+  },
+  inputActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: spacing.xs,
+    gap: spacing.xs,
   },
   iconButton: {
     padding: spacing.xs,
@@ -1014,7 +1299,11 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: 12,
     maxWidth: '75%',
-    backgroundColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   locationHeader: {
     flexDirection: 'row',
@@ -1025,19 +1314,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.header,
     fontSize: 14,
     fontWeight: '600',
-    color: colors.dark,
     marginLeft: spacing.sm,
   },
   locationText: {
     fontFamily: fonts.sub,
     fontSize: 16,
-    color: colors.dark,
     marginBottom: spacing.sm,
   },
   locationButtons: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.sm,
+    marginBottom: spacing.sm,
   },
   locationButton: {
     flexDirection: 'row',
@@ -1046,14 +1334,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     backgroundColor: '#fff',
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.accent,
     gap: 4,
   },
   locationButtonText: {
     fontSize: 12,
-    color: colors.accent,
+    color: colors.dark,
     fontWeight: '600',
+  },
+  locationAcceptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    gap: spacing.xs,
+  },
+  locationAcceptText: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: fonts.semiBold,
+  },
+  locationAcceptedText: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
   modalOverlay: {
     flex: 1,
@@ -1067,6 +1372,11 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     width: '80%',
     maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 8,
   },
   modalTitle: {
     fontSize: 20,
@@ -1153,7 +1463,11 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: 12,
     maxWidth: '80%',
-    backgroundColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -1164,7 +1478,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.header,
     fontSize: 14,
     fontWeight: '600',
-    color: colors.dark,
     marginLeft: spacing.sm,
   },
   calendarDetails: {
@@ -1178,22 +1491,21 @@ const styles = StyleSheet.create({
   calendarDetailText: {
     fontFamily: fonts.sub,
     fontSize: 14,
-    color: colors.dark,
     marginLeft: spacing.sm,
   },
   calendarActions: {
     marginTop: spacing.sm,
+    marginBottom: spacing.sm,
     gap: spacing.sm,
   },
   calendarAcceptButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.md,
     borderRadius: 8,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   calendarAcceptText: {
     fontSize: 14,

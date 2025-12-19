@@ -42,6 +42,7 @@ export default function PostDetailsScreen({ route, navigation }) {
   const [likes, setLikes] = useState([]);
   const [showLikes, setShowLikes] = useState(false);
   const [userPhotoURL, setUserPhotoURL] = useState(initialPost.userPhotoURL || null);
+  const [ownerUserName, setOwnerUserName] = useState(initialPost.userName || 'User');
   const [editingComment, setEditingComment] = useState(null);
 
   const db = getFirestore();
@@ -61,9 +62,27 @@ export default function PostDetailsScreen({ route, navigation }) {
       loadComments(),
       loadLikes(),
       checkIfLiked(),
-      loadUserPhoto()
+      loadUserPhoto(),
+      loadOwnerUserName()
     ]);
     logViewActivity();
+  };
+  // Fetch latest username for post owner
+  const loadOwnerUserName = async () => {
+    try {
+      if (activePost.ownerUid) {
+        const userDoc = await getDoc(doc(db, 'users', activePost.ownerUid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setOwnerUserName(userData.username || userData.displayName || 'User');
+        } else {
+          setOwnerUserName('User');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading owner username:', error);
+      setOwnerUserName('User');
+    }
   };
 
   const onRefresh = async () => {
@@ -129,23 +148,24 @@ export default function PostDetailsScreen({ route, navigation }) {
       const commentsData = await Promise.all(
         querySnapshot.docs.map(async (docSnapshot) => {
           const commentData = docSnapshot.data();
-          
-          let userName = commentData.userName || 'Anonymous';
+          let userName = 'Anonymous';
           let userPhoto = null;
+          let userDeleted = false;
           if (commentData.userId) {
             try {
               const userDoc = await getDoc(doc(db, 'users', commentData.userId));
               if (userDoc.exists()) {
                 const userData = userDoc.data();
-                userName = userData.displayName || userData.username || userName;
+                userName = userData.username || userData.displayName || userName;
                 userPhoto = userData.photoURL || null;
+              } else {
+                userDeleted = true;
               }
             } catch (err) {
               console.error('Error fetching user:', err);
             }
           }
-          
-          return {
+          return userDeleted ? null : {
             id: docSnapshot.id,
             ...commentData,
             userName,
@@ -153,13 +173,13 @@ export default function PostDetailsScreen({ route, navigation }) {
           };
         })
       );
-      
-      const sortedComments = commentsData.sort((a, b) => {
+      // Filter out nulls (deleted users)
+      const filteredComments = commentsData.filter(Boolean);
+      const sortedComments = filteredComments.sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(0);
         const dateB = b.createdAt?.toDate?.() || new Date(0);
         return dateB - dateA;
       });
-      
       setComments(sortedComments);
     } catch (error) {
       console.error('Error loading comments:', error);
@@ -167,6 +187,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleDeleteComment = async (commentId, commentUserId) => {
+    if (!auth.currentUser) return;
+    
     if (commentUserId !== auth.currentUser.uid) {
       Alert.alert('Error', 'You can only delete your own comments');
       return;
@@ -195,6 +217,18 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleReportComment = (comment) => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to report comments!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    
     if (comment.userId === auth.currentUser.uid) return;
 
     Alert.alert(
@@ -256,6 +290,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const checkIfLiked = async () => {
+    if (!auth.currentUser) return; // Guest users can't have likes
+    
     try {
       const q = query(
         collection(db, 'likes'),
@@ -290,6 +326,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const logViewActivity = async () => {
+    if (!auth.currentUser) return; // Guest users don't log activity
+    
     try {
       const oneHourAgo = new Date(Date.now() - 3600000);
       const q = query(
@@ -320,6 +358,18 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleLike = async () => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to start liking posts!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    
     try {
       if (liked && likeId) {
         await deleteDoc(doc(db, 'likes', likeId));
@@ -372,6 +422,18 @@ export default function PostDetailsScreen({ route, navigation }) {
   };
 
   const handleAddComment = async () => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login to start commenting!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    
     if (!newComment.trim()) return;
 
     setLoading(true);
@@ -439,7 +501,14 @@ export default function PostDetailsScreen({ route, navigation }) {
 
   const handleSwapNow = async () => {
     if (!auth.currentUser) {
-      Alert.alert('Sign In Required', 'Please sign in to request a swap.');
+      Alert.alert(
+        'Login to start swapping items!',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
       return;
     }
 
@@ -536,7 +605,7 @@ export default function PostDetailsScreen({ route, navigation }) {
                   navigation.navigate('UserProfile', { userId: activePost.ownerUid });
                 }
               }}>
-                <Text style={styles.userName}>{activePost.userName || 'User'}</Text>
+                <Text style={styles.userName}>{ownerUserName}</Text>
               </TouchableOpacity>
               <Text style={styles.postDate}>
                 {activePost.uploadedAt?.toDate?.().toLocaleDateString() || 'Recently'}
@@ -563,7 +632,7 @@ export default function PostDetailsScreen({ route, navigation }) {
           {/* Swap Action Buttons */}
           {activePost.postType === 'forSwap' && (
             <View style={styles.swapActionsContainer}>
-              {activePost.ownerUid !== auth.currentUser.uid ? (
+              {activePost.ownerUid !== auth.currentUser?.uid ? (
                 // Show "Swap Now" and "Try On" buttons for non-owners if available
                 currentSwapStatus === 'available' && (
                   <View>
@@ -576,7 +645,25 @@ export default function PostDetailsScreen({ route, navigation }) {
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.tryOnButton}
-                      onPress={() => navigation.navigate('TryOnScreen', { item: activePost })}
+                      onPress={() => {
+                        if (!auth.currentUser) {
+                          Alert.alert(
+                            'Login to try on items virtually!',
+                            '',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Login', onPress: () => navigation.navigate('Login') }
+                            ]
+                          );
+                          return;
+                        }
+                        navigation.navigate('TryOnScreen', { 
+                          preSelectedItem: activePost,
+                          allItems: [activePost],
+                          enableSuggestions: true,
+                          fromOtherUser: activePost.ownerUid !== auth.currentUser?.uid
+                        });
+                      }}
                     >
                       <Icon name="accessibility" size={20} color="#9ABEAA" />
                       <Text style={styles.tryOnButtonText}>Try On Virtually</Text>
@@ -613,7 +700,20 @@ export default function PostDetailsScreen({ route, navigation }) {
               <Icon name="chatbubble-outline" size={24} color={colors.dark} />
               <Text style={styles.actionText}>{comments.length} Comments</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity style={styles.actionButton} onPress={() => {
+              if (!auth.currentUser) {
+                Alert.alert(
+                  'Login to share posts!',
+                  '',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Login', onPress: () => navigation.navigate('Login') }
+                  ]
+                );
+                return;
+              }
+              // Share functionality
+            }}>
               <Icon name="share-social-outline" size={24} color={colors.dark} />
               <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
@@ -683,7 +783,7 @@ export default function PostDetailsScreen({ route, navigation }) {
                   <View style={styles.commentHeader}>
                     <Text style={styles.commentUser}>{comment.userName}</Text>
                     
-                    {comment.userId === auth.currentUser.uid ? (
+                    {comment.userId === auth.currentUser?.uid ? (
                       <View style={{ flexDirection: 'row' }}>
                         <TouchableOpacity
                           style={styles.editCommentButton}
