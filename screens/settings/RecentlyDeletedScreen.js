@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   SafeAreaView,
@@ -16,6 +17,13 @@ import {
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ITEMS_PER_ROW = 3;
+const ITEM_SPACING = 2;
+const TOTAL_SPACING = ITEM_SPACING * (ITEMS_PER_ROW - 1);
+const ITEM_WIDTH = (SCREEN_WIDTH - TOTAL_SPACING) / ITEMS_PER_ROW;
+const ITEM_HEIGHT = ITEM_WIDTH * 1.33; // 3:4 aspect ratio like ActivityScreen
 
 export default function RecentlyDeletedScreen({ navigation }) {
   const [deletedPosts, setDeletedPosts] = useState([]);
@@ -377,17 +385,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   gridContainer: {
-    paddingHorizontal: 2,
     paddingBottom: 100,
   },
   gridRow: {
-    gap: 4,
+    gap: ITEM_SPACING,
+    marginBottom: ITEM_SPACING,
   },
   postItem: {
-    flex: 1,
-    aspectRatio: 0.75,
+    width: ITEM_WIDTH,
+    height: ITEM_HEIGHT,
     backgroundColor: '#f0f0f0',
-    marginBottom: 4,
     position: 'relative',
   },
   postImage: {
