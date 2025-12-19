@@ -629,9 +629,7 @@ export default function PostDetailsScreen({ route, navigation }) {
             <Icon name="arrow-back" size={24} color={colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Post Details</Text>
-          <TouchableOpacity onPress={() => setShowShareModal(true)}>
-            <Icon name="share-social" size={24} color={colors.dark} />
-          </TouchableOpacity>
+          <View style={{ width: 24 }} />
         </View>
 
         {/* Post Image */}
@@ -764,7 +762,7 @@ export default function PostDetailsScreen({ route, navigation }) {
                 );
                 return;
               }
-              // Share functionality
+              setShowShareModal(true);
             }}>
               <Icon name="share-social-outline" size={24} color={colors.dark} />
               <Text style={styles.actionText}>Share</Text>
