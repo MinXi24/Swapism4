@@ -17,7 +17,9 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import {
   collection,
+  doc,
   getCountFromServer,
+  getDoc,
   getDocs,
   getFirestore,
   limit,
@@ -60,6 +62,81 @@ export default function AdminHomeScreen({ navigation }) {
     }, [])
   );
 
+  /**
+   * IMPLEMENTED FROM HOME.JS: 
+   * Verifies if the subject of the report actually exists and is not deleted/banned.
+   */
+  const verifyExistence = async (item) => {
+    const deletedId = 'm9';
+    // Scrub specific deleted ID
+    if (item.reported_user_id === deletedId || item.userId === deletedId || item.targetId === deletedId) {
+      return false;
+    }
+
+    try {
+      if (item.reportType === 'post') {
+        const postRef = doc(db, 'wardrobe-plug-fyp/user/images', item.reported_clothes_id || item.targetId || item.id);
+        const postSnap = await getDoc(postRef);
+        if (!postSnap.exists()) return false;
+
+        // Also check if the post owner is valid (Deleted account check)
+        const ownerUid = postSnap.data().ownerUid;
+        const ownerRef = doc(db, 'users', ownerUid);
+        const ownerSnap = await getDoc(ownerRef);
+        if (!ownerSnap.exists()) return false;
+        const ownerData = ownerSnap.data();
+        if (ownerData.deleted === true || ownerData.active === false || ownerData.isBanned === true) return false;
+        
+        return true;
+      } 
+      
+      if (item.reportType === 'user') {
+        const userRef = doc(db, 'users', item.reported_user_id || item.userId);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return false;
+
+        const userData = userSnap.data();
+        // HOME.JS LOGIC: Filter out deleted/inactive/banned accounts
+        if (userData.deleted === true || userData.active === false || userData.isBanned === true) {
+          return false;
+        }
+        return true;
+      }
+
+      if (item.reportType === 'comment') {
+        const userRef = doc(db, 'users', item.targetOwnerUid || item.userId);
+        const userSnap = await getDoc(userRef);
+        return userSnap.exists() && userSnap.data().deleted !== true;
+      }
+
+      return true; 
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const deduplicateReports = (items) => {
+    const seen = new Set();
+    return items.filter(item => {
+      let uniqueKey;
+      if (item.reportType === 'post') {
+        uniqueKey = `post_${item.reported_clothes_id || item.targetId || item.id}`;
+      } else if (item.reportType === 'user') {
+        uniqueKey = `user_${item.reported_user_id || item.userId}`;
+      } else if (item.reportType === 'comment') {
+        uniqueKey = `comment_${item.targetId || item.id}`;
+      } else {
+        uniqueKey = item.id;
+      }
+
+      if (seen.has(uniqueKey)) {
+        return false;
+      }
+      seen.add(uniqueKey);
+      return true;
+    });
+  };
+
   const loadReports = async () => {
     try {
       setLoading(true);
@@ -74,92 +151,85 @@ export default function AdminHomeScreen({ navigation }) {
 
       const usersColl = collection(db, 'users');
       const clothesColl = collection(db, 'clothes'); 
-      const resolvedQuery = query(collection(db, 'report'), where('status', '==', 'resolved'));
 
       const [
-        postSnap, 
-        commentSnap,
-        userReportSnap,
-        totalUsersSnap,
-        totalClothesSnap,
-        resolvedSnap,
-        historyPostSnap,
-        historyCommentSnap,
-        historyUserSnap
+        postSnap, commentSnap, userReportSnap,
+        totalUsersSnap, totalClothesSnap,
+        historyPostSnap, historyCommentSnap, historyUserSnap
       ] = await Promise.all([
-        getDocs(postsQuery),
-        getDocs(commentsQuery),
-        getDocs(usersReportQuery),
-        getCountFromServer(usersColl),
-        getCountFromServer(clothesColl),
-        getCountFromServer(resolvedQuery),
-        getDocs(resPostsQuery),
-        getDocs(resCommentsQuery),
-        getDocs(resUsersQuery)
+        getDocs(postsQuery), getDocs(commentsQuery), getDocs(usersReportQuery),
+        getCountFromServer(usersColl), getCountFromServer(clothesColl),
+        getDocs(resPostsQuery), getDocs(resCommentsQuery), getDocs(resUsersQuery)
       ]);
       
       // Process Pending
-      const formattedPosts = postSnap.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            reportType: 'post',
-            name: 'Reported Post',
-            detail: `Reason: ${data.reason || 'Flagged Content'}`,
-            timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
-            icon: 'alert-circle',
-            iconColor: '#FF6B6B' 
-        };
-      });
-
-      const formattedComments = commentSnap.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            reportType: 'comment',
-            name: data.targetOwnerName || 'Unknown User',
-            detail: `Comment: "${data.targetContent || 'Hidden'}"`, 
-            timestamp: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(0),
-            icon: 'chatbubble-ellipses',
-            iconColor: '#FDD835'
-        };
-      });
-
-      const formattedUserReports = userReportSnap.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            reportType: 'user', 
-            name: data.reported_user_name || 'Reported User',
-            detail: `Reason: ${data.reason || 'User Behavior'}`, 
-            timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
-            icon: 'person-remove', 
-            iconColor: '#FF6B6B'
-        };
-      });
-
-      // Process Resolved
-      const formattedHistory = [
-        ...historyPostSnap.docs.map(d => ({ ...d.data(), id: d.id, icon: 'checkmark-circle', iconColor: '#9abeaa', name: 'Resolved Post' })),
-        ...historyCommentSnap.docs.map(d => ({ ...d.data(), id: d.id, icon: 'checkmark-circle', iconColor: '#9abeaa', name: d.data().targetOwnerName || 'Comment' })),
-        ...historyUserSnap.docs.map(d => ({ ...d.data(), id: d.id, icon: 'checkmark-circle', iconColor: '#9abeaa', name: d.data().reported_user_name || 'User' }))
+      const rawPending = [
+        ...postSnap.docs.map(doc => ({
+            id: doc.id, ...doc.data(), reportType: 'post', name: 'Reported Post',
+            detail: `Reason: ${doc.data().reason || 'Flagged Content'}`,
+            timestamp: doc.data().created_at?.toDate ? doc.data().created_at.toDate() : new Date(0),
+            icon: 'alert-circle', iconColor: '#FF6B6B' 
+        })),
+        ...commentSnap.docs.map(doc => ({
+            id: doc.id, ...doc.data(), reportType: 'comment', name: doc.data().targetOwnerName || 'Unknown User',
+            detail: `Comment: "${doc.data().targetContent || 'Hidden'}"`, 
+            timestamp: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(0),
+            icon: 'chatbubble-ellipses', iconColor: '#FDD835'
+        })),
+        ...userReportSnap.docs.map(doc => ({
+            id: doc.id, ...doc.data(), reportType: 'user', name: doc.data().reported_user_name || 'Reported User',
+            detail: `Reason: ${doc.data().reason || 'User Behavior'}`, 
+            timestamp: doc.data().created_at?.toDate ? doc.data().created_at.toDate() : new Date(0),
+            icon: 'person-remove', iconColor: '#FF6B6B'
+        }))
       ];
 
-      const allReports = [...formattedPosts, ...formattedComments, ...formattedUserReports];
-      allReports.sort((a, b) => b.timestamp - a.timestamp); 
-      setReports(allReports);
-      setResolvedHistory(formattedHistory);
+      // Process Resolved
+      const rawHistory = [
+        ...historyPostSnap.docs.map(d => ({
+          ...d.data(), id: d.id, reportType: 'post', name: 'Resolved Post',
+          detail: `Action: ${d.data().actionTaken || 'Resolved'}`,
+          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().created_at?.toDate ? d.data().created_at.toDate() : new Date(0),
+          icon: 'checkmark-circle', iconColor: '#9abeaa'
+        })),
+        ...historyCommentSnap.docs.map(d => ({
+          ...d.data(), id: d.id, reportType: 'comment', name: d.data().targetOwnerName || 'Comment',
+          detail: `Comment: "${d.data().targetContent || 'Hidden'}"`,
+          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(0),
+          icon: 'checkmark-circle', iconColor: '#9abeaa'
+        })),
+        ...historyUserSnap.docs.map(d => ({
+          ...d.data(), id: d.id, reportType: 'user', name: d.data().reported_user_name || 'User',
+          detail: `Action: ${d.data().actionTaken || 'Reviewed'}`,
+          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().created_at?.toDate ? d.data().created_at.toDate() : new Date(0),
+          icon: 'checkmark-circle', iconColor: '#9abeaa'
+        }))
+      ];
 
-      const totalPending = postSnap.size + commentSnap.size + userReportSnap.size;
+      const filterAndDeduplicate = async (items) => {
+        // Sort first to ensure latest timestamp is kept during deduplication
+        items.sort((a, b) => b.timestamp - a.timestamp);
+        
+        const deduplicated = deduplicateReports(items);
+
+        const results = await Promise.all(deduplicated.map(async (item) => {
+          const exists = await verifyExistence(item);
+          return exists ? item : null;
+        }));
+        return results.filter(i => i !== null);
+      };
+
+      const finalPending = await filterAndDeduplicate(rawPending);
+      const finalHistory = await filterAndDeduplicate(rawHistory);
+
+      setReports(finalPending);
+      setResolvedHistory(finalHistory);
 
       setStats({
-        pending: totalPending,
+        pending: finalPending.length,
         users: totalUsersSnap.data().count,
         listings: totalClothesSnap.data().count,
-        resolved: resolvedSnap.data().count
+        resolved: finalHistory.length
       });
 
     } catch (error) {
@@ -192,30 +262,23 @@ export default function AdminHomeScreen({ navigation }) {
         return;
     }
 
-    let breakdown = [];
     let description = "";
     let showDetailsButton = false; 
 
     switch (stat.label) {
         case 'Pending':
-            const postCount = reports.filter(r => r.reportType === 'post').length;
-            const commentCount = reports.filter(r => r.reportType === 'comment').length;
-            const userReportCount = reports.filter(r => r.reportType === 'user').length;
-
             description = "Items currently awaiting moderator review.";
             showDetailsButton = true; 
             break;
-            
         case 'Users':
             description = "Total registered users.";
             break;
-            
         case 'Listings':
             description = "Total active wardrobe items.";
             break;
     }
 
-    setSelectedStatData({ ...stat, description, breakdown, showDetailsButton });
+    setSelectedStatData({ ...stat, description, showDetailsButton });
     setModalVisible(true);
   };
 
@@ -328,7 +391,7 @@ export default function AdminHomeScreen({ navigation }) {
                         </View>
                         <View style={styles.textContainer}>
                             <Text style={styles.nameText}>{item.name}</Text>
-                            <Text style={styles.detailText} numberOfLines={1}>{item.detail || item.reason}</Text>
+                            <Text style={styles.detailText} numberOfLines={1}>{item.detail}</Text>
                         </View>
                     </View>
                     
