@@ -955,16 +955,6 @@ export default function ChatScreen({ route, navigation }) {
               <Icon name="calendar-outline" size={24} color={colors.accent} />
             </TouchableOpacity>
           </View>
-=========
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            placeholder="Type a message..."
-            placeholderTextColor="#585555ff"
-            value={newMessage}
-            onChangeText={setNewMessage}
-            multiline
-          />
           <TouchableOpacity
             style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
             onPress={handleSendMessage}
@@ -1257,11 +1247,24 @@ const styles = StyleSheet.create({
   // inputWrapper: { ... } removed duplicate
   inputWrapper: {
     flex: 1,
-    backgroundColor: '#F5F3E4',
-    borderRadius: 20,
-    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    minHeight: 44,
+    maxHeight: 120,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 20,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
-    marginRight: spacing.sm,
+    minHeight: 32,
     maxHeight: 100,
     fontFamily: fonts.body,
   },

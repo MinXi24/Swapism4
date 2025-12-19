@@ -91,7 +91,7 @@ export default function MessagesScreen({ navigation }) {
         }
       }
 
-      // Check for ongoing swaps in each conversation
+      // Check for ongoing swaps and load all messages for search in each conversation
       for (const [otherUserId, conversation] of conversationsMap.entries()) {
         try {
           const userMessagesQuery = query(
@@ -117,6 +117,9 @@ export default function MessagesScreen({ navigation }) {
           if (hasAcceptedSwap) {
             conversation.hasSwapOngoing = true;
           }
+
+          // Store all messages for search functionality
+          conversation.allMessages = userMessages.map(msg => msg.text || '').filter(Boolean);
         } catch (error) {
           console.error('Error checking swap status:', error);
         }
@@ -184,7 +187,7 @@ export default function MessagesScreen({ navigation }) {
           <Text style={styles.time}>{formatTime(item.lastMessageTime)}</Text>
         </View>
         <Text style={[styles.messageText, item.unread && styles.unreadMessage]} numberOfLines={1}>
-          {item.lastMessage}
+          {item.displayMessage || item.lastMessage}
         </Text>
       </View>
       {item.unread && <View style={styles.unreadDot} />}
@@ -223,7 +226,26 @@ export default function MessagesScreen({ navigation }) {
       ) : (
         <View style={styles.messagesContainer}>
           <FlatList
-            data={conversations}
+            data={conversations.filter(item => {
+              if (!searchQuery) return true;
+              
+              const query = searchQuery.toLowerCase();
+              const matchesUsername = item.userName.toLowerCase().includes(query);
+              
+              // Find the first message that matches the search query
+              const matchedMessage = item.allMessages?.find(msg => 
+                msg.toLowerCase().includes(query)
+              );
+              
+              // If a message matches, replace the displayed message temporarily
+              if (matchedMessage) {
+                item.displayMessage = matchedMessage;
+              } else {
+                item.displayMessage = item.lastMessage;
+              }
+              
+              return matchesUsername || !!matchedMessage;
+            })}
             renderItem={renderMessageItem}
             keyExtractor={(item) => item.userId}
             showsVerticalScrollIndicator={false}

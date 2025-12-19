@@ -396,6 +396,7 @@ export default function UserProfileScreen({ route, navigation }) {
       </TouchableOpacity>
     </Modal>
   );
+
   const openMapWithLocation = async () => {
     const location = userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location;
     if (!location) return;

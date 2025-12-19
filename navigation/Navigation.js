@@ -3,6 +3,7 @@ import AdminHomeScreen from '../screens/admin/AdminHomeScreen';
 import ManageAccountScreen from '../screens/admin/manageAccountScreen';
 import ManageCommentsScreen from '../screens/admin/manageCommentsScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
+import ProfileSetupScreen from '../screens/auth/ProfileSetupScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import FavouritesScreen from '../screens/favourites/FavouritesScreen';
@@ -44,6 +45,7 @@ export default function Navigation() {
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
+      <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="Swap" component={SwapScreen} />

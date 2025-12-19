@@ -752,7 +752,7 @@ export default function HomeScreen({ navigation }) {
                 );
                 return;
               }
-              navigation.navigate('Activity');
+              navigation.navigate('PostActivity');
             }}
           >
             <Icon 

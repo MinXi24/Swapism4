@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import {
   Alert,
   Image,
+  Modal,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -23,6 +25,8 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -102,48 +106,38 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleForgotPassword = () => {
-    Alert.prompt(
-      'Forgot Password',
-      'Enter your email address to receive a password reset link:',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Send Reset Link',
-          onPress: async (emailInput) => {
-            if (!emailInput || !emailInput.trim()) {
-              Alert.alert('Error', 'Please enter your email address');
-              return;
-            }
+    setResetEmail(email);
+    setShowForgotPasswordModal(true);
+  };
 
-            try {
-              await sendPasswordResetEmail(auth, emailInput.trim());
-              Alert.alert(
-                'Success', 
-                'Password reset email sent! Please check your inbox and follow the instructions to reset your password.',
-                [{ text: 'OK' }]
-              );
-            } catch (error) {
-              let errorMessage = error.message;
-              
-              if (error.code === 'auth/user-not-found') {
-                errorMessage = 'No account found with this email address.';
-              } else if (error.code === 'auth/invalid-email') {
-                errorMessage = 'Please enter a valid email address.';
-              } else if (error.code === 'auth/too-many-requests') {
-                errorMessage = 'Too many attempts. Please try again later.';
-              }
+  const handleSendResetEmail = async () => {
+    if (!resetEmail || !resetEmail.trim()) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
 
-              Alert.alert('Error', errorMessage);
-            }
-          }
-        }
-      ],
-      'plain-text',
-      email
-    );
+    try {
+      await sendPasswordResetEmail(auth, resetEmail.trim());
+      setShowForgotPasswordModal(false);
+      Alert.alert(
+        'Success', 
+        'Password reset email sent! Please check your inbox and follow the instructions to reset your password.',
+        [{ text: 'OK' }]
+      );
+      setResetEmail('');
+    } catch (error) {
+      let errorMessage = error.message;
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email address.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Please enter a valid email address.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many attempts. Please try again later.';
+      }
+
+      Alert.alert('Error', errorMessage);
+    }
   };
 
   return (
@@ -250,6 +244,59 @@ export default function LoginScreen({ navigation }) {
           </View>
         </View>
       </View>
+
+      {/* Forgot Password Modal */}
+      <Modal
+        visible={showForgotPasswordModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowForgotPasswordModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowForgotPasswordModal(false)}
+        >
+          <TouchableOpacity 
+            style={styles.modalContent}
+            activeOpacity={1}
+          >
+            <Text style={styles.modalTitle}>Forgot Password</Text>
+            <Text style={styles.modalSubtitle}>
+              Enter your email address to receive a password reset link:
+            </Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Email"
+              value={resetEmail}
+              onChangeText={setResetEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoFocus={true}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  setShowForgotPasswordModal(false);
+                  setResetEmail('');
+                }}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.modalButtonSend]}
+                onPress={handleSendResetEmail}
+              >
+                <Text style={styles.modalButtonTextSend}>Send Reset Link</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -364,5 +411,71 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: spacing.lg,
+    width: '85%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: fonts.semiBold,
+    color: colors.dark,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontFamily: fonts.regular,
+    color: colors.gray,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#dbdbdb',
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 16,
+    fontFamily: fonts.regular,
+    marginBottom: spacing.lg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#f0f0f0',
+  },
+  modalButtonSend: {
+    backgroundColor: colors.accent,
+  },
+  modalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: fonts.semiBold,
+    color: colors.dark,
+  },
+  modalButtonTextSend: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: fonts.semiBold,
+    color: '#fff',
   },
 });
