@@ -1,13 +1,28 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
+import {
+  addDoc,
+  arrayRemove,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where
+} from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-<<<<<<< HEAD
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -16,33 +31,15 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View
-=======
-    ActionSheetIOS,
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Linking,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
+  View,
 } from 'react-native';
 
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import useGuest from '../../hooks/useGuest';
 import { colors, fonts, spacing } from '../../lib/theme';
-<<<<<<< HEAD
 
 const ALERT_RED = '#FF6B6B';
 
@@ -50,11 +47,6 @@ export default function UserProfileScreen({ route, navigation }) {
   const { userId, username, initialTab } = route.params;
 
   // Data State
-=======
-
-export default function UserProfileScreen({ route, navigation }) {
-  const { userId, username, initialTab } = route.params;
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
   const [userPosts, setUserPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab || 'forFun');
@@ -76,22 +68,15 @@ export default function UserProfileScreen({ route, navigation }) {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
-<<<<<<< HEAD
 
   // Relation State
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
-  const [followRequestStatus, setFollowRequestStatus] = useState(null);
-=======
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
   const [followRequestStatus, setFollowRequestStatus] = useState(null); // null, 'pending', 'accepted', 'rejected'
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
   const [mutualFollowers, setMutualFollowers] = useState([]);
   const [showAllMutuals, setShowAllMutuals] = useState(false);
 
-<<<<<<< HEAD
   // BLOCK & BAN STATE
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
   const [isUserBanned, setIsUserBanned] = useState(false);
@@ -101,8 +86,6 @@ export default function UserProfileScreen({ route, navigation }) {
   const currentUser = auth.currentUser;
   const { isGuest } = useGuest();
 
-=======
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
   // Show menu for report/block
   const [androidMenuVisible, setAndroidMenuVisible] = useState(false);
   const showMenu = () => {
@@ -240,7 +223,6 @@ export default function UserProfileScreen({ route, navigation }) {
     Alert.alert('Error', 'No map app available');
   };
 
-<<<<<<< HEAD
   const fetchScreenData = async () => {
     setLoading(true);
     setIsUserBanned(false);
@@ -269,13 +251,14 @@ export default function UserProfileScreen({ route, navigation }) {
           return;
         }
 
+        const validReviews = (userData.reviews || []).filter(review => review.userId && review.userName);
         setUserInfo({
           bio: userData.bio || '',
           location: userData.location || '',
           area: userData.area || '',
           rating: userData.rating || 0,
-          reviewCount: userData.reviewCount || 0,
-          reviews: userData.reviews || [],
+          reviewCount: validReviews.length,
+          reviews: validReviews,
           photoURL: userData.photoURL || null,
           username: userData.username || username || 'User',
         });
@@ -316,7 +299,7 @@ export default function UserProfileScreen({ route, navigation }) {
       const q = query(collection(db, 'wardrobe-plug-fyp/user/images'), where('ownerUid', '==', userId));
       const querySnapshot = await getDocs(q);
       const posts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .sort((a, b) => (b.uploadedAt?.toDate?.() || new Date()) - (a.uploadedAt?.toDate?.() || new Date()));
+        .sort((a, b) => (b.uploadedAt?.toDate?.() || new Date(0)) - (a.uploadedAt?.toDate?.() || new Date(0)));
 
       setUserPosts(posts);
       setStats(prev => ({ ...prev, posts: posts.length }));
@@ -342,18 +325,11 @@ export default function UserProfileScreen({ route, navigation }) {
       setFollowRequestStatus(!requestSnapshot.empty ? requestSnapshot.docs[0].data().status : null);
     } catch (e) { console.error(e); }
   };
-=======
-  const db = getFirestore();
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
-  const { isGuest } = useGuest();
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
 
   const logProfileView = async () => {
     if (!currentUser || currentUser.uid === userId) return;
 
     try {
-      // Get current user's username
       let viewerName = currentUser.displayName || 'Anonymous';
       try {
         const viewerDocRef = doc(db, 'users', currentUser.uid);
@@ -365,7 +341,6 @@ export default function UserProfileScreen({ route, navigation }) {
         console.error('Error fetching viewer name:', err);
       }
 
-      // Create notification for profile owner
       await addDoc(collection(db, 'notifications'), {
         userId: userId,
         type: 'profile_view',
@@ -380,136 +355,10 @@ export default function UserProfileScreen({ route, navigation }) {
     }
   };
 
-<<<<<<< HEAD
-=======
-  const loadUserProfile = async () => {
-    try {
-      const userDocRef = doc(db, 'users', userId);
-      const userDoc = await getDoc(userDocRef);
-      
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        // Filter reviews to exclude deleted/inactive users (client-side filtering)
-        // Note: This should ideally be handled by a Cloud Function when a user is deleted
-        const validReviews = (userData.reviews || []).filter(review => review.userId && review.userName);
-        setUserInfo({
-          bio: userData.bio || '',
-          location: userData.location || '',
-          area: userData.area || '',
-          rating: userData.rating || 0,
-          reviewCount: validReviews.length,
-          reviews: validReviews,
-          photoURL: userData.photoURL || null,
-          username: userData.username || username || 'User',
-        });
-        
-        // Load privacy setting
-        setIsPrivateAccount(userData.isPrivate || false);
-        
-        // Load followers and following counts
-        const followers = userData.followers || [];
-        const following = userData.following || [];
-        setStats(prev => ({
-          ...prev,
-          followers: followers.length,
-          following: following.length,
-        }));
-        
-        // Check if current user is following this user
-        if (currentUser) {
-          setIsFollowing(followers.includes(currentUser.uid));
-          
-          // Load mutual followers
-          const currentUserDocRef = doc(db, 'users', currentUser.uid);
-          const currentUserDoc = await getDoc(currentUserDocRef);
-          if (currentUserDoc.exists()) {
-            const currentUserFollowing = currentUserDoc.data().following || [];
-            // Find mutual followers (people that both current user and viewed user follow)
-            const mutuals = followers.filter(followerId => currentUserFollowing.includes(followerId));
-            
-            // Load mutual user details
-            const mutualDetails = await Promise.all(
-              mutuals.map(async (mutualId) => {
-                const mutualDocRef = doc(db, 'users', mutualId);
-                const mutualDoc = await getDoc(mutualDocRef);
-                if (mutualDoc.exists()) {
-                  const mutualData = mutualDoc.data();
-                  return {
-                    uid: mutualId,
-                    username: mutualData.username || 'User',
-                    photoURL: mutualData.photoURL || null,
-                  };
-                }
-                return null;
-              })
-            );
-            
-            setMutualFollowers(mutualDetails.filter(m => m !== null));
-          }
-          
-          // Check follow request status
-          const requestQuery = query(
-            collection(db, 'followRequests'),
-            where('fromUserId', '==', currentUser.uid),
-            where('toUserId', '==', userId)
-          );
-          const requestSnapshot = await getDocs(requestQuery);
-          
-          if (!requestSnapshot.empty) {
-            const requestData = requestSnapshot.docs[0].data();
-            setFollowRequestStatus(requestData.status);
-          } else {
-            setFollowRequestStatus(null);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
-  };
-
-  const loadUserPosts = async () => {
-    try {
-      setLoading(true);
-      await loadUserProfile();
-      const q = query(
-        collection(db, 'wardrobe-plug-fyp/user/images'),
-        where('ownerUid', '==', userId)
-      );
-      const querySnapshot = await getDocs(q);
-      const posts = querySnapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        .sort((a, b) => {
-          const dateA = a.uploadedAt?.toDate?.() || new Date(0);
-          const dateB = b.uploadedAt?.toDate?.() || new Date(0);
-          return dateB - dateA;
-        });
-      
-      setUserPosts(posts);
-      setStats(prev => ({ ...prev, posts: posts.length }));
-    } catch (error) {
-      console.error('Error loading user posts:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      loadUserPosts();
-      logProfileView();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
-  );
-
   const handlePostPress = (post) => {
     navigation.navigate('PostDetails', { post });
   };
 
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
   const handleFollowToggle = async () => {
     if (!currentUser) {
       Alert.alert(
@@ -584,15 +433,27 @@ export default function UserProfileScreen({ route, navigation }) {
         ]
       );
     } else {
-<<<<<<< HEAD
       try {
         setFollowLoading(true);
         if (isPrivateAccount) {
           let reqName = currentUser.displayName || 'User';
           const userD = await getDoc(doc(db, 'users', currentUser.uid));
           if (userD.exists()) reqName = userD.data().username || reqName;
-          await addDoc(collection(db, 'followRequests'), { fromUserId: currentUser.uid, fromUserName: reqName, toUserId: userId, status: 'pending', createdAt: new Date() });
-          await addDoc(collection(db, 'notifications'), { userId, type: 'follow_request', message: `${reqName} requested to follow you`, fromUserId: currentUser.uid, read: false, createdAt: new Date() });
+          await addDoc(collection(db, 'followRequests'), { 
+            fromUserId: currentUser.uid, 
+            fromUserName: reqName, 
+            toUserId: userId, 
+            status: 'pending', 
+            createdAt: new Date() 
+          });
+          await addDoc(collection(db, 'notifications'), { 
+            userId, 
+            type: 'follow_request', 
+            message: `${reqName} requested to follow you`, 
+            fromUserId: currentUser.uid, 
+            read: false, 
+            createdAt: new Date() 
+          });
           setFollowRequestStatus('pending');
           Alert.alert('Request Sent');
         } else {
@@ -601,72 +462,12 @@ export default function UserProfileScreen({ route, navigation }) {
           setIsFollowing(true);
           setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
         }
-      } catch (e) { console.error(e); } finally { setFollowLoading(false); }
-=======
-      // Follow or Request
-      try {
-        setFollowLoading(true);
-        
-        if (isPrivateAccount) {
-          // Send follow request
-          // Get current user's username
-          let requesterName = currentUser.displayName || 'User';
-          try {
-            const requesterDocRef = doc(db, 'users', currentUser.uid);
-            const requesterDoc = await getDoc(requesterDocRef);
-            if (requesterDoc.exists()) {
-              requesterName = requesterDoc.data().username || requesterName;
-            }
-          } catch (err) {
-            console.error('Error fetching requester name:', err);
-          }
-          
-          await addDoc(collection(db, 'followRequests'), {
-            fromUserId: currentUser.uid,
-            fromUserName: requesterName,
-            toUserId: userId,
-            status: 'pending',
-            createdAt: new Date(),
-          });
-          
-          // Create notification
-          await addDoc(collection(db, 'notifications'), {
-            userId: userId,
-            type: 'follow_request',
-            message: `${requesterName} requested to follow you`,
-            fromUserId: currentUser.uid,
-            fromUserName: requesterName,
-            read: false,
-            createdAt: new Date(),
-          });
-          
-          setFollowRequestStatus('pending');
-          Alert.alert('Request Sent', 'Your follow request has been sent');
-        } else {
-          // Public account - follow directly
-          const userDocRef = doc(db, 'users', userId);
-          const currentUserDocRef = doc(db, 'users', currentUser.uid);
-          
-          // Add to target user's followers
-          await updateDoc(userDocRef, {
-            followers: arrayUnion(currentUser.uid)
-          });
-          
-          // Add to current user's following
-          await updateDoc(currentUserDocRef, {
-            following: arrayUnion(userId)
-          });
-          
-          setIsFollowing(true);
-          setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
-        }
-      } catch (error) {
-        console.error('Error following/requesting:', error);
+      } catch (e) { 
+        console.error(e); 
         Alert.alert('Error', 'Failed to follow/request. Please try again.');
-      } finally {
-        setFollowLoading(false);
+      } finally { 
+        setFollowLoading(false); 
       }
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
     }
   };
 
@@ -706,99 +507,34 @@ export default function UserProfileScreen({ route, navigation }) {
       Alert.alert('Error', 'Please select a rating and write a review');
       return;
     }
-<<<<<<< HEAD
     try {
       const userRef = doc(db, 'users', userId);
-      let rName = currentUser?.displayName || 'Anon'; let rPhoto = null;
-      const me = await getDoc(doc(db, 'users', currentUser.uid)); if (me.exists()) { rName = me.data().username; rPhoto = me.data().photoURL; }
-      const rev = { userId: currentUser.uid, userName: rName, userPhoto: rPhoto, rating: reviewRating, text: reviewText.trim(), createdAt: new Date().toISOString() };
+      let rName = currentUser?.displayName || 'Anon'; 
+      let rPhoto = null;
+      const me = await getDoc(doc(db, 'users', currentUser.uid)); 
+      if (me.exists()) { 
+        rName = me.data().username; 
+        rPhoto = me.data().photoURL; 
+      }
+      const rev = { 
+        userId: currentUser.uid, 
+        userName: rName, 
+        userPhoto: rPhoto, 
+        rating: reviewRating, 
+        text: reviewText.trim(), 
+        createdAt: new Date().toISOString() 
+      };
       await updateDoc(userRef, { reviews: arrayUnion(rev) });
-      const updated = await getDoc(userRef); const allRevs = updated.data().reviews || [];
+      const updated = await getDoc(userRef); 
+      const allRevs = updated.data().reviews || [];
       const avg = allRevs.reduce((s, r) => s + r.rating, 0) / allRevs.length;
       await updateDoc(userRef, { rating: avg, reviewCount: allRevs.length });
-      setShowReviewModal(false); setReviewRating(0); setReviewText(''); fetchScreenData(); Alert.alert('Success', 'Review submitted');
+      setShowReviewModal(false); 
+      setReviewRating(0); 
+      setReviewText(''); 
+      fetchScreenData(); 
+      Alert.alert('Success', 'Review submitted');
     } catch (e) { console.error(e); }
-  };
-
-  const handleDeleteReview = async (review) => {
-    if (review.userId !== currentUser?.uid) return;
-    Alert.alert('Delete', 'Delete review?', [{ text: 'Cancel' }, {
-      text: 'Delete', style: 'destructive', onPress: async () => {
-        try {
-          const userRef = doc(db, 'users', userId); await updateDoc(userRef, { reviews: arrayRemove(review) });
-          const updated = await getDoc(userRef); const allRevs = updated.data().reviews || [];
-          const avg = allRevs.length > 0 ? allRevs.reduce((s, r) => s + r.rating, 0) / allRevs.length : 0;
-          await updateDoc(userRef, { rating: avg, reviewCount: allRevs.length });
-          fetchScreenData(); Alert.alert('Success', 'Deleted');
-        } catch (e) { console.error(e); }
-      }
-    }]);
-  };
-
-  const handlePostPress = (post) => { navigation.navigate('PostDetails', { post }); };
-
-  // Filter posts
-=======
-    if (!reviewText.trim()) {
-      Alert.alert('Error', 'Please write a review');
-      return;
-    }
-
-    try {
-      const userDocRef = doc(db, 'users', userId);
-      
-      // Get current user's username
-      let reviewerName = currentUser?.displayName || 'Anonymous';
-      let reviewerPhoto = null;
-      try {
-        const reviewerDocRef = doc(db, 'users', currentUser.uid);
-        const reviewerDoc = await getDoc(reviewerDocRef);
-        if (reviewerDoc.exists()) {
-          const reviewerData = reviewerDoc.data();
-          reviewerName = reviewerData.username || reviewerName;
-          reviewerPhoto = reviewerData.photoURL || null;
-        }
-      } catch (err) {
-        console.error('Error fetching reviewer name:', err);
-      }
-
-      const newReview = {
-        userId: currentUser.uid,
-        userName: reviewerName,
-        userPhoto: reviewerPhoto,
-        rating: reviewRating,
-        text: reviewText.trim(),
-        createdAt: new Date().toISOString(),
-      };
-
-      // Add review to user's reviews array
-      await updateDoc(userDocRef, {
-        reviews: arrayUnion(newReview)
-      });
-
-      // Recalculate average rating
-      const updatedUserDoc = await getDoc(userDocRef);
-      const updatedReviews = updatedUserDoc.data().reviews || [];
-      const avgRating = updatedReviews.reduce((sum, r) => sum + r.rating, 0) / updatedReviews.length;
-      
-      await updateDoc(userDocRef, {
-        rating: avgRating,
-        reviewCount: updatedReviews.length
-      });
-
-      // Reset modal
-      setShowReviewModal(false);
-      setReviewRating(0);
-      setReviewText('');
-      
-      // Reload user profile
-      await loadUserProfile();
-      
-      Alert.alert('Success', 'Your review has been submitted!');
-    } catch (error) {
-      console.error('Error submitting review:', error);
-      Alert.alert('Error', 'Failed to submit review. Please try again.');
-    }
   };
 
   const handleDeleteReview = async (review) => {
@@ -806,56 +542,26 @@ export default function UserProfileScreen({ route, navigation }) {
       Alert.alert('Error', 'You can only delete your own reviews');
       return;
     }
-
-    Alert.alert(
-      'Delete Review',
-      'Are you sure you want to delete this review?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const userDocRef = doc(db, 'users', userId);
-              
-              // Remove review from array
-              await updateDoc(userDocRef, {
-                reviews: arrayRemove(review)
-              });
-
-              // Recalculate average rating
-              const updatedUserDoc = await getDoc(userDocRef);
-              const updatedReviews = updatedUserDoc.data().reviews || [];
-              const avgRating = updatedReviews.length > 0 
-                ? updatedReviews.reduce((sum, r) => sum + r.rating, 0) / updatedReviews.length 
-                : 0;
-              
-              await updateDoc(userDocRef, {
-                rating: avgRating,
-                reviewCount: updatedReviews.length
-              });
-
-              // Reload user profile
-              await loadUserProfile();
-              
-              Alert.alert('Success', 'Review deleted successfully');
-            } catch (error) {
-              console.error('Error deleting review:', error);
-              Alert.alert('Error', 'Failed to delete review. Please try again.');
-            }
-          }
-        }
-      ]
-    );
+    Alert.alert('Delete', 'Delete review?', [{ text: 'Cancel' }, {
+      text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          const userRef = doc(db, 'users', userId); 
+          await updateDoc(userRef, { reviews: arrayRemove(review) });
+          const updated = await getDoc(userRef); 
+          const allRevs = updated.data().reviews || [];
+          const avg = allRevs.length > 0 ? allRevs.reduce((s, r) => s + r.rating, 0) / allRevs.length : 0;
+          await updateDoc(userRef, { rating: avg, reviewCount: allRevs.length });
+          fetchScreenData(); 
+          Alert.alert('Success', 'Deleted');
+        } catch (e) { console.error(e); }
+      }
+    }]);
   };
 
-  // Filter posts based on privacy and follow status
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
+  // Filter posts
   const forFunPosts = userPosts.filter(post => post.postType === 'forFun');
   const forSwapPosts = userPosts.filter(post => post.postType === 'forSwap');
   
-  // Show For Fun posts only if account is public OR user is following OR it's the current user's profile
   const canViewForFunPosts = !isPrivateAccount || isFollowing || userId === currentUser?.uid;
   const displayPosts = activeTab === 'forFun' 
     ? (canViewForFunPosts ? forFunPosts : []) 
@@ -869,7 +575,6 @@ export default function UserProfileScreen({ route, navigation }) {
     );
   }
 
-<<<<<<< HEAD
   // --- 1. BLOCKED VIEW ---
   if (isBlockedByMe) {
     return (
@@ -918,8 +623,6 @@ export default function UserProfileScreen({ route, navigation }) {
   }
 
   // --- 3. NORMAL VIEW ---
-=======
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -970,10 +673,8 @@ export default function UserProfileScreen({ route, navigation }) {
 
           <Text style={styles.userName}>{userInfo.username}</Text>
           
-          {/* Bio */}
           <Text style={styles.userBio}>{userInfo.bio}</Text>
           
-          {/* Location */}
           {(userInfo.location || userInfo.area) && (
             <TouchableOpacity style={styles.locationContainer} onPress={openMapWithLocation}>
               <Icon name="location-outline" size={16} color={colors.dark} />
@@ -1016,16 +717,6 @@ export default function UserProfileScreen({ route, navigation }) {
           {/* Mutual Followers Section */}
           {mutualFollowers.length > 0 && (
             <View style={styles.mutualFollowersSection}>
-<<<<<<< HEAD
-              <TouchableOpacity onPress={() => setShowAllMutuals(!showAllMutuals)} style={styles.mutualFollowersHeader}>
-                <View style={styles.mutualAvatarsRow}>
-                  {mutualFollowers.slice(0, showAllMutuals ? mutualFollowers.length : 1).map((mutual, index) => (
-                    <Image key={mutual.uid} source={mutual.photoURL ? { uri: mutual.photoURL } : null} style={[styles.mutualAvatar, index > 0 && { marginLeft: -8, backgroundColor: '#ccc' }]} />
-                  ))}
-                </View>
-                <Text style={styles.mutualFollowersText}>Followed by {mutualFollowers[0].username} {mutualFollowers.length > 1 && `and ${mutualFollowers.length - 1} others`}</Text>
-              </TouchableOpacity>
-=======
               <TouchableOpacity 
                 onPress={() => setShowAllMutuals(!showAllMutuals)}
                 style={styles.mutualFollowersHeader}
@@ -1067,7 +758,6 @@ export default function UserProfileScreen({ route, navigation }) {
                 )}
               </TouchableOpacity>
 
-              {/* Expanded mutual followers list */}
               {showAllMutuals && mutualFollowers.length > 1 && (
                 <View style={styles.mutualFollowersList}>
                   {mutualFollowers.slice(1).map((mutual) => (
@@ -1088,7 +778,6 @@ export default function UserProfileScreen({ route, navigation }) {
                   ))}
                 </View>
               )}
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
             </View>
           )}
         </View>
@@ -1098,28 +787,6 @@ export default function UserProfileScreen({ route, navigation }) {
           <View style={styles.ratingHeader}>
             <View style={styles.ratingLeft}>
               <Text style={styles.ratingScore}>{userInfo.rating.toFixed(1)}</Text>
-<<<<<<< HEAD
-              <div style={styles.starsContainer}>
-                {[1, 2, 3, 4, 5].map(star => <Icon key={star} name={star <= Math.floor(userInfo.rating) ? 'star' : 'star-outline'} size={20} color={colors.highlight} />)}
-              </div>
-            </View>
-            <TouchableOpacity style={styles.rateButton} onPress={handleRateUser}><Text style={styles.rateButtonText}>Rate</Text></TouchableOpacity>
-          </View>
-          <Text style={styles.reviewsTitle}>Reviews ({userInfo.reviewCount})</Text>
-          {userInfo.reviews.map((r, i) => (
-            <View key={i} style={styles.reviewItem}>
-              <Image source={r.userPhoto ? { uri: r.userPhoto } : null} style={styles.reviewUserImage} />
-              <View style={styles.reviewContent}>
-                <View style={styles.reviewHeader}>
-                  <Text style={styles.reviewAuthor}>{r.userName}</Text>
-                  {r.userId === currentUser?.uid && <TouchableOpacity onPress={() => handleDeleteReview(r)}><Icon name="trash-outline" size={18} color={colors.gray} /></TouchableOpacity>}
-                </View>
-                <Text style={styles.reviewText}>{r.text}</Text>
-                <View style={styles.reviewStars}>{[1, 2, 3, 4, 5].map(s => <Icon key={s} name={s <= r.rating ? 'star' : 'star-outline'} size={14} color={colors.highlight} />)}</View>
-              </View>
-            </View>
-          ))}
-=======
               <View style={styles.starsContainer}>
                 {[1, 2, 3, 4, 5].map(star => (
                   <Icon 
@@ -1172,7 +839,6 @@ export default function UserProfileScreen({ route, navigation }) {
               </View>
             ))
           )}
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
         </View>
 
         {/* Tabs */}
@@ -1198,9 +864,6 @@ export default function UserProfileScreen({ route, navigation }) {
           {displayPosts.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name={activeTab === 'forFun' && !canViewForFunPosts ? 'lock-closed-outline' : 'images-outline'} size={64} color={colors.gray} />
-<<<<<<< HEAD
-              <Text style={styles.emptyStateText}>{activeTab === 'forFun' && !canViewForFunPosts ? 'This Account is Private' : `No ${activeTab === 'forFun' ? 'Fun' : 'Swap'} Posts`}</Text>
-=======
               <Text style={styles.emptyStateText}>
                 {activeTab === 'forFun' && !canViewForFunPosts 
                   ? 'This Account is Private'
@@ -1211,7 +874,6 @@ export default function UserProfileScreen({ route, navigation }) {
                   ? 'Follow this account to see their For Fun posts'
                   : 'This user hasn\'t posted anything yet'}
               </Text>
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
             </View>
           ) : (
             <View style={styles.postsGrid}>
@@ -1273,7 +935,6 @@ export default function UserProfileScreen({ route, navigation }) {
                     </TouchableOpacity>
                   </View>
 
-                  {/* Rating Stars */}
                   <Text style={styles.modalLabel}>Your Rating</Text>
                   <View style={styles.modalStarsContainer}>
                     {[1, 2, 3, 4, 5].map(star => (
@@ -1287,7 +948,6 @@ export default function UserProfileScreen({ route, navigation }) {
                     ))}
                   </View>
 
-                  {/* Review Text */}
                   <Text style={styles.modalLabel}>Your Review</Text>
                   <TextInput
                     style={styles.reviewInput}
@@ -1299,7 +959,6 @@ export default function UserProfileScreen({ route, navigation }) {
                     textAlignVertical="top"
                   />
 
-                  {/* Submit Button */}
                   <TouchableOpacity style={styles.submitButton} onPress={handleSubmitReview}>
                     <Text style={styles.submitButtonText}>Submit Review</Text>
                   </TouchableOpacity>
@@ -1483,11 +1142,56 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
+  mutualAvatarImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  mutualAvatarPlaceholder: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#eee',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   mutualFollowersText: {
     flex: 1,
     fontSize: 13,
     color: colors.gray,
     marginLeft: spacing.xs,
+  },
+  mutualFollowersName: {
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+  mutualFollowersList: {
+    marginTop: spacing.sm,
+    paddingLeft: spacing.md,
+  },
+  mutualFollowerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  mutualFollowerItemImage: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: spacing.sm,
+  },
+  mutualFollowerItemPlaceholder: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#eee',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+  mutualFollowerItemName: {
+    fontSize: 13,
+    color: colors.dark,
   },
   ratingSection: {
     backgroundColor: '#9abeaa',
@@ -1532,6 +1236,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.dark,
     marginBottom: spacing.sm,
+  },
+  noReviewsContainer: {
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  noReviewsText: {
+    color: '#fff',
+    fontStyle: 'italic',
   },
   reviewItem: {
     flexDirection: 'row',
@@ -1608,6 +1320,13 @@ const styles = StyleSheet.create({
     color: colors.gray,
     marginTop: spacing.md,
   },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: colors.gray,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+  },
   postsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1644,8 +1363,63 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.dark,
   },
-<<<<<<< HEAD
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  modalStarsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  reviewInput: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    padding: spacing.md,
+    height: 100,
+    marginBottom: spacing.lg,
+    fontSize: 14,
+    color: colors.dark,
+  },
+  submitButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
 });
-=======
-});
->>>>>>> 2f7746d60505f2ab55bf6dd90de15f8cc017bcd3
