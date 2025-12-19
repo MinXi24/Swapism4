@@ -12,6 +12,7 @@ import {
     addDoc,
     collection,
     doc,
+    getDoc,
     getDocs,
     query,
     serverTimestamp,
@@ -35,6 +36,27 @@ export const useSwapRequest = ({
 }) => {
   const [userItems, setUserItems] = useState([]);
   const [showItemPicker, setShowItemPicker] = useState(false);
+  const [currentUserPhoto, setCurrentUserPhoto] = useState(null);
+
+  // Load current user's profile photo from Firestore
+  useEffect(() => {
+    const loadCurrentUserPhoto = async () => {
+      if (!currentUser?.uid) return;
+      
+      try {
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          setCurrentUserPhoto(userData.photoURL || null);
+        }
+      } catch (error) {
+        console.error('Error loading current user photo:', error);
+      }
+    };
+    loadCurrentUserPhoto();
+  }, [currentUser, db]);
 
   // Load items user can offer for swapping
   useEffect(() => {
@@ -72,11 +94,21 @@ export const useSwapRequest = ({
     setShowItemPicker(false);
     
     try {
+      // Check if the item's swap status is still available
+      if (myItem.swapStatus !== 'available') {
+        Alert.alert(
+          'Item Unavailable',
+          'This item is no longer available for swapping.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       const messageData = {
         type: 'swap_request',
         senderId: currentUser.uid,
         senderName: currentUser.displayName,
-        senderPhoto: currentUser.photoURL || null,
+        senderPhoto: currentUserPhoto || null,
         receiverId: otherUserId,
         receiverName: otherUserName,
         receiverPhoto: otherUserPhoto || null,
@@ -191,7 +223,35 @@ export const useSwapRequest = ({
                 }]);
               }
 
-              Alert.alert('Success', 'Swap accepted! Both items marked as reserved.');
+              // Create reminder badge message
+              const reminderMessage = {
+                senderId: currentUser.uid,
+                receiverId: otherUserId,
+                text: "Tap the 'Swap Ongoing' button at the top to view swap details and confirm receipt.",
+                type: 'reminder',
+                createdAt: new Date(),
+                participants: [currentUser.uid, otherUserId],
+                read: false,
+              };
+              
+              // Add reminder to Firestore
+              const reminderDocRef = await addDoc(collection(db, 'messages'), {
+                ...reminderMessage,
+                createdAt: serverTimestamp(),
+              });
+
+              // Add reminder to local state
+              if (setMessages) {
+                setMessages(prevMessages => [...prevMessages, {
+                  ...reminderMessage,
+                  id: reminderDocRef.id,
+                }]);
+              }
+
+              Alert.alert(
+                'Success', 
+                'Swap accepted! Both items marked as reserved.\n\nTap the "Swap Ongoing" button at the top to view swap details and confirm receipt.'
+              );
             } catch (error) {
               console.error('Error accepting swap:', error);
               Alert.alert('Error', 'Could not accept swap. Please try again.');

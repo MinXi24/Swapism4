@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from '../assets/icons/icons';
 import { colors, fonts, spacing } from '../lib/theme';
@@ -6,12 +6,17 @@ import Button from './Button';
 
 export default function Card({ 
   item, 
+  isFavorited: initialFavorited = false,
   onPress, 
   onFavorite, 
   onSwap,
   style 
 }) {
-  const [isFavorited, setIsFavorited] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(initialFavorited);
+
+  useEffect(() => {
+    setIsFavorited(initialFavorited);
+  }, [initialFavorited]);
 
   const handleFavorite = async () => {
     if (onFavorite) {

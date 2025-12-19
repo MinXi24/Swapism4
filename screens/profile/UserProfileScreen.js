@@ -18,26 +18,27 @@ import {
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActionSheetIOS,
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActionSheetIOS,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
+import useGuest from '../../hooks/useGuest';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 
@@ -501,8 +502,8 @@ export default function UserProfileScreen({ route, navigation }) {
   const handleFollowToggle = async () => {
     if (!currentUser) {
       Alert.alert(
+        'Login Required',
         'Login to start following users!',
-        '',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -632,6 +633,24 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleMessage = () => {
+    if (isGuest) {
+      Alert.alert(
+        'Login Required',
+        'Login to start messaging!',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Login',
+            onPress: () => navigation.navigate('Welcome')
+          }
+        ],
+        { cancelable: false }
+      );
+      return;
+    }
     navigation.navigate('Chat', { 
       user: {
         id: userId,
@@ -649,8 +668,8 @@ export default function UserProfileScreen({ route, navigation }) {
   const handleSubmitReview = async () => {
     if (!currentUser) {
       Alert.alert(
-        'Login to submit reviews!',
-        '',
+        'Login Required',
+        'You must be logged in to submit reviews!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }
@@ -1051,7 +1070,8 @@ export default function UserProfileScreen({ route, navigation }) {
                   {activeTab === 'forSwap' && (
                     <View style={[
                       styles.swapStatusBadge,
-                      (post.swapStatus === 'swappedOut' || post.swapStatus === 'reserved') && styles.swapStatusBadgeInactive
+                      post.swapStatus === 'reserved' && styles.swapStatusBadgeInactive,
+                      (post.swapStatus === 'swappedOut' || post.swapStatus === 'swapped out') && styles.swapStatusBadgeSwappedOut
                     ]}>
                       <Text style={styles.swapStatusBadgeText}>
                         {post.swapStatus === 'available' 
@@ -1595,9 +1615,12 @@ const styles = StyleSheet.create({
   swapStatusBadgeInactive: {
     backgroundColor: colors.gray,
   },
+  swapStatusBadgeSwappedOut: {
+    backgroundColor: colors.highlight,
+  },
   swapStatusBadgeText: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#fff',
+    color: colors.dark,
   },
 });
