@@ -62,14 +62,19 @@ export default function AdminHomeScreen({ navigation }) {
     }, [])
   );
 
-  /**
-   * IMPLEMENTED FROM HOME.JS: 
-   * Verifies if the subject of the report actually exists and is not deleted/banned.
-   */
   const verifyExistence = async (item) => {
     const deletedId = 'm9';
-    // Scrub specific deleted ID
-    if (item.reported_user_id === deletedId || item.userId === deletedId || item.targetId === deletedId) {
+    // STRICT SCRUB: If m9 is anywhere in this report, kill it immediately
+    if (
+        item.id === deletedId || 
+        item.targetId === deletedId || 
+        item.reported_user_id === deletedId || 
+        item.userId === deletedId ||
+        item.reporter_id === deletedId ||
+        item.targetOwnerUid === deletedId ||
+        item.ownerUid === deletedId ||
+        item.reported_clothes_id === deletedId
+    ) {
       return false;
     }
 
@@ -79,62 +84,31 @@ export default function AdminHomeScreen({ navigation }) {
         const postSnap = await getDoc(postRef);
         if (!postSnap.exists()) return false;
 
-        // Also check if the post owner is valid (Deleted account check)
         const ownerUid = postSnap.data().ownerUid;
         const ownerRef = doc(db, 'users', ownerUid);
         const ownerSnap = await getDoc(ownerRef);
         if (!ownerSnap.exists()) return false;
-        const ownerData = ownerSnap.data();
-        if (ownerData.deleted === true || ownerData.active === false || ownerData.isBanned === true) return false;
         
-        return true;
+        const ownerData = ownerSnap.data();
+        return !(ownerData.deleted === true || ownerData.active === false || ownerData.isBanned === true);
       } 
       
-      if (item.reportType === 'user') {
-        const userRef = doc(db, 'users', item.reported_user_id || item.userId);
+      if (item.reportType === 'user' || item.reportType === 'comment') {
+        const targetUid = item.reported_user_id || item.targetOwnerUid || item.userId;
+        if (!targetUid) return true; 
+
+        const userRef = doc(db, 'users', targetUid);
         const userSnap = await getDoc(userRef);
         if (!userSnap.exists()) return false;
 
         const userData = userSnap.data();
-        // HOME.JS LOGIC: Filter out deleted/inactive/banned accounts
-        if (userData.deleted === true || userData.active === false || userData.isBanned === true) {
-          return false;
-        }
-        return true;
-      }
-
-      if (item.reportType === 'comment') {
-        const userRef = doc(db, 'users', item.targetOwnerUid || item.userId);
-        const userSnap = await getDoc(userRef);
-        return userSnap.exists() && userSnap.data().deleted !== true;
+        return !(userData.deleted === true || userData.active === false || userData.isBanned === true);
       }
 
       return true; 
     } catch (e) {
       return false;
     }
-  };
-
-  const deduplicateReports = (items) => {
-    const seen = new Set();
-    return items.filter(item => {
-      let uniqueKey;
-      if (item.reportType === 'post') {
-        uniqueKey = `post_${item.reported_clothes_id || item.targetId || item.id}`;
-      } else if (item.reportType === 'user') {
-        uniqueKey = `user_${item.reported_user_id || item.userId}`;
-      } else if (item.reportType === 'comment') {
-        uniqueKey = `comment_${item.targetId || item.id}`;
-      } else {
-        uniqueKey = item.id;
-      }
-
-      if (seen.has(uniqueKey)) {
-        return false;
-      }
-      seen.add(uniqueKey);
-      return true;
-    });
   };
 
   const loadReports = async () => {
@@ -206,21 +180,39 @@ export default function AdminHomeScreen({ navigation }) {
         }))
       ];
 
-      const filterAndDeduplicate = async (items) => {
-        // Sort first to ensure latest timestamp is kept during deduplication
+      /**
+       * REFACTORED CLEANING LOGIC:
+       * Uses a sequential loop to ensure database existence is confirmed 
+       * BEFORE rendering the list.
+       */
+      const processAndClean = async (items) => {
         items.sort((a, b) => b.timestamp - a.timestamp);
-        
-        const deduplicated = deduplicateReports(items);
 
-        const results = await Promise.all(deduplicated.map(async (item) => {
+        const seenTargets = new Set();
+        const validItems = [];
+
+        for (const item of items) {
+          // 1. Deduplicate check
+          let key;
+          if (item.reportType === 'post') key = `post_${item.reported_clothes_id || item.targetId || item.id}`;
+          else if (item.reportType === 'user') key = `user_${item.reported_user_id || item.userId}`;
+          else key = item.id;
+
+          if (seenTargets.has(key)) continue;
+
+          // 2. Existence/Deletion check (Wait for DB response)
           const exists = await verifyExistence(item);
-          return exists ? item : null;
-        }));
-        return results.filter(i => i !== null);
+          if (exists) {
+            seenTargets.add(key);
+            validItems.push(item);
+          }
+        }
+        
+        return validItems;
       };
 
-      const finalPending = await filterAndDeduplicate(rawPending);
-      const finalHistory = await filterAndDeduplicate(rawHistory);
+      const finalPending = await processAndClean(rawPending);
+      const finalHistory = await processAndClean(rawHistory);
 
       setReports(finalPending);
       setResolvedHistory(finalHistory);
