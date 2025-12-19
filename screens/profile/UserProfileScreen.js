@@ -11,6 +11,7 @@ import {
   getDocs,
   getFirestore,
   query,
+  setDoc,
   updateDoc,
   where
 } from 'firebase/firestore';
@@ -21,6 +22,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   SafeAreaView,
@@ -32,7 +34,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import useGuest from '../../hooks/useGuest';
+import { useGuest } from '../../hooks/useGuest';
 
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -356,96 +358,79 @@ export default function UserProfileScreen({ route, navigation }) {
     </Modal>
   );
 
-  const loadUserProfile = async () => {
+  const handleReport = async () => {
     try {
-      const userDocRef = doc(db, 'users', userId);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-
-        if (userData.active === false || userData.isBanned === true) {
-          setIsUserBanned(true);
-          setLoading(false);
-          return;
-        }
-
-        const validReviews = (userData.reviews || []).filter(review => review.userId && review.userName);
-        setUserInfo({
-          bio: userData.bio || '',
-          location: userData.location || '',
-          area: userData.area || '',
-          rating: userData.rating || 0,
-          reviewCount: validReviews.length,
-          reviews: validReviews,
-          photoURL: userData.photoURL || null,
-          username: userData.username || username || 'User',
+      const reportedUserRef = doc(db, 'reported_users', userId);
+      const reportedUserDoc = await getDoc(reportedUserRef);
+      
+      if (reportedUserDoc.exists()) {
+        await updateDoc(reportedUserRef, {
+          reportCount: (reportedUserDoc.data().reportCount || 0) + 1,
+          lastReportedAt: new Date(),
         });
-
-        setIsPrivateAccount(userData.isPrivate || false);
-
-        const followers = userData.followers || [];
-        const following = userData.following || [];
-        setStats({
-          posts: 0,
-          followers: followers.length,
-          following: following.length,
+      } else {
+        await setDoc(reportedUserRef, {
+          userId: userId,
+          username: userInfo.username,
+          reportCount: 1,
+          lastReportedAt: new Date(),
         });
-
-        if (currentUser) {
-          setIsFollowing(followers.includes(currentUser.uid));
-          await loadMutualsAndRequests(followers);
-        }
-
-        await loadUserPostsOnly();
       }
+      Alert.alert('Success', 'User has been reported');
     } catch (error) {
-      console.error("Error loading profile:", error);
-    } finally {
-      setLoading(false);
+      console.error('Error reporting user:', error);
+      Alert.alert('Error', 'Failed to report user');
     }
+  };
+
+  const handleBlock = async () => {
+    try {
+      const blockRef = doc(db, 'users', currentUser.uid, 'blocked_users', userId);
+      await setDoc(blockRef, {
+        blockedAt: new Date(),
+        username: userInfo.username,
+      });
+      setIsBlockedByMe(true);
+      Alert.alert('Success', 'User has been blocked');
+    } catch (error) {
+      console.error('Error blocking user:', error);
+      Alert.alert('Error', 'Failed to block user');
+    }
+  };
+
+  const handleUnblock = async () => {
+    try {
+      const blockRef = doc(db, 'users', currentUser.uid, 'blocked_users', userId);
+      await deleteDoc(blockRef);
+      setIsBlockedByMe(false);
+      Alert.alert('Success', 'User has been unblocked');
+      fetchScreenData();
+    } catch (error) {
+      console.error('Error unblocking user:', error);
+      Alert.alert('Error', 'Failed to unblock user');
+    }
+  };
+
+  const openMapWithLocation = () => {
+    if (!userInfo.location) {
+      Alert.alert('No Location', 'User has not set a location');
+      return;
+    }
+    const encodedLocation = encodeURIComponent(userInfo.location);
+    const url = Platform.select({
+      ios: `maps:0,0?q=${encodedLocation}`,
+      android: `geo:0,0?q=${encodedLocation}`,
+    });
+    Linking.openURL(url).catch((err) => console.error('Error opening map:', err));
   };
 
   useFocusEffect(
     useCallback(() => {
       fetchScreenData();
       logProfileView();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userId])
   );
-
-  // Split out helper to load posts (called only if active)
-  const loadUserPostsOnly = async () => {
-    try {
-      const q = query(collection(db, 'wardrobe-plug-fyp/user/images'), where('ownerUid', '==', userId));
-      const querySnapshot = await getDocs(q);
-      const posts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .sort((a, b) => (b.uploadedAt?.toDate?.() || new Date()) - (a.uploadedAt?.toDate?.() || new Date()));
-      
-      setUserPosts(posts);
-      setStats(prev => ({ ...prev, posts: posts.length }));
-    } catch (error) { console.error(error); }
-  };
-
-  // Split out helper for mutuals/requests
-  const loadMutualsAndRequests = async (followers) => {
-      try {
-        const currentUserDocRef = doc(db, 'users', currentUser.uid);
-        const currentUserDoc = await getDoc(currentUserDocRef);
-        if (currentUserDoc.exists()) {
-            const currentUserFollowing = currentUserDoc.data().following || [];
-            const mutuals = followers.filter(followerId => currentUserFollowing.includes(followerId));
-            const mutualDetails = await Promise.all(mutuals.map(async (mid) => {
-                const mDoc = await getDoc(doc(db, 'users', mid));
-                return mDoc.exists() ? { uid: mid, username: mDoc.data().username, photoURL: mDoc.data().photoURL } : null;
-            }));
-            setMutualFollowers(mutualDetails.filter(m => m));
-        }
-        
-        const requestQuery = query(collection(db, 'followRequests'), where('fromUserId', '==', currentUser.uid), where('toUserId', '==', userId));
-        const requestSnapshot = await getDocs(requestQuery);
-        setFollowRequestStatus(!requestSnapshot.empty ? requestSnapshot.docs[0].data().status : null);
-      } catch (e) { console.error(e); }
-  };
 
   const handlePostPress = (post) => {
     navigation.navigate('PostDetails', { post });
@@ -995,10 +980,6 @@ export default function UserProfileScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
