@@ -1,30 +1,30 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  getFirestore,
-  query,
-  updateDoc,
-  where
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    getFirestore,
+    query,
+    updateDoc,
+    where
 } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
@@ -315,10 +315,36 @@ export default function PostDetailsScreen({ route, navigation }) {
         where('postId', '==', activePost.id)
       );
       const querySnapshot = await getDocs(q);
-      const likesData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      
+      // Fetch current user data for each like
+      const likesData = await Promise.all(
+        querySnapshot.docs.map(async (docSnapshot) => {
+          const likeData = docSnapshot.data();
+          
+          try {
+            // Fetch current user data
+            const userDoc = await getDoc(doc(db, 'users', likeData.userId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              return {
+                id: docSnapshot.id,
+                ...likeData,
+                userName: userData.username || likeData.userName || 'User',
+                userPhoto: userData.photoURL || null
+              };
+            }
+          } catch (err) {
+            console.error('Error fetching user data for like:', err);
+          }
+          
+          // Fallback to stored data if fetch fails
+          return {
+            id: docSnapshot.id,
+            ...likeData
+          };
+        })
+      );
+      
       setLikes(likesData);
     } catch (error) {
       console.error('Error loading likes:', error);
@@ -761,29 +787,29 @@ export default function PostDetailsScreen({ route, navigation }) {
               
               {showLikes && (
                 <View style={styles.likesList}>
-                  {likes.map(like => (
-                    <View key={like.id} style={styles.likeItem}>
-                      <Icon name="person-circle" size={32} color={colors.accent} />
-                      <Text style={styles.likeUserName}>{like.userName || 'User'}</Text>
-                    </View>
-                  ))}
+                  {likes.map(like => {
+                    const isCurrentUser = like.userId === auth.currentUser?.uid;
+                    const LikeWrapper = isCurrentUser ? View : TouchableOpacity;
+                    
+                    return (
+                      <LikeWrapper 
+                        key={like.id} 
+                        style={styles.likeItem}
+                        {...(!isCurrentUser && {
+                          onPress: () => navigation.navigate('UserProfile', { userId: like.userId })
+                        })}
+                      >
+                        {like.userPhoto ? (
+                          <Image source={{ uri: like.userPhoto }} style={styles.likeUserImage} />
+                        ) : (
+                          <Icon name="person-circle" size={32} color={colors.accent} />
+                        )}
+                        <Text style={styles.likeUserName}>{like.userName || 'User'}</Text>
+                      </LikeWrapper>
+                    );
+                  })}
                 </View>
               )}
-            </View>
-          )}
-
-          {/* Tagged Users Section */}
-          {activePost.taggedUsers && activePost.taggedUsers.length > 0 && (
-            <View style={styles.taggedUsers}>
-              <Text>Tagged: </Text>
-              {activePost.taggedUsers.map((user, index) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => navigation.navigate('UserProfile', { userId: user.uid })}
-                >
-                  <Text style={styles.taggedUsername}>@{user.username} </Text>
-                </TouchableOpacity>
-              ))}
             </View>
           )}
         </View>
@@ -1061,6 +1087,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.dark,
   },
+  likeUserImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
   commentsSection: {
     padding: spacing.md,
     paddingBottom: 100,
@@ -1158,17 +1189,5 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
-  },
-  taggedUsers: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginTop: spacing.sm,
-  },
-  taggedUsername: {
-    fontSize: 14,
-    color: colors.accent,
-    fontWeight: '500',
-    marginRight: 4,
   },
 });

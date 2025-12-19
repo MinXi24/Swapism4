@@ -1,13 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, doc, getDoc, getFirestore, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getFirestore } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    FlatList,
     Image,
-    Modal,
     ScrollView,
     StyleSheet,
     Text,
@@ -26,14 +24,9 @@ export default function AddPostScreen({ navigation, route }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [taggedUsers, setTaggedUsers] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [postType, setPostType] = useState('forFun');
   const [clothingType, setClothingType] = useState('other');
-  const [showUserSearch, setShowUserSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [selectedSize, setSelectedSize] = useState('');
   const [selectedCondition, setSelectedCondition] = useState('');
   const [additionalDetails, setAdditionalDetails] = useState('');
@@ -177,122 +170,6 @@ export default function AddPostScreen({ navigation, route }) {
     }
   };
 
-  const handleTagPeople = () => {
-    setShowUserSearch(true);
-    setSearchQuery('');
-    searchUsers(''); // Load all followed users initially
-  };
-
-  const searchUsers = async (searchText) => {
-    setSearchQuery(searchText);
-    
-    setLoading(true);
-    try {
-      const currentUserId = auth.currentUser?.uid;
-      if (!currentUserId) {
-        setFilteredUsers([]);
-        return;
-      }
-
-      // Get followed users from current user's following list
-      const userDocRef = doc(db, 'users', currentUserId);
-      const userDocSnap = await getDoc(userDocRef);
-      
-      if (!userDocSnap.exists()) {
-        setFilteredUsers([]);
-        return;
-      }
-
-      const userData = userDocSnap.data();
-      const followingList = userData.following || [];
-
-      if (followingList.length === 0) {
-        setFilteredUsers([]);
-        return;
-      }
-
-      // Fetch details of followed users
-      const users = [];
-      console.log('Following list:', followingList);
-      
-      for (const followedUserId of followingList) {
-        const followedUserDoc = await getDoc(doc(db, 'users', followedUserId));
-        if (followedUserDoc.exists()) {
-          const followedUserData = followedUserDoc.data();
-          const username = followedUserData.username || '';
-          const displayName = followedUserData.displayName || '';
-          
-          // Filter by search text if provided
-          const matchesSearch = !searchText.trim() || 
-            username.toLowerCase().includes(searchText.toLowerCase()) ||
-            displayName.toLowerCase().includes(searchText.toLowerCase());
-          
-          // Don't show already tagged users
-          const alreadyTagged = taggedUsers.some(u => u.uid === followedUserId);
-          
-          if (matchesSearch && !alreadyTagged) {
-            users.push({
-              uid: followedUserId,
-              username: username,
-              displayName: displayName,
-              photoURL: followedUserData.photoURL || null,
-            });
-          }
-        }
-      }
-      
-      console.log('Filtered users:', users.length);
-      setFilteredUsers(users);
-    } catch (error) {
-      console.error('Error fetching followed users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const selectUser = (user) => {
-    setTaggedUsers([...taggedUsers, user]);
-    setShowUserSearch(false);
-    setSearchQuery('');
-    setFilteredUsers([]);
-  };
-
-  const removeTag = (index) => {
-    const newTags = taggedUsers.filter((_, i) => i !== index);
-    setTaggedUsers(newTags);
-  };
-
-  const createTagNotifications = async (postId, imageUrl) => {
-    if (taggedUsers.length === 0) return;
-
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
-
-    try {
-      // Get current user's info
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      const currentUsername = userDoc.exists() ? userDoc.data().username || 'Someone' : 'Someone';
-
-      // Create notification for each tagged user
-      const notificationPromises = taggedUsers.map(async (taggedUser) => {
-        await addDoc(collection(db, 'users', taggedUser.uid, 'activities'), {
-          type: 'tag',
-          message: `${currentUsername} tagged you in a post`,
-          fromUserId: currentUser.uid,
-          fromUsername: currentUsername,
-          postId: postId,
-          postImage: imageUrl,
-          timestamp: serverTimestamp(),
-          read: false,
-        });
-      });
-
-      await Promise.all(notificationPromises);
-    } catch (error) {
-      console.error('Error creating tag notifications:', error);
-    }
-  };
-
   const handlePost = async () => {
     if (!auth.currentUser) {
       Alert.alert(
@@ -352,14 +229,13 @@ export default function AddPostScreen({ navigation, route }) {
       console.log('Saving to Firestore...');
       
       if (postType === 'both') {
-        const funPostRef = await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
+        await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), {
           ownerUid: uid,
           userName: userName,
           url: imageUrl,
           imageUrls: imageUrls,
           title: title.trim(),
           description: description.trim(),
-          taggedUsers: taggedUsers.map(u => ({ uid: u.uid, username: u.username })),
           postType: 'forFun',
           swapStatus: null,
           clothingType: clothingType,
@@ -374,7 +250,6 @@ export default function AddPostScreen({ navigation, route }) {
           imageUrls: imageUrls,
           title: title.trim(),
           description: description.trim(),
-          taggedUsers: taggedUsers.map(u => ({ uid: u.uid, username: u.username })),
           postType: 'forSwap',
           swapStatus: 'available',
           clothingType: clothingType,
@@ -383,9 +258,6 @@ export default function AddPostScreen({ navigation, route }) {
           additionalDetails: additionalDetails.trim() || 'N/A',
           uploadedAt: new Date(),
         });
-
-        // Create notifications for tagged users (use the fun post for notifications)
-        await createTagNotifications(funPostRef.id, imageUrl);
       } else {
         const postData = {
           ownerUid: uid,
@@ -394,7 +266,6 @@ export default function AddPostScreen({ navigation, route }) {
           imageUrls: imageUrls, // Store all image URLs
           title: title.trim(),
           description: description.trim(),
-          taggedUsers: taggedUsers.map(u => ({ uid: u.uid, username: u.username })),
           postType: postType,
           swapStatus: postType === 'forSwap' ? 'available' : null,
           clothingType: clothingType,
@@ -408,10 +279,7 @@ export default function AddPostScreen({ navigation, route }) {
           postData.additionalDetails = additionalDetails.trim() || 'N/A';
         }
 
-        const postRef = await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), postData);
-
-        // Create notifications for tagged users
-        await createTagNotifications(postRef.id, imageUrl);
+        await addDoc(collection(db, 'wardrobe-plug-fyp/user/images'), postData);
       }
 
       console.log('Post saved successfully!');
@@ -427,7 +295,6 @@ export default function AddPostScreen({ navigation, route }) {
       setSelectedImage(null);
       setTitle('');
       setDescription('');
-      setTaggedUsers([]);
       setPostType('forFun');
       setClothingType('other');
       setSelectedSize('');
@@ -738,27 +605,6 @@ export default function AddPostScreen({ navigation, route }) {
             </>
           )}
 
-          <TouchableOpacity 
-            style={styles.tagButton}
-            onPress={handleTagPeople}
-          >
-            <Icon name="person-add-outline" size={20} color={colors.accent} />
-            <Text style={styles.tagButtonText}>Tag People</Text>
-          </TouchableOpacity>
-
-          {taggedUsers.length > 0 && (
-            <View style={styles.tagsContainer}>
-              {taggedUsers.map((tag, index) => (
-                <View key={index} style={styles.tagChip}>
-                  <Text style={styles.tagChipText}>@{tag.username}</Text>
-                  <TouchableOpacity onPress={() => removeTag(index)}>
-                    <Icon name="close-circle" size={18} color={colors.gray} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-
           <TouchableOpacity
             style={[styles.postButton, uploading && styles.postButtonDisabled]}
             onPress={handlePost}
@@ -775,75 +621,6 @@ export default function AddPostScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* User Search Modal */}
-      <Modal
-        visible={showUserSearch}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowUserSearch(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Tag People</Text>
-              <TouchableOpacity onPress={() => setShowUserSearch(false)}>
-                <Icon name="close" size={24} color={colors.dark} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.searchContainer}>
-              <Icon name="search" size={20} color={colors.gray} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search from people you follow..."
-                value={searchQuery}
-                onChangeText={searchUsers}
-                autoFocus
-              />
-            </View>
-
-            {loading && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator color={colors.accent} />
-              </View>
-            )}
-
-            <FlatList
-              data={filteredUsers}
-              keyExtractor={(item) => item.uid}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.userItem}
-                  onPress={() => selectUser(item)}
-                >
-                  <View style={styles.userAvatar}>
-                    {item.photoURL ? (
-                      <Image source={{ uri: item.photoURL }} style={styles.avatarImage} />
-                    ) : (
-                      <Icon name="person" size={24} color={colors.gray} />
-                    )}
-                  </View>
-                  <View style={styles.userInfo}>
-                    <Text style={styles.userName}>@{item.username}</Text>
-                    {item.displayName && (
-                      <Text style={styles.userDisplayName}>{item.displayName}</Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                !loading && (
-                  <Text style={styles.emptyText}>
-                    {searchQuery ? 'No users found' : 'You are not following anyone yet'}
-                  </Text>
-                )
-              }
-              style={styles.userList}
-            />
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1025,38 +802,6 @@ const styles = StyleSheet.create({
   postTypeButtonTextActive: {
     color: '#fff',
   },
-  tagButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  tagButtonText: {
-    fontSize: 14,
-    color: colors.accent,
-    fontWeight: '600',
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-    marginHorizontal: spacing.md,
-  },
-  tagChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  tagChipText: {
-    fontSize: 14,
-    color: colors.dark,
-  },
   postButton: {
     flexDirection: 'row',
     backgroundColor: colors.accent,
@@ -1075,94 +820,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    flex: 1,
-    padding: spacing.lg,
-    paddingBottom: spacing.xl,
-    width: '100%',
-    height: '100%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.dark,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    margin: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderRadius: 8,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    fontSize: 16,
-    color: colors.dark,
-  },
-  loadingContainer: {
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  userList: {
-    flex: 1,
-  },
-  userItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  userAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-  },
-  avatarImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.dark,
-  },
-  userDisplayName: {
-    fontSize: 14,
-    color: colors.gray,
-    marginTop: 2,
-  },
-  emptyText: {
-    textAlign: 'center',
-    padding: spacing.xl,
-    color: colors.gray,
-    fontSize: 14,
   },
   sizeButtonsRow: {
     flexDirection: 'row',
