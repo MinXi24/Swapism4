@@ -9,12 +9,8 @@ import {
   getDocs,
   getFirestore,
   query,
-  serverTimestamp // <--- ADDED THIS IMPORT
-  ,
-
-
-
-
+  serverTimestamp,
+  setDoc,
   where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -533,14 +529,39 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleDeletePost = async (post) => {
-    try {
-      await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', post.id));
-      Alert.alert('Success', 'Post deleted successfully');
-      loadPosts();
-    } catch (error) {
-      console.error('Error deleting post:', error);
-      Alert.alert('Error', 'Failed to delete post');
-    }
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? You can restore it from Recently Deleted within 30 days.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Move post to deletedPosts collection
+              const postData = {
+                ...post,
+                deletedAt: new Date(),
+              };
+              await setDoc(doc(db, 'deletedPosts', post.id), postData);
+              
+              // Remove from original collection
+              await deleteDoc(doc(db, 'wardrobe-plug-fyp/user/images', post.id));
+              
+              Alert.alert('Success', 'Post moved to Recently Deleted');
+              loadPosts();
+            } catch (error) {
+              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          },
+        },
+      ]
+    );
   };
 
   // --- UPDATED FUNCTION: Added Debugging & ServerTimestamp ---

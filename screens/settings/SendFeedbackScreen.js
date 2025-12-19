@@ -157,58 +157,6 @@ export default function SendFeedbackScreen({ navigation }) {
     }
   };
 
-  // --- RENDER HELPERS ---
-  const renderHeader = () => (
-    <View style={styles.formContainer}>
-      {/* Category Selection */}
-      <Text style={styles.sectionLabel}>What is this about?</Text>
-      <View style={styles.categoryContainer}>
-        {CATEGORIES.map((cat) => (
-          <TouchableOpacity 
-            key={cat} 
-            style={[
-              styles.categoryChip, 
-              category === cat && styles.categoryChipActive
-            ]}
-            onPress={() => setCategory(cat)}
-          >
-            <Text style={[
-              styles.categoryText, 
-              category === cat && styles.categoryTextActive
-            ]}>
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Message Input */}
-      <Text style={styles.sectionLabel}>Your Message</Text>
-      <TextInput 
-        style={styles.textInput}
-        placeholder="Tell us what you think..."
-        placeholderTextColor={colors.gray}
-        multiline
-        textAlignVertical="top"
-        value={message}
-        onChangeText={setMessage}
-        maxLength={1000}
-      />
-      <Text style={styles.charCount}>{message.length}/1000</Text>
-
-      <TouchableOpacity 
-        style={styles.submitButton} 
-        onPress={handleSubmit}
-        disabled={loading}
-      >
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Submit Feedback</Text>}
-      </TouchableOpacity>
-
-      <View style={styles.divider} />
-      <Text style={styles.historyTitle}>My Feedback History</Text>
-    </View>
-  );
-
   const renderFeedbackItem = ({ item }) => (
     <View style={styles.historyCard}>
       <View style={styles.historyHeader}>
@@ -219,7 +167,6 @@ export default function SendFeedbackScreen({ navigation }) {
       </View>
       <Text style={styles.historyMessage}>{item.message}</Text>
       
-      {/* --- ADMIN REPLY SECTION --- */}
       {item.adminReply ? (
         <View>
           <View style={styles.replyContainer}>
@@ -268,7 +215,54 @@ export default function SendFeedbackScreen({ navigation }) {
           data={history}
           renderItem={renderFeedbackItem}
           keyExtractor={item => item.id}
-          ListHeaderComponent={renderHeader}
+          ListHeaderComponent={
+            <View style={styles.formContainer}>
+              <Text style={styles.sectionLabel}>What is this about?</Text>
+              <View style={styles.categoryContainer}>
+                {CATEGORIES.map((cat) => (
+                  <TouchableOpacity 
+                    key={cat} 
+                    style={[
+                      styles.categoryChip, 
+                      category === cat && styles.categoryChipActive
+                    ]}
+                    onPress={() => setCategory(cat)}
+                  >
+                    <Text style={[
+                      styles.categoryText, 
+                      category === cat && styles.categoryTextActive
+                    ]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.sectionLabel}>Your Message</Text>
+              <TextInput 
+                style={styles.textInput}
+                placeholder="Tell us what you think..."
+                placeholderTextColor={colors.gray}
+                multiline
+                textAlignVertical="top"
+                value={message}
+                onChangeText={setMessage}
+                maxLength={1000}
+              />
+              <Text style={styles.charCount}>{message.length}/1000</Text>
+
+              <TouchableOpacity 
+                style={styles.submitButton} 
+                onPress={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Submit Feedback</Text>}
+              </TouchableOpacity>
+
+              <View style={styles.divider} />
+              <Text style={styles.historyTitle}>My Feedback History</Text>
+            </View>
+          }
           contentContainerStyle={styles.scrollContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
@@ -279,7 +273,6 @@ export default function SendFeedbackScreen({ navigation }) {
         />
       </KeyboardAvoidingView>
 
-      {/* --- USER REPLY MODAL --- */}
       <Modal visible={replyModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
