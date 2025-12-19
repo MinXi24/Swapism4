@@ -601,45 +601,6 @@ export default function TryOnScreen({ route, navigation }) {
     setCapturedPhoto(null);
   };
 
-<<<<<<< HEAD
-=======
-  const saveOutfitToFavorites = async () => {
-    const auth = getAuth();
-    const currentUser = auth.currentUser;
-    
-    if (!currentUser) {
-      Alert.alert('Login Required', 'You must be logged in to save outfits!');
-      return;
-    }
-
-    const selectedTop = tops[currentTopIndex];
-    const selectedBottom = bottoms[currentBottomIndex];
-
-    if (!selectedTop || !selectedBottom) {
-      Alert.alert('Error', 'Please select both a top and bottom to save the outfit');
-      return;
-    }
-
-    try {
-      await addDoc(collection(firestore, 'favoriteOutfits'), {
-        userId: currentUser.uid,
-        topId: selectedTop.id,
-        topName: selectedTop.title || selectedTop.description || 'Top',
-        topImage: selectedTop.url,
-        bottomId: selectedBottom.id,
-        bottomName: selectedBottom.title || selectedBottom.description || 'Bottom',
-        bottomImage: selectedBottom.url,
-        createdAt: new Date(),
-      });
-      
-      Alert.alert('Success', 'Outfit saved to favorites!');
-    } catch (error) {
-      console.error('Error saving outfit:', error);
-      Alert.alert('Error', 'Failed to save outfit to favorites');
-    }
-  };
-
->>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
   const handleSuggestionClick = async (item) => {
     // Determine if item is a top or bottom based on clothingType or keywords
     const isTop = item.clothingType === 'top' || 
@@ -1426,12 +1387,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  resetButtonContainer: {
-    position: 'absolute',
-    top: 110,
-    right: 20,
-    zIndex: 10,
-  },
   resetButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1550,18 +1505,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ff6b6b',
   },
-  suggestionsContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: 180,
-  },
   suggestionsContainerOff: {
     backgroundColor: '#fff',
     padding: spacing.md,
@@ -1617,12 +1560,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
-  suggestionInfo: {
-    marginTop: spacing.xs,
-    width: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   previewModal: {
     position: 'absolute',
     top: 0,
@@ -1643,20 +1580,6 @@ const styles = StyleSheet.create({
     height: '80%',
     resizeMode: 'contain',
     backgroundColor: '#000',
-  },
-  previewOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  previewClothes: {
-    position: 'absolute',
-    width: width * 1.2,
-    height: '40%',
   },
   previewActions: {
     position: 'absolute',
@@ -1689,4 +1612,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-});
+}); 

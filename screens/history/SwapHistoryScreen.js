@@ -1,29 +1,25 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-    collection,
-<<<<<<< HEAD
-    doc as firestoreDoc,
-=======
-    doc,
->>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
-    getDoc,
-    getDocs,
-    getFirestore,
-    orderBy,
-    query,
-    where
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+  where
 } from 'firebase/firestore';
 import React, { useCallback, useState } from 'react';
 import {
-    FlatList,
-    Image,
-    Modal,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  FlatList,
+  Image,
+  Modal,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import Input from '../../components/Input';
@@ -53,13 +49,12 @@ export default function SwapHistoryScreen({ navigation }) {
     setSearchQuery(query);
   };
 
-<<<<<<< HEAD
   // Helper to fetch latest username for a given uid
   const fetchLatestUsername = async (uid) => {
     if (!uid) return 'Unknown User';
     if (latestUsernames[uid]) return latestUsernames[uid];
     try {
-      const userDoc = await getDoc(firestoreDoc(db, 'users', uid));
+      const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         const username = userData.username || userData.displayName || 'Unknown User';
@@ -68,7 +63,8 @@ export default function SwapHistoryScreen({ navigation }) {
       }
     } catch (_e) { /* ignore */ }
     return 'Unknown User';
-=======
+  };
+
   const loadUserPhoto = async (userId) => {
     if (!userId || loadedPhotos[userId]) return loadedPhotos[userId];
     
@@ -86,7 +82,6 @@ export default function SwapHistoryScreen({ navigation }) {
       console.error('Error loading user photo:', error);
     }
     return null;
->>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
   };
 
   const loadSwapHistory = async () => {
@@ -115,8 +110,6 @@ export default function SwapHistoryScreen({ navigation }) {
           latestOtherUserName: latestName,
         };
       }));
-
-      // Store all swaps
 
       // Filter based on selected filter
       let filteredSwaps = swapsData;
@@ -237,8 +230,6 @@ export default function SwapHistoryScreen({ navigation }) {
       ? item.swapDetails?.theirItemTitle 
       : item.swapDetails?.myItemTitle;
     
-    // Get other user's name and photo
-
     // Use latest username if available
     const otherUserName = item.latestOtherUserName || (isInitiatedByMe ? item.receiverName : item.senderName);
     
@@ -335,7 +326,6 @@ export default function SwapHistoryScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color={colors.dark} />
@@ -344,7 +334,6 @@ export default function SwapHistoryScreen({ navigation }) {
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Search Bar */}
       <Input
         placeholder="search swap history..."
         value={searchQuery}
@@ -353,7 +342,6 @@ export default function SwapHistoryScreen({ navigation }) {
         style={styles.searchBar}
       />
 
-      {/* Filter Dropdown Button */}
       <View style={styles.filterContainer}>
         <TouchableOpacity style={styles.filterDropdown} onPress={() => setShowFilterModal(true)}>
           <Icon name="funnel-outline" size={20} color={colors.dark} />
@@ -364,7 +352,6 @@ export default function SwapHistoryScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Filter Modal */}
       <Modal
         visible={showFilterModal}
         transparent={true}
@@ -452,7 +439,6 @@ export default function SwapHistoryScreen({ navigation }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* Swap History List */}
       <FlatList
         data={swapHistory}
         renderItem={renderSwapItem}
@@ -702,18 +688,6 @@ const styles = StyleSheet.create({
   },
   swapIconContainer: {
     paddingHorizontal: spacing.sm,
-  },
-  swapFooter: {
-    borderTopWidth: 1,
-    borderTopColor: colors.secondary,
-    paddingTop: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  initiatorText: {
-    fontSize: 12,
-    color: colors.gray,
-    fontStyle: 'italic',
-    textAlign: 'center',
   },
   emptyContainer: {
     flex: 1,
