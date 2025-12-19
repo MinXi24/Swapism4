@@ -31,7 +31,6 @@ import { colors, fonts, spacing } from '../../lib/theme';
 const ACTIVE_YELLOW = '#FDD835'; 
 
 export default function AdminHomeScreen({ navigation }) {
-  // Removed local searchQuery state since we use a dedicated screen now
   const [activeTab, setActiveTab] = useState('home');
 
   // --- DATA STATE ---
