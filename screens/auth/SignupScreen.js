@@ -140,12 +140,6 @@ export default function SignUpScreen({ navigation }) {
 
         {/* Form */}
         <View style={styles.formContainer}>
-          <Input
-            placeholder="Username"
-            value={username}
-            onChangeText={setUsername}
-            style={styles.input}
-          />
           
           <Input
             placeholder="Email"
