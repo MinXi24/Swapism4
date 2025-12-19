@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
+<<<<<<< HEAD
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
@@ -32,13 +33,36 @@ import {
   Text,
   TouchableOpacity,
   View
+=======
+    ActionSheetIOS,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
 } from 'react-native';
 
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
+<<<<<<< HEAD
 import { colors, spacing } from '../../lib/theme';
 
 const ALERT_RED = '#FF6B6B';
+=======
+import useGuest from '../../hooks/useGuest';
+import { colors, fonts, spacing } from '../../lib/theme';
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId, username, initialTab } = route.params;
@@ -65,13 +89,120 @@ export default function UserProfileScreen({ route, navigation }) {
   const [mutualFollowers, setMutualFollowers] = useState([]);
   const [showAllMutuals, setShowAllMutuals] = useState(false);
 
+<<<<<<< HEAD
   // BLOCK & BAN STATE
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
   const [isUserBanned, setIsUserBanned] = useState(false); // [NEW] Added Ban State
+=======
+  // Show menu for report/block
+  const [androidMenuVisible, setAndroidMenuVisible] = useState(false);
+  const showMenu = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Report User', 'Block User'],
+          destructiveButtonIndex: 2,
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) handleReport();
+          if (buttonIndex === 2) handleBlock();
+        }
+      );
+    } else {
+      setAndroidMenuVisible(true);
+    }
+  };
+  // Android custom modal for report/block
+  const renderAndroidMenu = () => (
+    <Modal
+      visible={androidMenuVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setAndroidMenuVisible(false)}
+    >
+      <TouchableOpacity
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}
+        activeOpacity={1}
+        onPress={() => setAndroidMenuVisible(false)}
+      >
+        <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 }}>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleReport(); }} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Report User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleBlock(); }} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Block User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setAndroidMenuVisible(false)} style={{ paddingVertical: 16 }}>
+            <Text style={{ color: '#333', fontSize: 16, textAlign: 'center' }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  const handleReport = () => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login Required',
+        'You must be logged in to report users',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    Alert.alert('Report', 'User has been reported.');
+  };
+  const handleBlock = () => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login Required',
+        'You must be logged in to block users',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+    Alert.alert('Block', 'User has been blocked.');
+  };
+
+  const openMapWithLocation = async () => {
+    const location = userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location;
+    if (!location) return;
+
+    const encodedLocation = encodeURIComponent(location);
+    
+    // Try different map apps in order of preference
+    const urls = [
+      `comgooglemaps://?q=${encodedLocation}`, // Google Maps iOS
+      `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`, // Google Maps web (works on Android and iOS)
+      `maps://maps.apple.com/?q=${encodedLocation}`, // Apple Maps
+    ];
+
+    for (const url of urls) {
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (error) {
+        console.log(`Cannot open ${url}`);
+      }
+    }
+
+    Alert.alert('Error', 'No map app available');
+  };
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
 
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
+  const { isGuest } = useGuest();
 
   // --- MAIN DATA LOADING LOGIC ---
   const fetchScreenData = async () => {
@@ -240,8 +371,109 @@ export default function UserProfileScreen({ route, navigation }) {
     Alert.alert('Error', 'No map app available');
   };
 
+<<<<<<< HEAD
   const handleReport = async () => {
       if (!currentUser) return Alert.alert('Error', 'Login required.');
+=======
+  const handleFollowToggle = async () => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login Required',
+        'Login to start following users!',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
+    if (isFollowing) {
+      // Show unfollow confirmation
+      Alert.alert(
+        'Unfollow',
+        'Do you wish to unfollow?',
+        [
+          { text: 'No', style: 'cancel' },
+          {
+            text: 'Yes',
+            onPress: async () => {
+              try {
+                setFollowLoading(true);
+                const userDocRef = doc(db, 'users', userId);
+                const currentUserDocRef = doc(db, 'users', currentUser.uid);
+                
+                // Remove from target user's followers
+                await updateDoc(userDocRef, {
+                  followers: arrayRemove(currentUser.uid)
+                });
+                
+                // Remove from current user's following
+                await updateDoc(currentUserDocRef, {
+                  following: arrayRemove(userId)
+                });
+                
+                // Delete any follow requests
+                const requestQuery = query(
+                  collection(db, 'followRequests'),
+                  where('fromUserId', '==', currentUser.uid),
+                  where('toUserId', '==', userId)
+                );
+                const requestSnapshot = await getDocs(requestQuery);
+                requestSnapshot.docs.forEach(async (docSnapshot) => {
+                  await deleteDoc(doc(db, 'followRequests', docSnapshot.id));
+                });
+                
+                setIsFollowing(false);
+                setFollowRequestStatus(null);
+                setStats(prev => ({ ...prev, followers: prev.followers - 1 }));
+              } catch (error) {
+                console.error('Error unfollowing:', error);
+                Alert.alert('Error', 'Failed to unfollow. Please try again.');
+              } finally {
+                setFollowLoading(false);
+              }
+            }
+          }
+        ]
+      );
+    } else if (followRequestStatus === 'pending') {
+      // Cancel request
+      Alert.alert(
+        'Cancel Request',
+        'Do you want to cancel your follow request?',
+        [
+          { text: 'No', style: 'cancel' },
+          {
+            text: 'Yes',
+            onPress: async () => {
+              try {
+                setFollowLoading(true);
+                const requestQuery = query(
+                  collection(db, 'followRequests'),
+                  where('fromUserId', '==', currentUser.uid),
+                  where('toUserId', '==', userId)
+                );
+                const requestSnapshot = await getDocs(requestQuery);
+                
+                requestSnapshot.docs.forEach(async (docSnapshot) => {
+                  await deleteDoc(doc(db, 'followRequests', docSnapshot.id));
+                });
+                
+                setFollowRequestStatus(null);
+              } catch (error) {
+                console.error('Error canceling request:', error);
+                Alert.alert('Error', 'Failed to cancel request. Please try again.');
+              } finally {
+                setFollowLoading(false);
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      // Follow or Request
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
       try {
           await addDoc(collection(db, 'reported_users'), {
             reporter_id: currentUser.uid, reporter_username: currentUser.displayName || 'User',
@@ -252,6 +484,7 @@ export default function UserProfileScreen({ route, navigation }) {
       } catch (e) { Alert.alert('Error', 'Failed to report.'); }
   };
 
+<<<<<<< HEAD
   const handleBlock = () => {
     if (!currentUser) return;
     Alert.alert('Block User', 'Block this user?', [
@@ -269,6 +502,63 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleUnblock = async () => {
+=======
+  const handleMessage = () => {
+    if (isGuest) {
+      Alert.alert(
+        'Login Required',
+        'Login to start messaging!',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Login',
+            onPress: () => navigation.navigate('Welcome')
+          }
+        ],
+        { cancelable: false }
+      );
+      return;
+    }
+    navigation.navigate('Chat', { 
+      user: {
+        id: userId,
+        uid: userId,
+        name: userInfo.username,
+        photoURL: userInfo.photoURL
+      }
+    });
+  };
+
+  const handleRateUser = () => {
+    setShowReviewModal(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!currentUser) {
+      Alert.alert(
+        'Login Required',
+        'You must be logged in to submit reviews!',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
+    if (reviewRating === 0) {
+      Alert.alert('Error', 'Please select a rating');
+      return;
+    }
+    if (!reviewText.trim()) {
+      Alert.alert('Error', 'Please write a review');
+      return;
+    }
+
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
     try {
         await deleteDoc(doc(db, 'users', currentUser.uid, 'blocked_users', userId));
         setIsBlockedByMe(false);
@@ -499,6 +789,24 @@ export default function UserProfileScreen({ route, navigation }) {
               {displayPosts.map(post => (
                 <TouchableOpacity key={post.id} style={styles.postItem} onPress={() => handlePostPress(post)}>
                   <Image source={{ uri: post.url }} style={styles.postImage} />
+<<<<<<< HEAD
+=======
+                  {activeTab === 'forSwap' && (
+                    <View style={[
+                      styles.swapStatusBadge,
+                      post.swapStatus === 'reserved' && styles.swapStatusBadgeInactive,
+                      (post.swapStatus === 'swappedOut' || post.swapStatus === 'swapped out') && styles.swapStatusBadgeSwappedOut
+                    ]}>
+                      <Text style={styles.swapStatusBadgeText}>
+                        {post.swapStatus === 'available' 
+                          ? 'Available' 
+                          : post.swapStatus === 'reserved' 
+                          ? 'Reserved' 
+                          : 'Swapped Out'}
+                      </Text>
+                    </View>
+                  )}
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
                 </TouchableOpacity>
               ))}
             </View>
@@ -511,6 +819,7 @@ export default function UserProfileScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+<<<<<<< HEAD
   centerContent: { justifyContent: 'center', alignItems: 'center' },
   container: { flex: 1, backgroundColor: colors.secondary },
   header: { flexDirection: 'row', alignItems: 'center', height: 56, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#eee' },
@@ -561,3 +870,475 @@ const styles = StyleSheet.create({
   emptyStateSubtext: { color: colors.gray, marginTop: 5 },
   mutualAvatar: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#fff' },
 });
+=======
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    position: 'relative',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    marginBottom: 4,
+  },
+  headerLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    height: 56,
+    width: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  headerRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    height: 56,
+    width: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  headerCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 56,
+    marginHorizontal: 56,
+  },
+  logo: {
+    fontFamily: fonts.header,
+    fontSize: 20,
+    color: colors.dark,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    maxWidth: '100%',
+  },
+  container: {
+    flex: 1,
+    backgroundColor: colors.secondary,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  profileSection: {
+    backgroundColor: '#fff',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+  },
+  profileTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  profileImageContainer: {
+    marginRight: spacing.lg,
+  },
+  profileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  profileImagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statsRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+  statLabel: {
+    fontSize: 13,
+    color: colors.gray,
+    marginTop: 2,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: spacing.xs,
+    alignSelf: 'flex-start',
+  },
+  userBio: {
+    fontSize: 14,
+    color: colors.dark,
+    textAlign: 'left',
+    alignSelf: 'flex-start',
+    marginBottom: spacing.sm,
+    lineHeight: 18,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.sm,
+  },
+  locationText: {
+    fontSize: 14,
+    color: colors.dark,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    width: '100%',
+    marginTop: spacing.md,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  followingButton: {
+    backgroundColor: '#e0e0e0',
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  mutualFollowersSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  mutualFollowersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  mutualAvatarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mutualAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  mutualAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  mutualAvatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mutualFollowersText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.gray,
+    marginLeft: spacing.xs,
+  },
+  mutualFollowersName: {
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  mutualFollowersList: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  mutualFollowerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
+  mutualFollowerItemImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  mutualFollowerItemPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mutualFollowerItemName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.dark,
+  },
+  ratingSection: {
+    backgroundColor: '#9abeaa',
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
+  ratingHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  ratingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  ratingScore: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#ffd75c',
+  },
+  ratingName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  rateButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#ffd75c',
+    borderRadius: 6,
+    backgroundColor: '#ffd75c',
+  },
+  rateButtonText: {
+    fontSize: 14,
+    color: colors.dark,
+    fontWeight: '600',
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  reviewsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  reviewItem: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.md,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: spacing.sm,
+  },
+  reviewUserImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  reviewContent: {
+    flex: 1,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  reviewAuthor: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  reviewText: {
+    fontSize: 14,
+    color: colors.dark,
+    marginBottom: 4,
+  },
+  reviewStars: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  noReviewsContainer: {
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  noReviewsText: {
+    fontSize: 14,
+    color: colors.gray,
+    fontStyle: 'italic',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingVertical: spacing.xl * 1.5,
+    paddingHorizontal: spacing.xl * 2,
+    paddingBottom: spacing.xl * 2,
+    width: '100%',
+    maxWidth: 750,
+    minWidth: 350,
+    maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  modalStarsContainer: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    justifyContent: 'center',
+  },
+  reviewInput: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    padding: spacing.md,
+    fontSize: 14,
+    minHeight: 100,
+    marginBottom: spacing.xl,
+  },
+  submitButton: {
+    backgroundColor: colors.accent,
+    padding: spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    marginTop: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: colors.dark,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  postsContainer: {
+    backgroundColor: '#fff',
+    minHeight: 300,
+    paddingTop: spacing.md,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg * 3,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.gray,
+    marginTop: spacing.md,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: colors.gray,
+    marginTop: 4,
+  },
+  postsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 2,
+  },
+  postItem: {
+    width: '33.33%',
+    aspectRatio: 1,
+    padding: 2,
+    position: 'relative',
+  },
+  postImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  swapStatusBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: '#9abeaa',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  swapStatusBadgeInactive: {
+    backgroundColor: colors.gray,
+  },
+  swapStatusBadgeSwappedOut: {
+    backgroundColor: colors.highlight,
+  },
+  swapStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+});
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287

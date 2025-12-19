@@ -2,7 +2,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
     collection,
+<<<<<<< HEAD
     doc as firestoreDoc,
+=======
+    doc,
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
     getDoc,
     getDocs,
     getFirestore,
@@ -30,6 +34,7 @@ export default function SwapHistoryScreen({ navigation }) {
   const [latestUsernames, setLatestUsernames] = useState({}); // { uid: username }
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('all'); // all, completed, accepted, pending, rejected
+  const [loadedPhotos, setLoadedPhotos] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
 
@@ -48,6 +53,7 @@ export default function SwapHistoryScreen({ navigation }) {
     setSearchQuery(query);
   };
 
+<<<<<<< HEAD
   // Helper to fetch latest username for a given uid
   const fetchLatestUsername = async (uid) => {
     if (!uid) return 'Unknown User';
@@ -62,6 +68,25 @@ export default function SwapHistoryScreen({ navigation }) {
       }
     } catch (_e) { /* ignore */ }
     return 'Unknown User';
+=======
+  const loadUserPhoto = async (userId) => {
+    if (!userId || loadedPhotos[userId]) return loadedPhotos[userId];
+    
+    try {
+      const userDocRef = doc(db, 'users', userId);
+      const userDocSnap = await getDoc(userDocRef);
+      
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        const photoURL = userData.photoURL || null;
+        setLoadedPhotos(prev => ({ ...prev, [userId]: photoURL }));
+        return photoURL;
+      }
+    } catch (error) {
+      console.error('Error loading user photo:', error);
+    }
+    return null;
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
   };
 
   const loadSwapHistory = async () => {
@@ -114,6 +139,23 @@ export default function SwapHistoryScreen({ navigation }) {
       }
 
       setSwapHistory(filteredSwaps);
+
+      // Load missing user photos
+      const photosToLoad = [];
+      swapsData.forEach(swap => {
+        const isInitiatedByMe = swap.senderId === currentUser?.uid;
+        const otherUserId = isInitiatedByMe ? swap.receiverId : swap.senderId;
+        const otherUserPhoto = isInitiatedByMe ? swap.receiverPhoto : swap.senderPhoto;
+        
+        if (!otherUserPhoto && otherUserId && !loadedPhotos[otherUserId]) {
+          photosToLoad.push(otherUserId);
+        }
+      });
+
+      // Load all missing photos
+      for (const userId of photosToLoad) {
+        loadUserPhoto(userId);
+      }
     } catch (error) {
       console.error('Error loading swap history:', error);
     } finally {
@@ -200,12 +242,26 @@ export default function SwapHistoryScreen({ navigation }) {
     // Use latest username if available
     const otherUserName = item.latestOtherUserName || (isInitiatedByMe ? item.receiverName : item.senderName);
     
-    const otherUserPhoto = isInitiatedByMe 
+    const otherUserId = isInitiatedByMe 
+      ? item.receiverId 
+      : item.senderId;
+    
+    const otherUserPhoto = (isInitiatedByMe 
       ? item.receiverPhoto 
-      : item.senderPhoto;
+      : item.senderPhoto) || loadedPhotos[otherUserId];
 
     return (
-      <TouchableOpacity style={styles.swapCard}>
+      <TouchableOpacity 
+        style={styles.swapCard}
+        onPress={() => {
+          navigation.navigate('SwapDetails', {
+            swapItem: {
+              ...item,
+              currentUserId: currentUser?.uid,
+            }
+          });
+        }}
+      >
         <View style={styles.swapHeader}>
           <View style={styles.swapHeaderLeft}>
             {otherUserPhoto ? (
@@ -281,10 +337,11 @@ export default function SwapHistoryScreen({ navigation }) {
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Swap History</Text>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color={colors.dark} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Swap History</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
       {/* Search Bar */}
@@ -436,12 +493,18 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 4,
+    width: 40,
   },
   headerTitle: {
-    fontFamily: fonts.header,
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.accent,
+    fontSize: 20,
+    fontFamily: fonts.semiBold,
+    fontWeight: '600',
+    color: colors.dark,
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
   },
   searchBar: {
     marginHorizontal: spacing.md,
@@ -525,10 +588,17 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   swapCard: {
-    backgroundColor: colors.secondary,
-    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
     padding: spacing.md,
     marginBottom: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
   swapHeader: {
     flexDirection: 'row',
@@ -554,6 +624,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.secondary,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   swapWithText: {
     fontSize: 14,
@@ -572,7 +644,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: '#fff',
+    backgroundColor: colors.secondary,
   },
   statusText: {
     fontSize: 12,
@@ -592,23 +664,27 @@ const styles = StyleSheet.create({
   itemCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: colors.accent,
-    borderRadius: 8,
+    backgroundColor: colors.secondary,
+    borderRadius: 12,
     padding: spacing.sm,
     width: 140,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   itemCardImage: {
     width: 50,
     height: 50,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   itemCardImagePlaceholder: {
     width: 50,
     height: 50,
-    borderRadius: 6,
-    backgroundColor: '#fff',
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   itemCardDetails: {
     flex: 1,

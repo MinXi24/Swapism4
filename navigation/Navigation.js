@@ -9,6 +9,7 @@ import SignupScreen from '../screens/auth/SignupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import FavouritesScreen from '../screens/favourites/FavouritesScreen';
 import SwapHistoryScreen from '../screens/history/SwapHistoryScreen';
+import SwapDetailsScreen from '../screens/history/SwapDetailsScreen';
 import HomeScreen from '../screens/home/HomeScreen';
 import PostActivityScreen from '../screens/home/PostActivityScreen';
 import SearchScreen from '../screens/home/SearchScreen';
@@ -65,6 +66,7 @@ export default function Navigation() {
       <Stack.Screen name="FollowList" component={FollowListScreen} />
       <Stack.Screen name="Activity" component={ActivityScreen} />
       <Stack.Screen name="PostActivity" component={PostActivityScreen} />
+      <Stack.Screen name="SwapDetails" component={SwapDetailsScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="About" component={AboutScreen} />
       <Stack.Screen name="Notification" component={NotificationScreen} />

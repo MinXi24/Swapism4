@@ -132,8 +132,8 @@ export default function EditProfileScreen({ navigation }) {
   const handleSave = async () => {
     if (!user) {
       Alert.alert(
-        'Login to start customizing your profile!',
-        '',
+        'Login Required',
+        'You must be logged in to customize your profile!',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => navigation.navigate('Login') }

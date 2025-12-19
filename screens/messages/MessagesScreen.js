@@ -10,9 +10,10 @@ import {
     query,
     where
 } from 'firebase/firestore';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
     Image,
     SafeAreaView,
@@ -25,6 +26,7 @@ import {
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import Input from '../../components/Input';
+import useGuest from '../../hooks/useGuest';
 
 import { colors, fonts, spacing } from '../../lib/theme';
 
@@ -36,6 +38,24 @@ export default function MessagesScreen({ navigation }) {
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
+  const { isGuest } = useGuest();
+
+  // Check if user is guest
+  useEffect(() => {
+    if (isGuest) {
+      Alert.alert(
+        'Login Required',
+        'You must be logged in to access messages!',
+        [
+          {
+            text: 'Login',
+            onPress: () => navigation.navigate('Welcome')
+          }
+        ],
+        { cancelable: false }
+      );
+    }
+  }, [isGuest, navigation]);
 
   useFocusEffect(
     useCallback(() => {

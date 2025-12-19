@@ -24,10 +24,6 @@ export default function AboutScreen({ navigation }) {
   const currentUser = auth.currentUser;
 
   const loadUserData = async () => {
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
 
     try {
       const userDocRef = doc(db, 'users', currentUser.uid);

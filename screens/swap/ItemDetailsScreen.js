@@ -94,13 +94,7 @@ export default function ItemDetailsScreen({ route, navigation }) {
           <Icon name="arrow-back" size={28} color={colors.dark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Item Details</Text>
-        <TouchableOpacity onPress={handleFavorite} style={styles.favoriteButton}>
-          <Icon 
-            name={isFavorited ? "heart" : "heart-outline"} 
-            size={28} 
-            color={isFavorited ? "#ff6b6b" : colors.dark} 
-          />
-        </TouchableOpacity>
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -221,9 +215,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.dark,
+    flex: 1,
+    textAlign: 'center',
   },
-  favoriteButton: {
-    padding: 4,
+  headerSpacer: {
+    width: 36,
   },
   imageContainer: {
     width: '100%',

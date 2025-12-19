@@ -601,6 +601,45 @@ export default function TryOnScreen({ route, navigation }) {
     setCapturedPhoto(null);
   };
 
+<<<<<<< HEAD
+=======
+  const saveOutfitToFavorites = async () => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser) {
+      Alert.alert('Login Required', 'You must be logged in to save outfits!');
+      return;
+    }
+
+    const selectedTop = tops[currentTopIndex];
+    const selectedBottom = bottoms[currentBottomIndex];
+
+    if (!selectedTop || !selectedBottom) {
+      Alert.alert('Error', 'Please select both a top and bottom to save the outfit');
+      return;
+    }
+
+    try {
+      await addDoc(collection(firestore, 'favoriteOutfits'), {
+        userId: currentUser.uid,
+        topId: selectedTop.id,
+        topName: selectedTop.title || selectedTop.description || 'Top',
+        topImage: selectedTop.url,
+        bottomId: selectedBottom.id,
+        bottomName: selectedBottom.title || selectedBottom.description || 'Bottom',
+        bottomImage: selectedBottom.url,
+        createdAt: new Date(),
+      });
+      
+      Alert.alert('Success', 'Outfit saved to favorites!');
+    } catch (error) {
+      console.error('Error saving outfit:', error);
+      Alert.alert('Error', 'Failed to save outfit to favorites');
+    }
+  };
+
+>>>>>>> 470c4123e4f4bcdcd7948862af51f967e4e65287
   const handleSuggestionClick = async (item) => {
     // Determine if item is a top or bottom based on clothingType or keywords
     const isTop = item.clothingType === 'top' || 
