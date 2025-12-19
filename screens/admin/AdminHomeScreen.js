@@ -20,6 +20,7 @@ import {
   getCountFromServer,
   getDocs,
   getFirestore,
+  limit,
   query,
   where
 } from 'firebase/firestore';
@@ -32,9 +33,11 @@ const ACTIVE_YELLOW = '#FDD835';
 
 export default function AdminHomeScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('home');
+  const [listFilter, setListFilter] = useState('pending'); // 'pending' | 'resolved'
 
   // --- DATA STATE ---
   const [reports, setReports] = useState([]);
+  const [resolvedHistory, setResolvedHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   
   const [stats, setStats] = useState({
@@ -65,6 +68,10 @@ export default function AdminHomeScreen({ navigation }) {
       const commentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'pending')); 
       const usersReportQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
       
+      const resPostsQuery = query(collection(db, 'report'), where('status', '==', 'resolved'), limit(20));
+      const resCommentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'resolved'), limit(20));
+      const resUsersQuery = query(collection(db, 'reported_users'), where('status', '==', 'resolved'), limit(20));
+
       const usersColl = collection(db, 'users');
       const clothesColl = collection(db, 'clothes'); 
       const resolvedQuery = query(collection(db, 'report'), where('status', '==', 'resolved'));
@@ -75,17 +82,23 @@ export default function AdminHomeScreen({ navigation }) {
         userReportSnap,
         totalUsersSnap,
         totalClothesSnap,
-        resolvedSnap
+        resolvedSnap,
+        historyPostSnap,
+        historyCommentSnap,
+        historyUserSnap
       ] = await Promise.all([
         getDocs(postsQuery),
         getDocs(commentsQuery),
         getDocs(usersReportQuery),
         getCountFromServer(usersColl),
         getCountFromServer(clothesColl),
-        getCountFromServer(resolvedQuery)
+        getCountFromServer(resolvedQuery),
+        getDocs(resPostsQuery),
+        getDocs(resCommentsQuery),
+        getDocs(resUsersQuery)
       ]);
       
-      // Process Lists
+      // Process Pending
       const formattedPosts = postSnap.docs.map(doc => {
         const data = doc.data();
         return {
@@ -128,10 +141,17 @@ export default function AdminHomeScreen({ navigation }) {
         };
       });
 
+      // Process Resolved
+      const formattedHistory = [
+        ...historyPostSnap.docs.map(d => ({ ...d.data(), id: d.id, icon: 'checkmark-circle', iconColor: '#9abeaa', name: 'Resolved Post' })),
+        ...historyCommentSnap.docs.map(d => ({ ...d.data(), id: d.id, icon: 'checkmark-circle', iconColor: '#9abeaa', name: d.data().targetOwnerName || 'Comment' })),
+        ...historyUserSnap.docs.map(d => ({ ...d.data(), id: d.id, icon: 'checkmark-circle', iconColor: '#9abeaa', name: d.data().reported_user_name || 'User' }))
+      ];
+
       const allReports = [...formattedPosts, ...formattedComments, ...formattedUserReports];
       allReports.sort((a, b) => b.timestamp - a.timestamp); 
-
       setReports(allReports);
+      setResolvedHistory(formattedHistory);
 
       const totalPending = postSnap.size + commentSnap.size + userReportSnap.size;
 
@@ -167,6 +187,11 @@ export default function AdminHomeScreen({ navigation }) {
   };
 
   const handleStatPress = (stat) => {
+    if (stat.label === 'Resolved') {
+        setListFilter('resolved');
+        return;
+    }
+
     let breakdown = [];
     let description = "";
     let showDetailsButton = false; 
@@ -179,32 +204,14 @@ export default function AdminHomeScreen({ navigation }) {
 
             description = "Items currently awaiting moderator review.";
             showDetailsButton = true; 
-            breakdown = [
-                { label: 'Reported Posts', value: postCount },
-                { label: 'Reported Comments', value: commentCount },
-                { label: 'Reported Users', value: userReportCount }
-            ];
             break;
             
         case 'Users':
             description = "Total registered users.";
-            breakdown = [
-                { label: 'Total Accounts', value: stats.users },
-            ];
             break;
             
         case 'Listings':
             description = "Total active wardrobe items.";
-            breakdown = [
-                { label: 'Active Items', value: stats.listings },
-            ];
-            break;
-            
-        case 'Resolved':
-            description = "Total closed cases.";
-            breakdown = [
-                { label: 'Cases Closed', value: stats.resolved },
-            ];
             break;
     }
 
@@ -223,6 +230,8 @@ export default function AdminHomeScreen({ navigation }) {
     { label: 'Listings', value: stats.listings, icon: 'shirt-outline', color: '#9abeaa' }, 
     { label: 'Resolved', value: stats.resolved, icon: 'checkmark-done-circle-outline', color: '#FCE77D' },
   ];
+
+  const currentDisplayList = listFilter === 'pending' ? reports : resolvedHistory;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -245,7 +254,7 @@ export default function AdminHomeScreen({ navigation }) {
         }
       >
         
-        {/* --- SEARCH BAR (NAVIGATES TO ADMIN SEARCH) --- */}
+        {/* --- SEARCH BAR --- */}
         <TouchableOpacity 
             style={styles.searchContainer} 
             activeOpacity={0.9}
@@ -288,7 +297,15 @@ export default function AdminHomeScreen({ navigation }) {
         </View>
 
         <View style={styles.sectionHeaderRow}>
-             <Text style={styles.sectionTitle}>Recent Reports</Text>
+             <View style={{flexDirection: 'row', gap: 10}}>
+                <TouchableOpacity onPress={() => setListFilter('pending')}>
+                    <Text style={[styles.sectionTitle, listFilter === 'pending' ? {color: colors.dark} : {color: colors.gray}]}>Pending</Text>
+                </TouchableOpacity>
+                <Text style={styles.sectionTitle}>|</Text>
+                <TouchableOpacity onPress={() => setListFilter('resolved')}>
+                    <Text style={[styles.sectionTitle, listFilter === 'resolved' ? {color: colors.dark} : {color: colors.gray}]}>Resolved History</Text>
+                </TouchableOpacity>
+             </View>
              <TouchableOpacity onPress={loadReports}>
                 <Text style={styles.viewAllText}>Refresh</Text>
              </TouchableOpacity>
@@ -297,21 +314,21 @@ export default function AdminHomeScreen({ navigation }) {
         <View style={styles.listContainer}>
             {loading ? (
                 <ActivityIndicator size="small" color={colors.dark} style={{padding:20}} />
-            ) : reports.length === 0 ? (
+            ) : currentDisplayList.length === 0 ? (
                 <Text style={styles.emptyText}>
-                    No pending reports.
+                    No {listFilter} items found.
                 </Text>
             ) : (
-                reports.map((item) => (
+                currentDisplayList.map((item) => (
                 <View key={item.id} style={styles.listItem}>
                     <View style={styles.listItemLeft}>
                         <View style={[styles.statusIndicator, { backgroundColor: item.iconColor }]} />
                         <View style={styles.avatar}>
-                            <Icon name={item.icon} size={20} color={colors.gray} />
+                            <Icon name={item.icon || 'alert-circle'} size={20} color={colors.gray} />
                         </View>
                         <View style={styles.textContainer}>
                             <Text style={styles.nameText}>{item.name}</Text>
-                            <Text style={styles.detailText} numberOfLines={1}>{item.detail}</Text>
+                            <Text style={styles.detailText} numberOfLines={1}>{item.detail || item.reason}</Text>
                         </View>
                     </View>
                     
@@ -319,7 +336,7 @@ export default function AdminHomeScreen({ navigation }) {
                         style={styles.reviewButton}
                         onPress={() => handleViewItem(item)}
                     >
-                        <Text style={styles.reviewButtonText}>Review</Text>
+                        <Text style={styles.reviewButtonText}>{listFilter === 'pending' ? 'Review' : 'View'}</Text>
                     </TouchableOpacity>
                 </View>
                 ))
@@ -356,18 +373,6 @@ export default function AdminHomeScreen({ navigation }) {
                             
                             <Text style={styles.modalDescription}>{selectedStatData.description}</Text>
                             
-                            <View style={styles.breakdownContainer}>
-                                <Text style={styles.breakdownHeader}>INSIGHTS</Text>
-                                {selectedStatData.breakdown.map((item, i) => (
-                                    <View key={i} style={styles.breakdownRow}>
-                                        <View style={{flexDirection:'row', alignItems:'center'}}>
-                                            <Text style={styles.breakdownLabel}>{item.label}</Text>
-                                        </View>
-                                        <Text style={styles.breakdownValue}>{item.value}</Text>
-                                    </View>
-                                ))}
-                            </View>
-
                             {selectedStatData.showDetailsButton && (
                                 <TouchableOpacity 
                                     style={styles.detailsButton}
@@ -652,7 +657,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
   },
-  // --- MODAL STYLES ---
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -700,37 +704,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 20,
     lineHeight: 20,
-  },
-  breakdownContainer: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15, 
-  },
-  breakdownHeader: {
-    fontFamily: fonts.body,
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#999',
-    marginBottom: 8,
-    letterSpacing: 1,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 2, 
-    paddingVertical: 4, 
-  },
-  breakdownLabel: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.dark,
-  },
-  breakdownValue: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.dark,
   },
   detailsButton: {
     backgroundColor: '#9abeaa',

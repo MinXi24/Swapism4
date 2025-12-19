@@ -3,11 +3,15 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   RefreshControl,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -19,6 +23,7 @@ import {
   getDocs,
   getFirestore,
   query,
+  serverTimestamp,
   updateDoc,
   where
 } from 'firebase/firestore';
@@ -42,6 +47,11 @@ export default function AdminFeedbackScreen({ navigation }) {
   const [feedbackList, setFeedbackList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // --- REPLY STATE ---
+  const [replyModalVisible, setReplyModalVisible] = useState(false);
+  const [selectedFeedback, setSelectedFeedback] = useState(null);
+  const [replyText, setReplyText] = useState('');
 
   // 1. LOAD DATA
   useEffect(() => {
@@ -83,14 +93,47 @@ export default function AdminFeedbackScreen({ navigation }) {
 
   // --- ACTIONS ---
 
-  const handleMarkReviewed = async (item) => {
+  const handleOpenReply = (item) => {
+    setSelectedFeedback(item);
+    setReplyText('');
+    setReplyModalVisible(true);
+  };
+
+  const handleSendReply = async () => {
+    if (!replyText.trim()) {
+      Alert.alert("Error", "Please enter a reply.");
+      return;
+    }
+
     try {
-      await updateDoc(doc(db, 'user_feedback', item.id), { status: 'reviewed' });
-      // Remove from list locally for instant UI update
-      setFeedbackList(prev => prev.filter(i => i.id !== item.id));
-      Alert.alert("Success", "Feedback marked as reviewed.");
+      // Updates status to reviewed and attaches the admin's message
+      await updateDoc(doc(db, 'user_feedback', selectedFeedback.id), { 
+        status: 'reviewed',
+        adminReply: replyText.trim(),
+        repliedAt: serverTimestamp()
+      });
+      
+      setReplyModalVisible(false);
+      // Update UI locally
+      setFeedbackList(prev => prev.filter(i => i.id !== selectedFeedback.id));
+      Alert.alert("Success", "Reply sent to user.");
     } catch (error) {
-      Alert.alert("Error", "Could not update status.");
+      console.error(error);
+      Alert.alert("Error", "Could not send reply.");
+    }
+  };
+
+  const handleMarkResolved = async (item) => {
+    try {
+      await updateDoc(doc(db, 'user_feedback', item.id), { 
+        status: 'reviewed',
+        resolvedAt: serverTimestamp()
+      });
+      // Update UI locally
+      setFeedbackList(prev => prev.filter(i => i.id !== item.id));
+      Alert.alert("Success", "Feedback marked as resolved.");
+    } catch (error) {
+      Alert.alert("Error", "Could not resolve feedback.");
     }
   };
 
@@ -131,12 +174,26 @@ export default function AdminFeedbackScreen({ navigation }) {
             <Text style={styles.usernameText}>{item.username} ({item.userEmail})</Text>
         </View>
 
+        {/* Display response if it exists (for the Reviewed tab) */}
+        {selectedTab === 'reviewed' && item.adminReply && (
+          <View style={styles.adminReplyContainer}>
+            <Text style={styles.adminReplyLabel}>Admin Response:</Text>
+            <Text style={styles.adminReplyText}>{item.adminReply}</Text>
+          </View>
+        )}
+
         <View style={styles.actionsRow}>
             {selectedTab === 'pending' && (
-                <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => handleMarkReviewed(item)}>
-                    <Icon name="checkmark-circle" size={18} color={THEME_GREEN} />
-                    <Text style={styles.actionTextPrimary}>Mark Read</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => handleOpenReply(item)}>
+                      <Icon name="arrow-undo" size={18} color={THEME_GREEN} />
+                      <Text style={styles.actionTextPrimary}>Reply</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => handleMarkResolved(item)}>
+                      <Icon name="checkmark-done-circle-outline" size={18} color={THEME_GREEN} />
+                      <Text style={styles.actionTextPrimary}>Resolve</Text>
+                  </TouchableOpacity>
+                </>
             )}
             <TouchableOpacity style={styles.actionBtnDestructive} onPress={() => handleDelete(item)}>
                 <Icon name="trash-outline" size={18} color={ALERT_RED} />
@@ -197,6 +254,34 @@ export default function AdminFeedbackScreen({ navigation }) {
             }
           />
       )}
+
+      {/* Reply Modal */}
+      <Modal visible={replyModalVisible} animationType="fade" transparent={true}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Reply to Feedback</Text>
+            <Text style={styles.modalUserLabel}>To: {selectedFeedback?.username}</Text>
+            <TextInput
+              style={styles.replyInput}
+              placeholder="Write your response here..."
+              multiline
+              value={replyText}
+              onChangeText={setReplyText}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setReplyModalVisible(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sendBtn} onPress={handleSendReply}>
+                <Text style={styles.sendBtnText}>Send Reply</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
@@ -412,4 +497,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // Admin Reply UI
+  adminReplyContainer: {
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: THEME_GREEN,
+  },
+  adminReplyLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: THEME_GREEN,
+    marginBottom: 4,
+  },
+  adminReplyText: {
+    fontSize: 14,
+    color: colors.dark,
+    fontStyle: 'italic',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    color: colors.dark,
+  },
+  modalUserLabel: {
+    fontSize: 14,
+    color: colors.gray,
+    marginBottom: 15,
+  },
+  replyInput: {
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 8,
+    padding: 12,
+    height: 120,
+    textAlignVertical: 'top',
+    fontSize: 16,
+    backgroundColor: '#fafafa',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 20,
+  },
+  cancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  cancelBtnText: {
+    color: colors.gray,
+    fontWeight: '600',
+  },
+  sendBtn: {
+    backgroundColor: THEME_GREEN,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  sendBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  }
 });
