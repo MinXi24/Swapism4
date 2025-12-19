@@ -41,10 +41,77 @@ export default function ProfileScreen({ navigation }) {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [postalCode, setPostalCode] = useState([]);
   const [discoverPosts, setDiscoverPosts] = useState([]);
+  const [reviewsWithUserData, setReviewsWithUserData] = useState([]);
 
   const auth = getAuth();
   const db = getFirestore();
   const user = auth.currentUser;
+
+  // Fetch latest username and photo for each review
+  const fetchReviewsWithUserData = async (reviews) => {
+    if (!reviews || reviews.length === 0) return [];
+    
+    const updatedReviews = [];
+    
+    for (const review of reviews) {
+      try {
+        const userDocRef = doc(db, 'users', review.userId);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          updatedReviews.push({
+            userId: review.userId,
+            userName: data.username || 'Anonymous',
+            userPhoto: data.photoURL || null,
+            text: review.text,
+            rating: review.rating,
+            createdAt: review.createdAt,
+          });
+        } else {
+          updatedReviews.push({
+            userId: review.userId,
+            userName: review.userName || 'Anonymous',
+            userPhoto: review.userPhoto || null,
+            text: review.text,
+            rating: review.rating,
+            createdAt: review.createdAt,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching user data for review:', err);
+        updatedReviews.push({
+          userId: review.userId,
+          userName: review.userName || 'Anonymous',
+          userPhoto: review.userPhoto || null,
+          text: review.text,
+          rating: review.rating,
+          createdAt: review.createdAt,
+        });
+      }
+    }
+    
+    return updatedReviews;
+  };
+
+  // Update reviews whenever userInfo.reviews changes
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (userInfo && Array.isArray(userInfo.reviews) && userInfo.reviews.length > 0) {
+        try {
+          const updatedReviews = await fetchReviewsWithUserData(userInfo.reviews);
+          setReviewsWithUserData(updatedReviews);
+        } catch (err) {
+          console.error('Error fetching reviews with user data:', err);
+          setReviewsWithUserData(userInfo.reviews);
+        }
+      } else {
+        setReviewsWithUserData([]);
+      }
+    };
+    loadReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userInfo.reviews]);
 
   useEffect(() => {
     // Set guest-specific bio if not logged in
@@ -160,17 +227,16 @@ export default function ProfileScreen({ navigation }) {
       const validPosts = [];
       for (const docSnapshot of querySnapshot.docs) {
         const postData = { id: docSnapshot.id, ...docSnapshot.data() };
-        
         // Skip current user's posts and swapped out items
         if (postData.ownerUid === uid || postData.swapStatus !== 'available') continue;
-        
-        // Check if owner is valid
+        // Check if owner is valid and fetch latest username/photo
+        let latestUserName = postData.userName || 'User';
+        let latestPhotoURL = null;
         if (postData.ownerUid) {
           try {
             const userDocRef = doc(db, 'users', postData.ownerUid);
             const userDoc = await getDoc(userDocRef);
             if (!userDoc.exists()) continue;
-            
             const userData = userDoc.data();
             if (
               userData.deleted === true ||
@@ -183,12 +249,13 @@ export default function ProfileScreen({ navigation }) {
             ) {
               continue;
             }
-          } catch (error) {
+            latestUserName = userData.username;
+            latestPhotoURL = userData.photoURL || null;
+          } catch (_error) {
             continue;
           }
         }
-        
-        validPosts.push(postData);
+        validPosts.push({ ...postData, userName: latestUserName, userPhotoURL: latestPhotoURL });
         if (validPosts.length >= 10) break; // Show only first 10 posts
       }
       
@@ -311,7 +378,7 @@ export default function ProfileScreen({ navigation }) {
           await Linking.openURL(url);
           return;
         }
-      } catch (error) {
+      } catch (_error) {
         console.log(`Cannot open ${url}`);
       }
     }
@@ -596,12 +663,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.noReviewsText}>No reviews yet</Text>
             </View>
           ) : (
-            (userInfo.reviews || []).filter(review => {
-              // This is a simple client-side filter. For better performance,
-              // reviews from deleted users should be removed from the database
-              // when a user is deleted (via Cloud Function)
-              return review.userId && review.userName;
-            }).map((review, index) => (
+            reviewsWithUserData.map((review, index) => (
               <TouchableOpacity
                 key={index}
                 onPress={() => navigation.navigate('UserProfile', { userId: review.userId })}

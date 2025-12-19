@@ -11,19 +11,19 @@ import {
   getDocs,
   getFirestore,
   query,
-  serverTimestamp, // Needed for Block/Report
-  setDoc, // Needed for Block
+  serverTimestamp,
+  setDoc,
   updateDoc,
   where
 } from 'firebase/firestore';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
-  Linking, // Added from merge
+  Linking,
   Modal,
   Platform,
   SafeAreaView,
@@ -39,6 +39,7 @@ import {
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import { colors, fonts, spacing } from '../../lib/theme';
+
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId, username, initialTab } = route.params;
@@ -60,6 +61,10 @@ export default function UserProfileScreen({ route, navigation }) {
     photoURL: null,
     username: username || '',
   });
+  
+  // --- ENHANCED: Store reviews with live user data ---
+  const [reviewsWithUserData, setReviewsWithUserData] = useState([]);
+  
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
@@ -69,16 +74,112 @@ export default function UserProfileScreen({ route, navigation }) {
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
   const [mutualFollowers, setMutualFollowers] = useState([]);
   const [showAllMutuals, setShowAllMutuals] = useState(false);
-
-  // [NEW] State to track if I have blocked this user
+  const [androidMenuVisible, setAndroidMenuVisible] = useState(false);
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
 
-  // Define DB/Auth
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
 
-  // --- MAIN DATA LOADING LOGIC (Fixes Race Condition) ---
+  // --- ENHANCED: Fetch latest username and photo for each review ---
+  const fetchReviewsWithUserData = async (reviews) => {
+    if (!reviews || reviews.length === 0) return [];
+    
+    const updatedReviews = [];
+    
+    // First, deduplicate by userId (keep only latest review per user)
+    const reviewsByUserId = new Map();
+    reviews.forEach(review => {
+      const existing = reviewsByUserId.get(review.userId);
+      if (!existing) {
+        reviewsByUserId.set(review.userId, review);
+      } else {
+        // Keep the review with the most recent createdAt
+        const existingDate = existing.createdAt ? new Date(existing.createdAt) : new Date(0);
+        const currentDate = review.createdAt ? new Date(review.createdAt) : new Date(0);
+        if (currentDate > existingDate) {
+          reviewsByUserId.set(review.userId, review);
+        }
+      }
+    });
+    
+    // Now fetch current user data for each unique review
+    for (const review of reviewsByUserId.values()) {
+      try {
+        const userDocRef = doc(db, 'users', review.userId);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          updatedReviews.push({
+            userId: review.userId,
+            userName: data.username || 'Anonymous',
+            userPhoto: data.photoURL || null,
+            text: review.text,
+            rating: review.rating,
+            createdAt: review.createdAt,
+          });
+        } else {
+          // User no longer exists, use stored data
+          updatedReviews.push({
+            userId: review.userId,
+            userName: review.userName || 'Anonymous',
+            userPhoto: review.userPhoto || null,
+            text: review.text,
+            rating: review.rating,
+            createdAt: review.createdAt,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching user data for review:', err);
+        // If fetch fails, use stored data
+        updatedReviews.push({
+          userId: review.userId,
+          userName: review.userName || 'Anonymous',
+          userPhoto: review.userPhoto || null,
+          text: review.text,
+          rating: review.rating,
+          createdAt: review.createdAt,
+        });
+      }
+    }
+    
+    // Sort by date (newest first)
+    return updatedReviews.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return dateB - dateA;
+    });
+  };
+  
+  // --- ENHANCED: Update reviews whenever userInfo.reviews changes ---
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (userInfo && Array.isArray(userInfo.reviews) && userInfo.reviews.length > 0) {
+        try {
+          const updatedReviews = await fetchReviewsWithUserData(userInfo.reviews);
+          setReviewsWithUserData(updatedReviews);
+        } catch (err) {
+          console.error('Error fetching reviews with user data:', err);
+          // Fallback to deduplicated original review data if fetch fails
+          const uniqueMap = new Map();
+          userInfo.reviews.forEach(r => {
+            if (!uniqueMap.has(r.userId) || 
+                (r.createdAt && (!uniqueMap.get(r.userId).createdAt || 
+                new Date(r.createdAt) > new Date(uniqueMap.get(r.userId).createdAt)))) {
+              uniqueMap.set(r.userId, r);
+            }
+          });
+          setReviewsWithUserData(Array.from(uniqueMap.values()));
+        }
+      } else {
+        setReviewsWithUserData([]);
+      }
+    };
+    loadReviews();
+  }, [userInfo.reviews]);
+
+  // --- MAIN DATA LOADING LOGIC ---
   const fetchScreenData = async () => {
     setLoading(true);
     try {
@@ -92,7 +193,7 @@ export default function UserProfileScreen({ route, navigation }) {
 
         setIsBlockedByMe(isBlocked);
 
-        // 2. STOP if blocked. Do not load profile data.
+        // 2. STOP if blocked
         if (isBlocked) {
             setLoading(false);
             return; 
@@ -105,7 +206,7 @@ export default function UserProfileScreen({ route, navigation }) {
         ]);
 
     } catch (error) {
-        console.error("Error loading screen:", error);
+      console.error("Error loading screen:", error);
     } finally {
         setLoading(false);
     }
@@ -238,7 +339,7 @@ export default function UserProfileScreen({ route, navigation }) {
       await addDoc(collection(db, 'notifications'), {
         userId: userId,
         type: 'profile_view',
-        message: `${viewerName} requested to follow`,
+        message: `${viewerName} viewed your profile`,
         viewerId: currentUser.uid,
         viewerName: viewerName,
         read: false,
@@ -251,7 +352,6 @@ export default function UserProfileScreen({ route, navigation }) {
 
   // --- ACTION HANDLERS ---
 
-  const [androidMenuVisible, setAndroidMenuVisible] = useState(false);
   const showMenu = () => {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -584,6 +684,13 @@ export default function UserProfileScreen({ route, navigation }) {
         console.error('Error fetching reviewer name:', err);
       }
 
+
+      // Remove all previous reviews by this userId (even if username changed)
+      const userProfileDoc = await getDoc(userDocRef);
+      let existingReviews = userProfileDoc.exists() ? (userProfileDoc.data().reviews || []) : [];
+      // Remove all reviews with this userId
+      const filteredReviews = existingReviews.filter(r => r.userId !== currentUser.uid);
+
       const newReview = {
         userId: currentUser.uid,
         userName: reviewerName,
@@ -593,14 +700,15 @@ export default function UserProfileScreen({ route, navigation }) {
         createdAt: new Date().toISOString(),
       };
 
+      // Overwrite the reviews array with the filtered + new review
       await updateDoc(userDocRef, {
-        reviews: arrayUnion(newReview)
+        reviews: [...filteredReviews, newReview]
       });
 
       const updatedUserDoc = await getDoc(userDocRef);
       const updatedReviews = updatedUserDoc.data().reviews || [];
       const avgRating = updatedReviews.reduce((sum, r) => sum + r.rating, 0) / updatedReviews.length;
-      
+
       await updateDoc(userDocRef, {
         rating: avgRating,
         reviewCount: updatedReviews.length
@@ -609,9 +717,9 @@ export default function UserProfileScreen({ route, navigation }) {
       setShowReviewModal(false);
       setReviewRating(0);
       setReviewText('');
-      
+
       loadUserProfile();
-      
+
       Alert.alert('Success', 'Your review has been submitted!');
     } catch (error) {
       console.error('Error submitting review:', error);
@@ -869,7 +977,7 @@ export default function UserProfileScreen({ route, navigation }) {
               <Text style={styles.noReviewsText}>No reviews yet</Text>
             </View>
           ) : (
-            userInfo.reviews.map((review, index) => (
+            reviewsWithUserData.map((review, index) => (
               <View key={index} style={styles.reviewItem}>
                 {review.userPhoto ? (
                   <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />
@@ -895,6 +1003,8 @@ export default function UserProfileScreen({ route, navigation }) {
               </View>
             ))
           )}
+
+
         </View>
 
         <View style={styles.tabsContainer}>

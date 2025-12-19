@@ -2,24 +2,27 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-    collection,
-    getDocs,
-    getFirestore,
-    orderBy,
-    query,
-    where
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+  where
 } from 'firebase/firestore';
 import React, { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -71,7 +74,7 @@ export default function FavouritesScreen({ navigation }) {
       
       setFavorites(favoritesData);
       
-      // Load favorite outfits from virtual try-on
+      // Load favorite outfits from virtual try-on with updated usernames
       const outfitsQuery = query(
         collection(db, 'favoriteOutfits'),
         where('userId', '==', currentUser.uid),
@@ -79,11 +82,40 @@ export default function FavouritesScreen({ navigation }) {
       );
       
       const outfitsSnapshot = await getDocs(outfitsQuery);
-      const outfitsData = outfitsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const outfitsData = [];
       
+      // Fetch current usernames for each outfit
+      for (const docSnap of outfitsSnapshot.docs) {
+        const outfit = { id: docSnap.id, ...docSnap.data() };
+        
+        // Update topItem username if exists
+        if (outfit.topItem && outfit.topItem.ownerUid) {
+          try {
+            const topUserDoc = await getDoc(doc(db, 'users', outfit.topItem.ownerUid));
+            if (topUserDoc.exists()) {
+              const userData = topUserDoc.data();
+              outfit.topItem.userName = userData.username || userData.displayName || 'User';
+            }
+          } catch (err) {
+            console.error('Error fetching top item user:', err);
+          }
+        }
+        
+        // Update bottomItem username if exists
+        if (outfit.bottomItem && outfit.bottomItem.ownerUid) {
+          try {
+            const bottomUserDoc = await getDoc(doc(db, 'users', outfit.bottomItem.ownerUid));
+            if (bottomUserDoc.exists()) {
+              const userData = bottomUserDoc.data();
+              outfit.bottomItem.userName = userData.username || userData.displayName || 'User';
+            }
+          } catch (err) {
+            console.error('Error fetching bottom item user:', err);
+          }
+        }
+        
+        outfitsData.push(outfit);
+      }
       setFavoriteOutfits(outfitsData);
     } catch (error) {
       console.error('Error loading favorites:', error);
@@ -115,32 +147,110 @@ export default function FavouritesScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  const handleOutfitPress = (outfit) => {
+    const items = [];
+    
+    if (outfit.topItem) {
+      items.push({
+        ...outfit.topItem,
+        url: outfit.topItem.url,
+        userName: outfit.topItem.userName || 'User',
+        clothingType: 'top'
+      });
+    }
+    
+    if (outfit.bottomItem) {
+      items.push({
+        ...outfit.bottomItem,
+        url: outfit.bottomItem.url,
+        userName: outfit.bottomItem.userName || 'User',
+        clothingType: 'bottom'
+      });
+    }
+    
+    navigation.navigate('TryOnScreen', {
+      allItems: items,
+      savedTransforms: outfit.transforms,
+      fromFavorites: true
+    });
+  };
+
+  const handleUnfavoriteOutfit = async (outfitId) => {
+    Alert.alert(
+      'Remove Outfit',
+      'Are you sure you want to remove this outfit from your favorites?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'favoriteOutfits', outfitId));
+              setFavoriteOutfits(prev => prev.filter(outfit => outfit.id !== outfitId));
+              Alert.alert('Success', 'Outfit removed from favorites');
+            } catch (error) {
+              console.error('Error removing outfit:', error);
+              Alert.alert('Error', 'Failed to remove outfit. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderOutfitItem = ({ item }) => (
     <TouchableOpacity
       style={styles.outfitCard}
-      onPress={() => {
-        Alert.alert(
-          'Outfit Details',
-          `Top: ${item.topName || 'Unknown'}\nBottom: ${item.bottomName || 'Unknown'}`,
-          [{ text: 'OK' }]
-        );
-      }}
+      onPress={() => handleOutfitPress(item)}
     >
+      <TouchableOpacity
+        style={styles.deleteOutfitButton}
+        onPress={(e) => {
+          e.stopPropagation();
+          handleUnfavoriteOutfit(item.id);
+        }}
+      >
+        <Icon name="close-circle" size={24} color="#ff4444" />
+      </TouchableOpacity>
       <View style={styles.outfitImages}>
-        {item.topImage && (
-          <Image source={{ uri: item.topImage }} style={styles.outfitItemImage} />
+        {item.topItem && (
+          <View style={styles.outfitItemContainer}>
+            <Image source={{ uri: item.topItem.url }} style={styles.outfitItemImage} />
+            <Text style={styles.outfitItemLabel} numberOfLines={1}>
+              {item.topItem.title || 'Top'}
+            </Text>
+            <Text style={styles.outfitUserName} numberOfLines={1}>
+              @{item.topItem.userName}
+            </Text>
+          </View>
         )}
-        {item.bottomImage && (
-          <Image source={{ uri: item.bottomImage }} style={styles.outfitItemImage} />
+        {item.bottomItem && (
+          <View style={styles.outfitItemContainer}>
+            <Image source={{ uri: item.bottomItem.url }} style={styles.outfitItemImage} />
+            <Text style={styles.outfitItemLabel} numberOfLines={1}>
+              {item.bottomItem.title || 'Bottom'}
+            </Text>
+            <Text style={styles.outfitUserName} numberOfLines={1}>
+              @{item.bottomItem.userName}
+            </Text>
+          </View>
         )}
       </View>
-      <View style={styles.outfitInfo}>
-        <Text style={styles.outfitText} numberOfLines={1}>
-          {item.topName || 'Top'} + {item.bottomName || 'Bottom'}
-        </Text>
+      <View style={styles.outfitFooter}>
         <Text style={styles.outfitDate}>
-          {item.createdAt?.toDate?.().toLocaleDateString() || ''}
+          {item.createdAt?.toDate?.().toLocaleDateString() || 'Saved outfit'}
         </Text>
+        <TouchableOpacity
+          style={styles.tryAgainButton}
+          onPress={() => handleOutfitPress(item)}
+        >
+          <Icon name="eye" size={16} color={colors.accent} />
+          <Text style={styles.tryAgainText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -267,7 +377,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   gridContainer: {
-    padding: SPACING,
+    padding: spacing.sm,
+    paddingBottom: 80,
   },
   gridItem: {
     width: ITEM_SIZE,
@@ -306,34 +417,83 @@ const styles = StyleSheet.create({
   outfitCard: {
     width: (width - spacing.md * 3) / 2,
     backgroundColor: '#fff',
-    borderRadius: 8,
-    margin: spacing.xs,
+    borderRadius: 12,
+    margin: spacing.sm,
+    marginHorizontal: spacing.xs,
+    marginVertical: spacing.sm,
     overflow: 'hidden',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    position: 'relative',
+  },
+  deleteOutfitButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 10,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 2,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   outfitImages: {
     flexDirection: 'row',
-    height: 150,
+    height: 180,
+    gap: 2,
+  },
+  outfitItemContainer: {
+    flex: 1,
+    backgroundColor: '#f9f9f9',
   },
   outfitItemImage: {
-    flex: 1,
-    height: '100%',
+    width: '100%',
+    height: 120,
+    resizeMode: 'cover',
   },
-  outfitInfo: {
-    padding: spacing.sm,
-  },
-  outfitText: {
-    fontSize: 14,
+  outfitItemLabel: {
+    fontSize: 12,
     fontWeight: '600',
     color: colors.dark,
-    marginBottom: 4,
+    paddingHorizontal: 6,
+    paddingTop: 4,
+  },
+  outfitUserName: {
+    fontSize: 10,
+    color: colors.gray,
+    paddingHorizontal: 6,
+    paddingBottom: 4,
+  },
+  outfitFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
   },
   outfitDate: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.gray,
+  },
+  tryAgainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: colors.secondary,
+    borderRadius: 12,
+  },
+  tryAgainText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.accent,
   },
 });

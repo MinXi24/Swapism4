@@ -142,7 +142,7 @@ export default function ManageCommentsScreen({ navigation }) {
             setPostStatus('missing');
         }
     } catch (error) {
-        console.error("Error loading detail:", error);
+        console.error("Error loading detail:", error); // No need to escape in JS console.error
         setPostStatus('error');
     } finally {
         setLoadingDetail(false);
@@ -165,7 +165,10 @@ export default function ManageCommentsScreen({ navigation }) {
   };
 
   const handleDismiss = async () => {
-      Alert.alert("Dismiss Report", "Keep this comment?", [
+      Alert.alert(
+        "Dismiss Report", 
+        "Keep this comment?", 
+        [
           { text: "Cancel", style: "cancel" },
           { text: "Dismiss", onPress: async () => {
               try {
@@ -175,11 +178,15 @@ export default function ManageCommentsScreen({ navigation }) {
                   finalizeAction();
               } catch (e) { Alert.alert("Error", "Action failed"); }
           }}
-      ]);
+        ]
+      );
   };
 
   const handleDelete = async () => {
-      Alert.alert("Delete Comment", "Permanently delete?", [
+      Alert.alert(
+        "Delete Comment", 
+        "Permanently delete?", 
+        [
           { text: "Cancel", style: "cancel" },
           { text: "Delete", style: "destructive", onPress: async () => {
               try {
@@ -192,7 +199,8 @@ export default function ManageCommentsScreen({ navigation }) {
                   finalizeAction();
               } catch (e) { Alert.alert("Error", "Action failed"); }
           }}
-      ]);
+        ]
+      );
   };
 
   const finalizeAction = () => {

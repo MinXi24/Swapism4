@@ -1,19 +1,22 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, doc, getDocs, getFirestore, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
-import React, { useCallback, useState } from 'react';
+import { addDoc, collection, doc, getDoc, getDocs, getFirestore, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
+
+
+
 
 export default function SwapOngoingScreen({ route, navigation }) {
   const { swapDetails, otherUser, swapSenderId } = route.params || {};
@@ -21,6 +24,29 @@ export default function SwapOngoingScreen({ route, navigation }) {
     myConfirmation: false,
     theirConfirmation: false
   });
+  const [otherUserName, setOtherUserName] = useState(otherUser?.name || 'Other User');
+  // Fetch latest username for the other user
+  useEffect(() => {
+    const fetchOtherUserName = async () => {
+      try {
+        const otherUserId = otherUser?.id || otherUser?.uid;
+        if (otherUserId) {
+          const userDoc = await getDoc(doc(db, 'users', otherUserId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setOtherUserName(userData.username || userData.displayName || 'Other User');
+          } else {
+            setOtherUserName('Other User');
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching other user name:', error);
+        setOtherUserName('Other User');
+      }
+    };
+    fetchOtherUserName();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otherUser]);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -382,7 +408,7 @@ export default function SwapOngoingScreen({ route, navigation }) {
                   color={confirmationStatus.theirConfirmation ? "#4caf50" : colors.gray} 
                 />
                 <Text style={styles.statusText}>
-                  {otherUser?.name || 'Other User'}
+                  {otherUserName}
                 </Text>
               </View>
               
@@ -413,7 +439,7 @@ export default function SwapOngoingScreen({ route, navigation }) {
             <View style={styles.waitingCard}>
               <Icon name="time-outline" size={32} color={colors.accent} />
               <Text style={styles.waitingText}>
-                Waiting for {otherUser?.name || 'the other user'} to confirm...
+                Waiting for {otherUserName || 'the other user'} to confirm...
               </Text>
             </View>
           )}

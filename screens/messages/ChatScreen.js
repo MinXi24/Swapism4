@@ -948,41 +948,23 @@ export default function ChatScreen({ route, navigation }) {
               maxLength={500}
               textAlignVertical="center"
             />
-            <View style={styles.inputActions}>
-              <TouchableOpacity style={styles.iconButton} onPress={() => {
-                if (!currentUser) {
-                  Alert.alert(
-                    'Login to share location!',
-                    '',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Login', onPress: () => navigation.navigate('Login') }
-                    ]
-                  );
-                  return;
-                }
-                setShowLocationModal(true);
-              }}>
-                <Icon name="location-outline" size={20} color={colors.gray} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton} onPress={() => {
-                if (!currentUser) {
-                  Alert.alert(
-                    'Login to send meetup invitations!',
-                    '',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Login', onPress: () => navigation.navigate('Login') }
-                    ]
-                  );
-                  return;
-                }
-                setShowCalendarModal(true);
-              }}>
-                <Icon name="calendar-outline" size={20} color={colors.gray} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowLocationModal(true)}>
+              <Icon name="location-outline" size={24} color={colors.accent} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowCalendarModal(true)}>
+              <Icon name="calendar-outline" size={24} color={colors.accent} />
+            </TouchableOpacity>
           </View>
+=========
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            placeholder="Type a message..."
+            placeholderTextColor="#585555ff"
+            value={newMessage}
+            onChangeText={setNewMessage}
+            multiline
+          />
           <TouchableOpacity
             style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
             onPress={handleSendMessage}
@@ -1278,8 +1260,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F5F3E4',
     borderRadius: 20,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginRight: spacing.sm,
+    maxHeight: 100,
   },
   input: {
     flex: 1,
@@ -1289,7 +1273,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     minHeight: 32,
     maxHeight: 100,
-    backgroundColor: 'transparent',
     fontFamily: fonts.body,
   },
   inputActions: {

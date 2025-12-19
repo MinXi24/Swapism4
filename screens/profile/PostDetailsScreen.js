@@ -1,30 +1,30 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    getFirestore,
-    query,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
@@ -42,6 +42,7 @@ export default function PostDetailsScreen({ route, navigation }) {
   const [likes, setLikes] = useState([]);
   const [showLikes, setShowLikes] = useState(false);
   const [userPhotoURL, setUserPhotoURL] = useState(initialPost.userPhotoURL || null);
+  const [ownerUserName, setOwnerUserName] = useState(initialPost.userName || 'User');
   const [editingComment, setEditingComment] = useState(null);
 
   const db = getFirestore();
@@ -61,9 +62,27 @@ export default function PostDetailsScreen({ route, navigation }) {
       loadComments(),
       loadLikes(),
       checkIfLiked(),
-      loadUserPhoto()
+      loadUserPhoto(),
+      loadOwnerUserName()
     ]);
     logViewActivity();
+  };
+  // Fetch latest username for post owner
+  const loadOwnerUserName = async () => {
+    try {
+      if (activePost.ownerUid) {
+        const userDoc = await getDoc(doc(db, 'users', activePost.ownerUid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setOwnerUserName(userData.username || userData.displayName || 'User');
+        } else {
+          setOwnerUserName('User');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading owner username:', error);
+      setOwnerUserName('User');
+    }
   };
 
   const onRefresh = async () => {
@@ -129,23 +148,24 @@ export default function PostDetailsScreen({ route, navigation }) {
       const commentsData = await Promise.all(
         querySnapshot.docs.map(async (docSnapshot) => {
           const commentData = docSnapshot.data();
-          
-          let userName = commentData.userName || 'Anonymous';
+          let userName = 'Anonymous';
           let userPhoto = null;
+          let userDeleted = false;
           if (commentData.userId) {
             try {
               const userDoc = await getDoc(doc(db, 'users', commentData.userId));
               if (userDoc.exists()) {
                 const userData = userDoc.data();
-                userName = userData.displayName || userData.username || userName;
+                userName = userData.username || userData.displayName || userName;
                 userPhoto = userData.photoURL || null;
+              } else {
+                userDeleted = true;
               }
             } catch (err) {
               console.error('Error fetching user:', err);
             }
           }
-          
-          return {
+          return userDeleted ? null : {
             id: docSnapshot.id,
             ...commentData,
             userName,
@@ -153,13 +173,13 @@ export default function PostDetailsScreen({ route, navigation }) {
           };
         })
       );
-      
-      const sortedComments = commentsData.sort((a, b) => {
+      // Filter out nulls (deleted users)
+      const filteredComments = commentsData.filter(Boolean);
+      const sortedComments = filteredComments.sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(0);
         const dateB = b.createdAt?.toDate?.() || new Date(0);
         return dateB - dateA;
       });
-      
       setComments(sortedComments);
     } catch (error) {
       console.error('Error loading comments:', error);
@@ -585,7 +605,7 @@ export default function PostDetailsScreen({ route, navigation }) {
                   navigation.navigate('UserProfile', { userId: activePost.ownerUid });
                 }
               }}>
-                <Text style={styles.userName}>{activePost.userName || 'User'}</Text>
+                <Text style={styles.userName}>{ownerUserName}</Text>
               </TouchableOpacity>
               <Text style={styles.postDate}>
                 {activePost.uploadedAt?.toDate?.().toLocaleDateString() || 'Recently'}
@@ -637,7 +657,12 @@ export default function PostDetailsScreen({ route, navigation }) {
                           );
                           return;
                         }
-                        navigation.navigate('TryOnScreen', { item: activePost });
+                        navigation.navigate('TryOnScreen', { 
+                          preSelectedItem: activePost,
+                          allItems: [activePost],
+                          enableSuggestions: true,
+                          fromOtherUser: activePost.ownerUid !== auth.currentUser?.uid
+                        });
                       }}
                     >
                       <Icon name="accessibility" size={20} color="#9ABEAA" />

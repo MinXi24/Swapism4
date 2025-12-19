@@ -9,7 +9,12 @@ import {
   getDocs,
   getFirestore,
   query,
-  serverTimestamp,
+  serverTimestamp // <--- ADDED THIS IMPORT
+  ,
+
+
+
+
   where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -19,7 +24,6 @@ import {
   Animated,
   FlatList,
   Image,
-  Linking,
   PanResponder,
   RefreshControl,
   SafeAreaView,
@@ -42,84 +46,6 @@ export default function HomeScreen({ navigation }) {
   const [notificationAnim] = useState(new Animated.Value(-100));
   const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
-  const [showLocationModal, setShowLocationModal] = useState(false);
-  const [postalCode, setPostalCode] = useState('');
-  const [userArea, setUserArea] = useState('');
-  
-  // Singapore postal code districts mapping
-  const postalDistricts = {
-    '01': 'Raffles Place, Cecil, Marina',
-    '02': 'Anson, Tanjong Pagar',
-    '03': 'Queenstown, Tiong Bahru',
-    '04': 'Telok Blangah, Harbourfront',
-    '05': 'Pasir Panjang, Hong Leong Garden',
-    '06': 'High Street, Beach Road',
-    '07': 'Middle Road, Golden Mile',
-    '08': 'Little India',
-    '09': 'Orchard, Cairnhill, River Valley',
-    '10': 'Ardmore, Bukit Timah, Holland Road',
-    '11': 'Watten Estate, Novena, Thomson',
-    '12': 'Balestier, Toa Payoh',
-    '13': 'Macpherson, Braddell',
-    '14': 'Geylang, Eunos',
-    '15': 'Katong, Joo Chiat, Amber Road',
-    '16': 'Upper East Coast, Eastwood',
-    '17': 'Loyang, Changi',
-    '18': 'Tampines, Pasir Ris',
-    '19': 'Serangoon Garden, Hougang',
-    '20': 'Bishan, Ang Mo Kio',
-    '21': 'Upper Bukit Timah, Clementi Park',
-    '22': 'Jurong',
-    '23': 'Hillview, Dairy Farm, Bukit Panjang',
-    '24': 'Lim Chu Kang, Tengah',
-    '25': 'Kranji, Woodgrove, Woodlands',
-    '26': 'Upper Thomson, Springleaf',
-    '27': 'Yishun, Sembawang',
-    '28': 'Seletar',
-  };
-
-  const handleSaveLocation = () => {
-    if (postalCode.length === 6 && /^\d{6}$/.test(postalCode)) {
-      const district = postalCode.substring(0, 2);
-      const area = postalDistricts[district];
-      if (area) {
-        setUserArea(area);
-        setShowLocationModal(false);
-        setPostalCode('');
-        Alert.alert('Location Set', `Your area is: ${area}`);
-      } else {
-        Alert.alert('Postal code not recognized. Please check and try again.');
-      }
-    } else {
-      Alert.alert('Please enter a valid 6-digit Singapore postal code');
-    }
-  };
-
-  // For other users to open the location in map apps
-  const openMapWithLocation = async (area) => {
-    if (!area) return;
-    const location = `Singapore, ${area}`;
-    const encodedLocation = encodeURIComponent(location);
-    const urls = [
-      `citymapper://directions?endaddress=${encodedLocation}`,
-      `comgooglemaps://?q=${encodedLocation}`,
-      `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`,
-      `maps://maps.apple.com/?q=${encodedLocation}`,
-      `https://citymapper.com/directions?endaddress=${encodedLocation}`
-    ];
-    for (const url of urls) {
-      try {
-        const supported = await Linking.canOpenURL(url);
-        if (supported) {
-          await Linking.openURL(url);
-          return;
-        }
-      } catch (_error) {
-        // continue
-      }
-    }
-    Alert.alert('Error', 'No map app available');
-  };
 
   const db = getFirestore();
   const auth = getAuth();
@@ -184,8 +110,12 @@ export default function HomeScreen({ navigation }) {
         querySnapshot.docs.map(async (docSnapshot) => {
           const postData = docSnapshot.data();
 
-          // Check if owner is deleted, inactive, or invalid
           let ownerIsInvalid = false;
+          let currentUsername = postData.userName || 'User';
+          let userPhotoURL = null;
+          let isPrivate = false;
+          let isFollowing = false;
+
           if (postData.ownerUid) {
             try {
               const userDocRef = doc(db, 'users', postData.ownerUid);
@@ -204,6 +134,15 @@ export default function HomeScreen({ navigation }) {
                   (userData.username && userData.username.toLowerCase().includes('admin'))
                 ) {
                   ownerIsInvalid = true;
+                } else {
+                  currentUsername = userData.username;
+                  userPhotoURL = userData.photoURL || null;
+                  isPrivate = userData.isPrivate || false;
+                  
+                  if (currentUser) {
+                    const followers = userData.followers || [];
+                    isFollowing = followers.includes(currentUser.uid);
+                  }
                 }
               }
             } catch (_error) {
@@ -230,34 +169,10 @@ export default function HomeScreen({ navigation }) {
             doc => doc.data().userId === currentUser?.uid
           );
           
-          // Load user profile picture and privacy settings
-          let userPhotoURL = null;
-          let isPrivate = false;
-          let isFollowing = false;
-          
-          if (postData.ownerUid) {
-            try {
-              const userDocRef = doc(db, 'users', postData.ownerUid);
-              const userDoc = await getDoc(userDocRef);
-              if (userDoc.exists()) {
-                const userData = userDoc.data();
-                userPhotoURL = userData.photoURL || null;
-                isPrivate = userData.isPrivate || false;
-                
-                // Check if current user is following
-                if (currentUser) {
-                  const followers = userData.followers || [];
-                  isFollowing = followers.includes(currentUser.uid);
-                }
-              }
-            } catch (_error) {
-              // Already handled above
-            }
-          }
-          
           return {
             id: docSnapshot.id,
             ...postData,
+            userName: currentUsername,
             likeCount,
             commentCount,
             userLiked,
@@ -867,32 +782,7 @@ export default function HomeScreen({ navigation }) {
       ) : (
         <FlatList
           data={posts}
-          renderItem={(itemProps) => {
-            // Pass userArea to each post for navigation
-            return (
-              <View>
-                {renderPost({ ...itemProps })}
-                {userArea ? (
-                  <TouchableOpacity
-                    style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 16, marginTop: 4 }}
-                    onPress={() => {
-                      Alert.alert(
-                        'Navigate to Location',
-                        `Open ${userArea} in a map app?`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Open', onPress: () => openMapWithLocation(userArea) },
-                        ]
-                      );
-                    }}
-                  >
-                    <Icon name="location-outline" size={18} color={colors.accent} />
-                    <Text style={{ marginLeft: 6, color: colors.accent, fontSize: 14 }}>View Location</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            );
-          }}
+          renderItem={renderPost}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={renderHeader}
