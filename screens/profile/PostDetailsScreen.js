@@ -17,6 +17,7 @@ import {
     Alert,
     Image,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     RefreshControl,
     ScrollView,
@@ -44,6 +45,7 @@ export default function PostDetailsScreen({ route, navigation }) {
   const [userPhotoURL, setUserPhotoURL] = useState(initialPost.userPhotoURL || null);
   const [ownerUserName, setOwnerUserName] = useState(initialPost.userName || 'User');
   const [editingComment, setEditingComment] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -627,7 +629,9 @@ export default function PostDetailsScreen({ route, navigation }) {
             <Icon name="arrow-back" size={24} color={colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Post Details</Text>
-          <View style={{ width: 24 }} />
+          <TouchableOpacity onPress={() => setShowShareModal(true)}>
+            <Icon name="share-social" size={24} color={colors.dark} />
+          </TouchableOpacity>
         </View>
 
         {/* Post Image */}
@@ -890,6 +894,40 @@ export default function PostDetailsScreen({ route, navigation }) {
           />
         </TouchableOpacity>
       </View>
+
+      {/* Share Modal */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowShareModal(false)}
+        >
+          <View style={styles.shareModalContent}>
+            <Text style={styles.shareModalTitle}>Share Post</Text>
+            <TouchableOpacity
+              style={styles.shareOption}
+              onPress={() => {
+                setShowShareModal(false);
+                navigation.navigate('Messages', { sharedPost: activePost });
+              }}
+            >
+              <Icon name="chatbubble" size={24} color={colors.accent} />
+              <Text style={styles.shareOptionText}>Send to Friend</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowShareModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1189,5 +1227,47 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shareModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: spacing.lg,
+    width: '80%',
+    alignItems: 'center',
+  },
+  shareModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.dark,
+    marginBottom: spacing.lg,
+  },
+  shareOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    width: '100%',
+    marginBottom: spacing.md,
+  },
+  shareOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+  },
+  cancelButton: {
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    color: colors.gray,
   },
 });

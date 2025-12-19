@@ -10,6 +10,7 @@ import {
     Modal,
     SafeAreaView,
     ScrollView,
+    Share,
     StatusBar,
     StyleSheet,
     Text,
@@ -19,7 +20,7 @@ import {
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
-import useGuest from '../../hooks/useGuest';
+import { useGuest } from '../../hooks/useGuest';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function ProfileScreen({ navigation }) {
@@ -359,7 +360,7 @@ export default function ProfileScreen({ navigation }) {
     navigation.navigate('EditProfile');
   };
 
-  const handleShareProfile = () => {
+  const handleShareProfile = async () => {
     if (!user) {
       Alert.alert(
         'Login Required',
@@ -372,7 +373,22 @@ export default function ProfileScreen({ navigation }) {
       return;
     }
     // Share profile functionality
-    console.log('Share profile');
+    try {
+      const profileUrl = `swapism4://profile/${user.uid}`;
+      const message = `Check out my Swapism profile! ${profileUrl}`;
+      
+      const result = await Share.share({
+        message: message,
+        title: 'Share Profile',
+      });
+      
+      if (result.action === Share.sharedAction) {
+        console.log('Profile shared successfully');
+      }
+    } catch (error) {
+      console.error('Error sharing profile:', error);
+      Alert.alert('Error', 'Failed to share profile');
+    }
   };
 
   const openMapWithLocation = async () => {

@@ -8,6 +8,17 @@
     "scheme": "swapism4",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "intentFilters": [
+      {
+        "action": "VIEW",
+        "data": [
+          {
+            "scheme": "swapism4"
+          }
+        ],
+        "category": ["BROWSABLE", "DEFAULT"]
+      }
+    ],
     "ios": {
       "supportsTablet": true
     },

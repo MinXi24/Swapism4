@@ -10,7 +10,7 @@ import {
     query,
     where
 } from 'firebase/firestore';
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -26,14 +26,15 @@ import {
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import Input from '../../components/Input';
-import useGuest from '../../hooks/useGuest';
+import { useGuest } from '../../hooks/useGuest';
 
 import { colors, fonts, spacing } from '../../lib/theme';
 
-export default function MessagesScreen({ navigation }) {
+export default function MessagesScreen({ navigation, route }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const sharedPost = route.params?.sharedPost || null;
 
   const db = getFirestore();
   const auth = getAuth();
@@ -171,14 +172,21 @@ export default function MessagesScreen({ navigation }) {
   };
 
   const handleMessagePress = (conversation) => {
-    navigation.navigate('Chat', {
+    const chatParams = {
       user: {
         id: conversation.userId,
         uid: conversation.userId,
         name: conversation.userName,
         photoURL: conversation.userPhotoURL,
       },
-    });
+    };
+    
+    // If there's a shared post, pass it to the chat
+    if (sharedPost) {
+      chatParams.sharedPost = sharedPost;
+    }
+    
+    navigation.navigate('Chat', chatParams);
   };
 
   const renderMessageItem = ({ item }) => (

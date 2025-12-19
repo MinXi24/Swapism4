@@ -2,34 +2,34 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Calendar from 'expo-calendar';
 import { getAuth } from 'firebase/auth';
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  getFirestore,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDocs,
+    getFirestore,
+    orderBy,
+    query,
+    serverTimestamp,
+    updateDoc,
+    where
 } from 'firebase/firestore';
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  Alert,
-  Clipboard,
-  Image,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  SafeAreaView,
-  SectionList,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Clipboard,
+    Image,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    SafeAreaView,
+    SectionList,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import RNModalDateTimePicker from 'react-native-modal-datetime-picker';
 import Icon from '../../assets/icons/icons';
@@ -39,7 +39,7 @@ import { useSwapRequest } from '../../hooks/useSwapRequest';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function ChatScreen({ route, navigation }) {
-  const { user, swapRequest } = route.params;
+  const { user, swapRequest, sharedPost } = route.params;
   const otherUserId = user?.id || user?.uid;
   const otherUserName = user?.name;
   const [messages, setMessages] = useState([]);
@@ -60,6 +60,7 @@ export default function ChatScreen({ route, navigation }) {
   const [pickerMode, setPickerMode] = useState('date');
   const flatListRef = useRef(null);
   const inputRef = useRef(null);
+  const [pendingSharedPost, setPendingSharedPost] = useState(sharedPost || null);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -178,6 +179,38 @@ export default function ChatScreen({ route, navigation }) {
       await loadMessages();
     } catch (error) {
       console.error('Error sending message:', error);
+    }
+  };
+
+  const handleSendSharedPost = async () => {
+    if (!pendingSharedPost) return;
+
+    try {
+      const postUrl = `swapism4://post/${pendingSharedPost.id}`;
+      const messageText = `Check out this post: ${pendingSharedPost.title || 'Shared Post'}`;
+      
+      await addDoc(collection(db, 'messages'), {
+        senderId: currentUser.uid,
+        receiverId: otherUserId,
+        text: messageText,
+        createdAt: serverTimestamp(),
+        participants: [currentUser.uid, otherUserId],
+        read: false,
+        type: 'shared_post',
+        postData: {
+          id: pendingSharedPost.id,
+          title: pendingSharedPost.title,
+          url: pendingSharedPost.url,
+          deepLink: postUrl,
+        },
+      });
+
+      setPendingSharedPost(null);
+      await loadMessages();
+      Alert.alert('Success', 'Post shared successfully!');
+    } catch (error) {
+      console.error('Error sending shared post:', error);
+      Alert.alert('Error', 'Failed to share post. Please try again.');
     }
   };
 
@@ -934,6 +967,36 @@ export default function ChatScreen({ route, navigation }) {
           }
         />
 
+        {/* Shared Post Preview */}
+        {pendingSharedPost && (
+          <View style={styles.sharedPostPreview}>
+            <View style={styles.sharedPostContent}>
+              <Image source={{ uri: pendingSharedPost.url }} style={styles.sharedPostImage} />
+              <View style={styles.sharedPostInfo}>
+                <Text style={styles.sharedPostTitle} numberOfLines={2}>
+                  {pendingSharedPost.title || 'Shared Post'}
+                </Text>
+                <Text style={styles.sharedPostLabel}>Ready to send</Text>
+              </View>
+            </View>
+            <View style={styles.sharedPostActions}>
+              <TouchableOpacity
+                style={styles.cancelSharedButton}
+                onPress={() => setPendingSharedPost(null)}
+              >
+                <Text style={styles.cancelSharedText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sendSharedButton}
+                onPress={handleSendSharedPost}
+              >
+                <Icon name="send" size={20} color="#fff" />
+                <Text style={styles.sendSharedText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Input Area */}
         <View style={styles.inputContainer}>
           <View style={styles.inputWrapper}>
@@ -1581,5 +1644,62 @@ const styles = StyleSheet.create({
   dateTimeText: {
     fontSize: 16,
     color: colors.dark,
+  },
+  sharedPostPreview: {
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    padding: spacing.md,
+  },
+  sharedPostContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  sharedPostImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+  },
+  sharedPostInfo: {
+    flex: 1,
+  },
+  sharedPostTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: 4,
+  },
+  sharedPostLabel: {
+    fontSize: 12,
+    color: colors.gray,
+  },
+  sharedPostActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  cancelSharedButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  cancelSharedText: {
+    color: colors.gray,
+    fontSize: 14,
+  },
+  sendSharedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+  },
+  sendSharedText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
