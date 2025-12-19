@@ -11,8 +11,6 @@ import {
   getDocs,
   getFirestore,
   query,
-  serverTimestamp,
-  setDoc,
   updateDoc,
   where
 } from 'firebase/firestore';
@@ -23,7 +21,6 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   SafeAreaView,
@@ -45,6 +42,8 @@ const ALERT_RED = '#FF6B6B';
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId, username, initialTab } = route.params;
+
+  // Data State
   const [userPosts, setUserPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab || 'forFun');
@@ -299,19 +298,11 @@ export default function UserProfileScreen({ route, navigation }) {
 
   const logProfileView = async () => {
     if (!currentUser || currentUser.uid === userId) return;
-
+    
     try {
-      // Get current user's username
-      let viewerName = currentUser.displayName || 'Anonymous';
-      try {
-        const viewerDocRef = doc(db, 'users', currentUser.uid);
-        const viewerDoc = await getDoc(viewerDocRef);
-        if (viewerDoc.exists()) {
-          viewerName = viewerDoc.data().username || viewerName;
-        }
-      } catch (err) {
-        console.error('Error fetching viewer name:', err);
-      }
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      const viewerName = userDoc.exists() ? userDoc.data().username || 'Someone' : 'Someone';
 
       // Create notification for profile owner
       await addDoc(collection(db, 'notifications'), {
@@ -369,11 +360,16 @@ export default function UserProfileScreen({ route, navigation }) {
     try {
       const userDocRef = doc(db, 'users', userId);
       const userDoc = await getDoc(userDocRef);
-      
+
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        // Filter reviews to exclude deleted/inactive users (client-side filtering)
-        // Note: This should ideally be handled by a Cloud Function when a user is deleted
+
+        if (userData.active === false || userData.isBanned === true) {
+          setIsUserBanned(true);
+          setLoading(false);
+          return;
+        }
+
         const validReviews = (userData.reviews || []).filter(review => review.userId && review.userName);
         setUserInfo({
           bio: userData.bio || '',
@@ -385,96 +381,26 @@ export default function UserProfileScreen({ route, navigation }) {
           photoURL: userData.photoURL || null,
           username: userData.username || username || 'User',
         });
-        
-        // Load privacy setting
+
         setIsPrivateAccount(userData.isPrivate || false);
-        
-        // Load followers and following counts
+
         const followers = userData.followers || [];
         const following = userData.following || [];
-        setStats(prev => ({
-          ...prev,
+        setStats({
+          posts: 0,
           followers: followers.length,
           following: following.length,
-        }));
-        
-        // Check if current user is following this user
+        });
+
         if (currentUser) {
           setIsFollowing(followers.includes(currentUser.uid));
-          
-          // Load mutual followers
-          const currentUserDocRef = doc(db, 'users', currentUser.uid);
-          const currentUserDoc = await getDoc(currentUserDocRef);
-          if (currentUserDoc.exists()) {
-            const currentUserFollowing = currentUserDoc.data().following || [];
-            // Find mutual followers (people that both current user and viewed user follow)
-            const mutuals = followers.filter(followerId => currentUserFollowing.includes(followerId));
-            
-            // Load mutual user details
-            const mutualDetails = await Promise.all(
-              mutuals.map(async (mutualId) => {
-                const mutualDocRef = doc(db, 'users', mutualId);
-                const mutualDoc = await getDoc(mutualDocRef);
-                if (mutualDoc.exists()) {
-                  const mutualData = mutualDoc.data();
-                  return {
-                    uid: mutualId,
-                    username: mutualData.username || 'User',
-                    photoURL: mutualData.photoURL || null,
-                  };
-                }
-                return null;
-              })
-            );
-            
-            setMutualFollowers(mutualDetails.filter(m => m !== null));
-          }
-          
-          // Check follow request status
-          const requestQuery = query(
-            collection(db, 'followRequests'),
-            where('fromUserId', '==', currentUser.uid),
-            where('toUserId', '==', userId)
-          );
-          const requestSnapshot = await getDocs(requestQuery);
-          
-          if (!requestSnapshot.empty) {
-            const requestData = requestSnapshot.docs[0].data();
-            setFollowRequestStatus(requestData.status);
-          } else {
-            setFollowRequestStatus(null);
-          }
+          await loadMutualsAndRequests(followers);
         }
+
+        await loadUserPostsOnly();
       }
     } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
-  };
-
-  const loadUserPosts = async () => {
-    try {
-      setLoading(true);
-      await loadUserProfile();
-      const q = query(
-        collection(db, 'wardrobe-plug-fyp/user/images'),
-        where('ownerUid', '==', userId)
-      );
-      const querySnapshot = await getDocs(q);
-      const posts = querySnapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        .sort((a, b) => {
-          const dateA = a.uploadedAt?.toDate?.() || new Date(0);
-          const dateB = b.uploadedAt?.toDate?.() || new Date(0);
-          return dateB - dateA;
-        });
-      
-      setUserPosts(posts);
-      setStats(prev => ({ ...prev, posts: posts.length }));
-    } catch (error) {
-      console.error('Error loading user posts:', error);
+      console.error("Error loading profile:", error);
     } finally {
       setLoading(false);
     }
@@ -482,76 +408,43 @@ export default function UserProfileScreen({ route, navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      loadUserPosts();
+      fetchScreenData();
       logProfileView();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [userId])
   );
 
-  const openMapWithLocation = async () => {
-    const location = userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location;
-    if (!location) return;
-    const encodedLocation = encodeURIComponent(location);
-    
-    // Try different map apps in order of preference
-    const urls = [
-      `comgooglemaps://?q=${encodedLocation}`, // Google Maps iOS
-      `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`, // Google Maps web (works on Android and iOS)
-      `maps://maps.apple.com/?q=${encodedLocation}`, // Apple Maps
-    ];
-
-    for (const url of urls) {
-      try {
-        const supported = await Linking.canOpenURL(url);
-        if (supported) {
-          await Linking.openURL(url);
-          return;
-        }
-      } catch (_error) {
-        console.log(`Cannot open ${url}`);
-      }
-    }
-
-    Alert.alert('Error', 'No map app available');
-  };
-
-  const handleReport = async () => {
-      if (!currentUser) return Alert.alert('Error', 'Login required.');
-      try {
-          await addDoc(collection(db, 'reported_users'), {
-            reporter_id: currentUser.uid, reporter_username: currentUser.displayName || 'User',
-            reported_user_id: userId, reported_user_name: userInfo.username,
-            reason: "Inappropriate behavior", status: 'pending', created_at: serverTimestamp(),
-          });
-          Alert.alert('Report Sent', 'User reported.');
-      } catch (_e) { Alert.alert('Error', 'Failed to report.'); }
-  };
-
-  const handleBlock = () => {
-    if (!currentUser) return;
-    Alert.alert('Block User', 'Block this user?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Block', style: 'destructive', onPress: async () => {
-            try {
-                await setDoc(doc(db, 'users', currentUser.uid, 'blocked_users', userId), {
-                    blocked_user_id: userId, blocked_user_name: userInfo.username, blocked_at: serverTimestamp()
-                });
-                setIsBlockedByMe(true);
-                Alert.alert('Blocked', 'User blocked.');
-            } catch (_e) { Alert.alert('Error', 'Failed to block.'); }
-        }}
-    ]);
-  };
-
-  const handleUnblock = async () => {
+  // Split out helper to load posts (called only if active)
+  const loadUserPostsOnly = async () => {
     try {
-        await deleteDoc(doc(db, 'users', currentUser.uid, 'blocked_users', userId));
-        setIsBlockedByMe(false);
-        fetchScreenData(); // Reload data
-        Alert.alert("Unblocked", "You can now see this user's profile.");
-    } catch (_error) {
-        Alert.alert("Error", "Could not unblock user.");
-    }
+      const q = query(collection(db, 'wardrobe-plug-fyp/user/images'), where('ownerUid', '==', userId));
+      const querySnapshot = await getDocs(q);
+      const posts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (b.uploadedAt?.toDate?.() || new Date()) - (a.uploadedAt?.toDate?.() || new Date()));
+      
+      setUserPosts(posts);
+      setStats(prev => ({ ...prev, posts: posts.length }));
+    } catch (error) { console.error(error); }
+  };
+
+  // Split out helper for mutuals/requests
+  const loadMutualsAndRequests = async (followers) => {
+      try {
+        const currentUserDocRef = doc(db, 'users', currentUser.uid);
+        const currentUserDoc = await getDoc(currentUserDocRef);
+        if (currentUserDoc.exists()) {
+            const currentUserFollowing = currentUserDoc.data().following || [];
+            const mutuals = followers.filter(followerId => currentUserFollowing.includes(followerId));
+            const mutualDetails = await Promise.all(mutuals.map(async (mid) => {
+                const mDoc = await getDoc(doc(db, 'users', mid));
+                return mDoc.exists() ? { uid: mid, username: mDoc.data().username, photoURL: mDoc.data().photoURL } : null;
+            }));
+            setMutualFollowers(mutualDetails.filter(m => m));
+        }
+        
+        const requestQuery = query(collection(db, 'followRequests'), where('fromUserId', '==', currentUser.uid), where('toUserId', '==', userId));
+        const requestSnapshot = await getDocs(requestQuery);
+        setFollowRequestStatus(!requestSnapshot.empty ? requestSnapshot.docs[0].data().status : null);
+      } catch (e) { console.error(e); }
   };
 
   const handlePostPress = (post) => {
@@ -609,20 +502,14 @@ export default function UserProfileScreen({ route, navigation }) {
         'Login Required',
         'Login to start messaging!',
         [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Login',
-            onPress: () => navigation.navigate('Welcome')
-          }
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Welcome') }
         ],
         { cancelable: false }
       );
       return;
     }
-    navigation.navigate('Chat', { 
+    navigation.navigate('Chat', {
       user: {
         id: userId,
         uid: userId,
@@ -638,26 +525,13 @@ export default function UserProfileScreen({ route, navigation }) {
 
   const handleSubmitReview = async () => {
     if (!currentUser) {
-      Alert.alert(
-        'Login Required',
-        'You must be logged in to submit reviews!',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => navigation.navigate('Login') }
-        ]
-      );
+      Alert.alert('Login Required', 'You must be logged in to submit reviews!', [{ text: 'Cancel', style: 'cancel' }, { text: 'Login', onPress: () => navigation.navigate('Login') }]);
       return;
     }
-
-    if (reviewRating === 0) {
-      Alert.alert('Error', 'Please select a rating');
+    if (reviewRating === 0 || !reviewText.trim()) {
+      Alert.alert('Error', 'Please select a rating and write a review');
       return;
     }
-    if (!reviewText.trim()) {
-      Alert.alert('Error', 'Please write a review');
-      return;
-    }
-
     try {
       const userDocRef = doc(db, 'users', userId);
       let reviewerName = currentUser?.displayName || 'Anonymous';
@@ -704,11 +578,10 @@ export default function UserProfileScreen({ route, navigation }) {
       }}]);
   };
 
-  // Filter posts based on privacy and follow status
+  // Filter posts
   const forFunPosts = userPosts.filter(post => post.postType === 'forFun');
   const forSwapPosts = userPosts.filter(post => post.postType === 'forSwap');
   
-  // Show For Fun posts only if account is public OR user is following OR it's the current user's profile
   const canViewForFunPosts = !isPrivateAccount || isFollowing || userId === currentUser?.uid;
   const displayPosts = activeTab === 'forFun' 
     ? (canViewForFunPosts ? forFunPosts : []) 
@@ -722,6 +595,54 @@ export default function UserProfileScreen({ route, navigation }) {
     );
   }
 
+  // --- 1. BLOCKED VIEW ---
+  if (isBlockedByMe) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}><Icon name="arrow-back" size={24} color={colors.dark} /></TouchableOpacity>
+          <View style={styles.headerCenter}><Text style={styles.logo}>Blocked User</Text></View>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={[styles.centerContent, { flex: 1, padding: 20 }]}>
+          <Icon name="ban" size={64} color={colors.gray} />
+          <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 20, color: colors.dark }}>Blocked</Text>
+          <Text style={{ textAlign: 'center', color: colors.gray, marginTop: 10, marginBottom: 20 }}>You have blocked this user.</Text>
+          <TouchableOpacity style={{ backgroundColor: colors.dark, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }} onPress={handleUnblock}>
+            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Unblock</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // --- 2. BANNED VIEW ---
+  if (isUserBanned) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
+            <Icon name="arrow-back" size={24} color={colors.dark} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.logo}>Suspended</Text>
+          </View>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={[styles.centerContent, { flex: 1, padding: 20 }]}>
+          <Icon name="alert-circle" size={64} color={ALERT_RED} />
+          <Text style={{ fontSize: 20, fontWeight: 'bold', marginTop: 20, color: colors.dark }}>
+            Account Suspended
+          </Text>
+          <Text style={{ textAlign: 'center', color: colors.gray, marginTop: 10, fontSize: 14, lineHeight: 20 }}>
+            This user has been banned for violating our community guidelines. Their posts and profile are no longer available.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // --- 3. NORMAL VIEW ---
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
@@ -772,10 +693,8 @@ export default function UserProfileScreen({ route, navigation }) {
 
           <Text style={styles.userName}>{userInfo.username}</Text>
           
-          {/* Bio */}
           <Text style={styles.userBio}>{userInfo.bio}</Text>
           
-          {/* Location */}
           {(userInfo.location || userInfo.area) && (
             <TouchableOpacity style={styles.locationContainer} onPress={openMapWithLocation}>
               <Icon name="location-outline" size={16} color={colors.dark} />
@@ -859,7 +778,6 @@ export default function UserProfileScreen({ route, navigation }) {
                 )}
               </TouchableOpacity>
 
-              {/* Expanded mutual followers list */}
               {showAllMutuals && mutualFollowers.length > 1 && (
                 <View style={styles.mutualFollowersList}>
                   {mutualFollowers.slice(1).map((mutual) => (
@@ -993,11 +911,11 @@ export default function UserProfileScreen({ route, navigation }) {
                       (post.swapStatus === 'swappedOut' || post.swapStatus === 'swapped out') && styles.swapStatusBadgeSwappedOut
                     ]}>
                       <Text style={styles.swapStatusBadgeText}>
-                        {post.swapStatus === 'available' 
-                          ? 'Available' 
-                          : post.swapStatus === 'reserved' 
-                          ? 'Reserved' 
-                          : 'Swapped Out'}
+                        {post.swapStatus === 'available'
+                          ? 'Available'
+                          : post.swapStatus === 'reserved'
+                            ? 'Reserved'
+                            : 'Swapped Out'}
                       </Text>
                     </View>
                   )}
@@ -1037,7 +955,6 @@ export default function UserProfileScreen({ route, navigation }) {
                     </TouchableOpacity>
                   </View>
 
-                  {/* Rating Stars */}
                   <Text style={styles.modalLabel}>Your Rating</Text>
                   <View style={styles.modalStarsContainer}>
                     {[1, 2, 3, 4, 5].map(star => (
@@ -1051,7 +968,6 @@ export default function UserProfileScreen({ route, navigation }) {
                     ))}
                   </View>
 
-                  {/* Review Text */}
                   <Text style={styles.modalLabel}>Your Review</Text>
                   <TextInput
                     style={styles.reviewInput}
@@ -1063,7 +979,6 @@ export default function UserProfileScreen({ route, navigation }) {
                     textAlignVertical="top"
                   />
 
-                  {/* Submit Button */}
                   <TouchableOpacity style={styles.submitButton} onPress={handleSubmitReview}>
                     <Text style={styles.submitButtonText}>Submit Review</Text>
                   </TouchableOpacity>
@@ -1132,6 +1047,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.secondary,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   profileSection: {
     backgroundColor: '#fff',
@@ -1248,15 +1167,15 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   mutualAvatarImage: {
-    width: '100%',
-    height: '100%',
+    width: 24,
+    height: 24,
     borderRadius: 12,
   },
   mutualAvatarPlaceholder: {
-    width: '100%',
-    height: '100%',
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#eee',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1267,35 +1186,35 @@ const styles = StyleSheet.create({
     marginLeft: spacing.xs,
   },
   mutualFollowersName: {
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: colors.dark,
   },
   mutualFollowersList: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingLeft: spacing.md,
   },
   mutualFollowerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.xs,
-    gap: spacing.sm,
   },
   mutualFollowerItemImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: spacing.sm,
   },
   mutualFollowerItemPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#eee',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: spacing.sm,
   },
   mutualFollowerItemName: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
     color: colors.dark,
   },
   ratingSection: {
@@ -1319,12 +1238,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffd75c',
   },
-  ratingName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.dark,
-  },
   rateButton: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -1347,6 +1260,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.dark,
     marginBottom: spacing.sm,
+  },
+  noReviewsContainer: {
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  noReviewsText: {
+    color: '#fff',
+    fontStyle: 'italic',
   },
   reviewItem: {
     flexDirection: 'row',
@@ -1383,90 +1304,6 @@ const styles = StyleSheet.create({
   reviewStars: {
     flexDirection: 'row',
     gap: 2,
-  },
-  noReviewsContainer: {
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  noReviewsText: {
-    fontSize: 14,
-    color: colors.gray,
-    fontStyle: 'italic',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.md,
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingVertical: spacing.xl * 1.5,
-    paddingHorizontal: spacing.xl * 2,
-    paddingBottom: spacing.xl * 2,
-    width: '100%',
-    maxWidth: 750,
-    minWidth: 350,
-    maxHeight: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.dark,
-  },
-  modalLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.dark,
-    marginBottom: spacing.sm,
-  },
-  modalStarsContainer: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-    justifyContent: 'center',
-  },
-  reviewInput: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: spacing.md,
-    fontSize: 14,
-    minHeight: 100,
-    marginBottom: spacing.xl,
-  },
-  submitButton: {
-    backgroundColor: colors.accent,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -1510,7 +1347,9 @@ const styles = StyleSheet.create({
   emptyStateSubtext: {
     fontSize: 14,
     color: colors.gray,
-    marginTop: 4,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
   },
   postsGrid: {
     flexDirection: 'row',
@@ -1545,6 +1384,65 @@ const styles = StyleSheet.create({
   },
   swapStatusBadgeText: {
     fontSize: 10,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.dark,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.dark,
+    marginBottom: spacing.sm,
+  },
+  modalStarsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  reviewInput: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    padding: spacing.md,
+    height: 100,
+    marginBottom: spacing.lg,
+    fontSize: 14,
+    color: colors.dark,
+  },
+  submitButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: colors.dark,
   },

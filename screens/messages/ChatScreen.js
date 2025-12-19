@@ -390,7 +390,6 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   // Add event to calendar
-  // Add event to calendar and persist status in Firestore per user
   const addEventToCalendar = async (calendarDetails, messageId) => {
     const allowed = await getCalendarPermission();
     if (!allowed) return;
@@ -950,14 +949,10 @@ export default function ChatScreen({ route, navigation }) {
               textAlignVertical="center"
             />
             <View style={styles.inputActions}>
-              <TouchableOpacity style={styles.iconButton} onPress={() => {
-                setShowLocationModal(true);
-              }}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => setShowLocationModal(true)}>
                 <Icon name="location-outline" size={20} color={colors.gray} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton} onPress={() => {
-                setShowCalendarModal(true);
-              }}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => setShowCalendarModal(true)}>
                 <Icon name="calendar-outline" size={20} color={colors.gray} />
               </TouchableOpacity>
             </View>

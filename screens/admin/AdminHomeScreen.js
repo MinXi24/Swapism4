@@ -17,9 +17,12 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import {
   collection,
+  doc,
   getCountFromServer,
+  getDoc,
   getDocs,
   getFirestore,
+  limit,
   query,
   where
 } from 'firebase/firestore';
@@ -32,9 +35,11 @@ const ACTIVE_YELLOW = '#FDD835';
 
 export default function AdminHomeScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('home');
+  const [listFilter, setListFilter] = useState('pending'); // 'pending' | 'resolved'
 
   // --- DATA STATE ---
   const [reports, setReports] = useState([]);
+  const [resolvedHistory, setResolvedHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   
   const [stats, setStats] = useState({
@@ -57,6 +62,81 @@ export default function AdminHomeScreen({ navigation }) {
     }, [])
   );
 
+  /**
+   * IMPLEMENTED FROM HOME.JS: 
+   * Verifies if the subject of the report actually exists and is not deleted/banned.
+   */
+  const verifyExistence = async (item) => {
+    const deletedId = 'm9';
+    // Scrub specific deleted ID
+    if (item.reported_user_id === deletedId || item.userId === deletedId || item.targetId === deletedId) {
+      return false;
+    }
+
+    try {
+      if (item.reportType === 'post') {
+        const postRef = doc(db, 'wardrobe-plug-fyp/user/images', item.reported_clothes_id || item.targetId || item.id);
+        const postSnap = await getDoc(postRef);
+        if (!postSnap.exists()) return false;
+
+        // Also check if the post owner is valid (Deleted account check)
+        const ownerUid = postSnap.data().ownerUid;
+        const ownerRef = doc(db, 'users', ownerUid);
+        const ownerSnap = await getDoc(ownerRef);
+        if (!ownerSnap.exists()) return false;
+        const ownerData = ownerSnap.data();
+        if (ownerData.deleted === true || ownerData.active === false || ownerData.isBanned === true) return false;
+        
+        return true;
+      } 
+      
+      if (item.reportType === 'user') {
+        const userRef = doc(db, 'users', item.reported_user_id || item.userId);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return false;
+
+        const userData = userSnap.data();
+        // HOME.JS LOGIC: Filter out deleted/inactive/banned accounts
+        if (userData.deleted === true || userData.active === false || userData.isBanned === true) {
+          return false;
+        }
+        return true;
+      }
+
+      if (item.reportType === 'comment') {
+        const userRef = doc(db, 'users', item.targetOwnerUid || item.userId);
+        const userSnap = await getDoc(userRef);
+        return userSnap.exists() && userSnap.data().deleted !== true;
+      }
+
+      return true; 
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const deduplicateReports = (items) => {
+    const seen = new Set();
+    return items.filter(item => {
+      let uniqueKey;
+      if (item.reportType === 'post') {
+        uniqueKey = `post_${item.reported_clothes_id || item.targetId || item.id}`;
+      } else if (item.reportType === 'user') {
+        uniqueKey = `user_${item.reported_user_id || item.userId}`;
+      } else if (item.reportType === 'comment') {
+        uniqueKey = `comment_${item.targetId || item.id}`;
+      } else {
+        uniqueKey = item.id;
+      }
+
+      if (seen.has(uniqueKey)) {
+        return false;
+      }
+      seen.add(uniqueKey);
+      return true;
+    });
+  };
+
   const loadReports = async () => {
     try {
       setLoading(true);
@@ -65,81 +145,91 @@ export default function AdminHomeScreen({ navigation }) {
       const commentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'pending')); 
       const usersReportQuery = query(collection(db, 'reported_users'), where('status', '==', 'pending'));
       
+      const resPostsQuery = query(collection(db, 'report'), where('status', '==', 'resolved'), limit(20));
+      const resCommentsQuery = query(collection(db, 'reported_comments'), where('status', '==', 'resolved'), limit(20));
+      const resUsersQuery = query(collection(db, 'reported_users'), where('status', '==', 'resolved'), limit(20));
+
       const usersColl = collection(db, 'users');
       const clothesColl = collection(db, 'clothes'); 
-      const resolvedQuery = query(collection(db, 'report'), where('status', '==', 'resolved'));
 
       const [
-        postSnap, 
-        commentSnap,
-        userReportSnap,
-        totalUsersSnap,
-        totalClothesSnap,
-        resolvedSnap
+        postSnap, commentSnap, userReportSnap,
+        totalUsersSnap, totalClothesSnap,
+        historyPostSnap, historyCommentSnap, historyUserSnap
       ] = await Promise.all([
-        getDocs(postsQuery),
-        getDocs(commentsQuery),
-        getDocs(usersReportQuery),
-        getCountFromServer(usersColl),
-        getCountFromServer(clothesColl),
-        getCountFromServer(resolvedQuery)
+        getDocs(postsQuery), getDocs(commentsQuery), getDocs(usersReportQuery),
+        getCountFromServer(usersColl), getCountFromServer(clothesColl),
+        getDocs(resPostsQuery), getDocs(resCommentsQuery), getDocs(resUsersQuery)
       ]);
       
-      // Process Lists
-      const formattedPosts = postSnap.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            reportType: 'post',
-            name: 'Reported Post',
-            detail: `Reason: ${data.reason || 'Flagged Content'}`,
-            timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
-            icon: 'alert-circle',
-            iconColor: '#FF6B6B' 
-        };
-      });
+      // Process Pending
+      const rawPending = [
+        ...postSnap.docs.map(doc => ({
+            id: doc.id, ...doc.data(), reportType: 'post', name: 'Reported Post',
+            detail: `Reason: ${doc.data().reason || 'Flagged Content'}`,
+            timestamp: doc.data().created_at?.toDate ? doc.data().created_at.toDate() : new Date(0),
+            icon: 'alert-circle', iconColor: '#FF6B6B' 
+        })),
+        ...commentSnap.docs.map(doc => ({
+            id: doc.id, ...doc.data(), reportType: 'comment', name: doc.data().targetOwnerName || 'Unknown User',
+            detail: `Comment: "${doc.data().targetContent || 'Hidden'}"`, 
+            timestamp: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(0),
+            icon: 'chatbubble-ellipses', iconColor: '#FDD835'
+        })),
+        ...userReportSnap.docs.map(doc => ({
+            id: doc.id, ...doc.data(), reportType: 'user', name: doc.data().reported_user_name || 'Reported User',
+            detail: `Reason: ${doc.data().reason || 'User Behavior'}`, 
+            timestamp: doc.data().created_at?.toDate ? doc.data().created_at.toDate() : new Date(0),
+            icon: 'person-remove', iconColor: '#FF6B6B'
+        }))
+      ];
 
-      const formattedComments = commentSnap.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            reportType: 'comment',
-            name: data.targetOwnerName || 'Unknown User',
-            detail: `Comment: "${data.targetContent || 'Hidden'}"`, 
-            timestamp: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(0),
-            icon: 'chatbubble-ellipses',
-            iconColor: '#FDD835'
-        };
-      });
+      // Process Resolved
+      const rawHistory = [
+        ...historyPostSnap.docs.map(d => ({
+          ...d.data(), id: d.id, reportType: 'post', name: 'Resolved Post',
+          detail: `Action: ${d.data().actionTaken || 'Resolved'}`,
+          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().created_at?.toDate ? d.data().created_at.toDate() : new Date(0),
+          icon: 'checkmark-circle', iconColor: '#9abeaa'
+        })),
+        ...historyCommentSnap.docs.map(d => ({
+          ...d.data(), id: d.id, reportType: 'comment', name: d.data().targetOwnerName || 'Comment',
+          detail: `Comment: "${d.data().targetContent || 'Hidden'}"`,
+          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(0),
+          icon: 'checkmark-circle', iconColor: '#9abeaa'
+        })),
+        ...historyUserSnap.docs.map(d => ({
+          ...d.data(), id: d.id, reportType: 'user', name: d.data().reported_user_name || 'User',
+          detail: `Action: ${d.data().actionTaken || 'Reviewed'}`,
+          timestamp: d.data().resolvedAt?.toDate ? d.data().resolvedAt.toDate() : d.data().created_at?.toDate ? d.data().created_at.toDate() : new Date(0),
+          icon: 'checkmark-circle', iconColor: '#9abeaa'
+        }))
+      ];
 
-      const formattedUserReports = userReportSnap.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            reportType: 'user', 
-            name: data.reported_user_name || 'Reported User',
-            detail: `Reason: ${data.reason || 'User Behavior'}`, 
-            timestamp: data.created_at?.toDate ? data.created_at.toDate() : new Date(0),
-            icon: 'person-remove', 
-            iconColor: '#FF6B6B'
-        };
-      });
+      const filterAndDeduplicate = async (items) => {
+        // Sort first to ensure latest timestamp is kept during deduplication
+        items.sort((a, b) => b.timestamp - a.timestamp);
+        
+        const deduplicated = deduplicateReports(items);
 
-      const allReports = [...formattedPosts, ...formattedComments, ...formattedUserReports];
-      allReports.sort((a, b) => b.timestamp - a.timestamp); 
+        const results = await Promise.all(deduplicated.map(async (item) => {
+          const exists = await verifyExistence(item);
+          return exists ? item : null;
+        }));
+        return results.filter(i => i !== null);
+      };
 
-      setReports(allReports);
+      const finalPending = await filterAndDeduplicate(rawPending);
+      const finalHistory = await filterAndDeduplicate(rawHistory);
 
-      const totalPending = postSnap.size + commentSnap.size + userReportSnap.size;
+      setReports(finalPending);
+      setResolvedHistory(finalHistory);
 
       setStats({
-        pending: totalPending,
+        pending: finalPending.length,
         users: totalUsersSnap.data().count,
         listings: totalClothesSnap.data().count,
-        resolved: resolvedSnap.data().count
+        resolved: finalHistory.length
       });
 
     } catch (error) {
@@ -167,48 +257,28 @@ export default function AdminHomeScreen({ navigation }) {
   };
 
   const handleStatPress = (stat) => {
-    let breakdown = [];
+    if (stat.label === 'Resolved') {
+        setListFilter('resolved');
+        return;
+    }
+
     let description = "";
     let showDetailsButton = false; 
 
     switch (stat.label) {
         case 'Pending':
-            const postCount = reports.filter(r => r.reportType === 'post').length;
-            const commentCount = reports.filter(r => r.reportType === 'comment').length;
-            const userReportCount = reports.filter(r => r.reportType === 'user').length;
-
             description = "Items currently awaiting moderator review.";
             showDetailsButton = true; 
-            breakdown = [
-                { label: 'Reported Posts', value: postCount },
-                { label: 'Reported Comments', value: commentCount },
-                { label: 'Reported Users', value: userReportCount }
-            ];
             break;
-            
         case 'Users':
             description = "Total registered users.";
-            breakdown = [
-                { label: 'Total Accounts', value: stats.users },
-            ];
             break;
-            
         case 'Listings':
             description = "Total active wardrobe items.";
-            breakdown = [
-                { label: 'Active Items', value: stats.listings },
-            ];
-            break;
-            
-        case 'Resolved':
-            description = "Total closed cases.";
-            breakdown = [
-                { label: 'Cases Closed', value: stats.resolved },
-            ];
             break;
     }
 
-    setSelectedStatData({ ...stat, description, breakdown, showDetailsButton });
+    setSelectedStatData({ ...stat, description, showDetailsButton });
     setModalVisible(true);
   };
 
@@ -223,6 +293,8 @@ export default function AdminHomeScreen({ navigation }) {
     { label: 'Listings', value: stats.listings, icon: 'shirt-outline', color: '#9abeaa' }, 
     { label: 'Resolved', value: stats.resolved, icon: 'checkmark-done-circle-outline', color: '#FCE77D' },
   ];
+
+  const currentDisplayList = listFilter === 'pending' ? reports : resolvedHistory;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -245,7 +317,7 @@ export default function AdminHomeScreen({ navigation }) {
         }
       >
         
-        {/* --- SEARCH BAR (NAVIGATES TO ADMIN SEARCH) --- */}
+        {/* --- SEARCH BAR --- */}
         <TouchableOpacity 
             style={styles.searchContainer} 
             activeOpacity={0.9}
@@ -288,7 +360,15 @@ export default function AdminHomeScreen({ navigation }) {
         </View>
 
         <View style={styles.sectionHeaderRow}>
-             <Text style={styles.sectionTitle}>Recent Reports</Text>
+             <View style={{flexDirection: 'row', gap: 10}}>
+                <TouchableOpacity onPress={() => setListFilter('pending')}>
+                    <Text style={[styles.sectionTitle, listFilter === 'pending' ? {color: colors.dark} : {color: colors.gray}]}>Pending</Text>
+                </TouchableOpacity>
+                <Text style={styles.sectionTitle}>|</Text>
+                <TouchableOpacity onPress={() => setListFilter('resolved')}>
+                    <Text style={[styles.sectionTitle, listFilter === 'resolved' ? {color: colors.dark} : {color: colors.gray}]}>Resolved History</Text>
+                </TouchableOpacity>
+             </View>
              <TouchableOpacity onPress={loadReports}>
                 <Text style={styles.viewAllText}>Refresh</Text>
              </TouchableOpacity>
@@ -297,17 +377,17 @@ export default function AdminHomeScreen({ navigation }) {
         <View style={styles.listContainer}>
             {loading ? (
                 <ActivityIndicator size="small" color={colors.dark} style={{padding:20}} />
-            ) : reports.length === 0 ? (
+            ) : currentDisplayList.length === 0 ? (
                 <Text style={styles.emptyText}>
-                    No pending reports.
+                    No {listFilter} items found.
                 </Text>
             ) : (
-                reports.map((item) => (
+                currentDisplayList.map((item) => (
                 <View key={item.id} style={styles.listItem}>
                     <View style={styles.listItemLeft}>
                         <View style={[styles.statusIndicator, { backgroundColor: item.iconColor }]} />
                         <View style={styles.avatar}>
-                            <Icon name={item.icon} size={20} color={colors.gray} />
+                            <Icon name={item.icon || 'alert-circle'} size={20} color={colors.gray} />
                         </View>
                         <View style={styles.textContainer}>
                             <Text style={styles.nameText}>{item.name}</Text>
@@ -319,7 +399,7 @@ export default function AdminHomeScreen({ navigation }) {
                         style={styles.reviewButton}
                         onPress={() => handleViewItem(item)}
                     >
-                        <Text style={styles.reviewButtonText}>Review</Text>
+                        <Text style={styles.reviewButtonText}>{listFilter === 'pending' ? 'Review' : 'View'}</Text>
                     </TouchableOpacity>
                 </View>
                 ))
@@ -356,18 +436,6 @@ export default function AdminHomeScreen({ navigation }) {
                             
                             <Text style={styles.modalDescription}>{selectedStatData.description}</Text>
                             
-                            <View style={styles.breakdownContainer}>
-                                <Text style={styles.breakdownHeader}>INSIGHTS</Text>
-                                {selectedStatData.breakdown.map((item, i) => (
-                                    <View key={i} style={styles.breakdownRow}>
-                                        <View style={{flexDirection:'row', alignItems:'center'}}>
-                                            <Text style={styles.breakdownLabel}>{item.label}</Text>
-                                        </View>
-                                        <Text style={styles.breakdownValue}>{item.value}</Text>
-                                    </View>
-                                ))}
-                            </View>
-
                             {selectedStatData.showDetailsButton && (
                                 <TouchableOpacity 
                                     style={styles.detailsButton}
@@ -652,7 +720,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
   },
-  // --- MODAL STYLES ---
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -700,37 +767,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 20,
     lineHeight: 20,
-  },
-  breakdownContainer: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15, 
-  },
-  breakdownHeader: {
-    fontFamily: fonts.body,
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#999',
-    marginBottom: 8,
-    letterSpacing: 1,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 2, 
-    paddingVertical: 4, 
-  },
-  breakdownLabel: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.dark,
-  },
-  breakdownValue: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.dark,
   },
   detailsButton: {
     backgroundColor: '#9abeaa',
