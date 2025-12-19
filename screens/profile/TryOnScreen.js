@@ -1,19 +1,19 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { getAuth } from 'firebase/auth';
-import { addDoc, collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { captureRef } from 'react-native-view-shot';
@@ -25,7 +25,13 @@ import { colors, fonts, spacing } from '../../lib/theme';
 const { width, height } = Dimensions.get('window');
 
 export default function TryOnScreen({ route, navigation }) {
-  const { allItems = [] } = route.params || {};
+  const { 
+    allItems = [], 
+    preSelectedItem = null,
+    enableSuggestions = false,
+    fromOtherUser = false,
+    savedTransforms = null
+  } = route.params || {};
   const [cameraActive, setCameraActive] = useState(false);
   const [currentTopIndex, setCurrentTopIndex] = useState(0);
   const [currentBottomIndex, setCurrentBottomIndex] = useState(0);
@@ -198,6 +204,271 @@ export default function TryOnScreen({ route, navigation }) {
   const selectedTop = tops[currentTopIndex];
   const selectedBottom = bottoms[currentBottomIndex];
 
+  // Initialize with pre-selected item and load suggestions
+  useEffect(() => {
+    if (preSelectedItem) {
+      const isTop = preSelectedItem.clothingType === 'top' || 
+                    preSelectedItem.title?.toLowerCase().includes('shirt') ||
+                    preSelectedItem.title?.toLowerCase().includes('top') ||
+                    preSelectedItem.title?.toLowerCase().includes('jacket') ||
+                    preSelectedItem.title?.toLowerCase().includes('blouse');
+      
+      if (isTop) {
+        const topIndex = tops.findIndex(t => t.id === preSelectedItem.id);
+        if (topIndex >= 0) setCurrentTopIndex(topIndex);
+        
+        if (enableSuggestions) {
+          loadMatchingBottoms(preSelectedItem);
+        }
+      } else {
+        const bottomIndex = bottoms.findIndex(b => b.id === preSelectedItem.id);
+        if (bottomIndex >= 0) setCurrentBottomIndex(bottomIndex);
+        
+        if (enableSuggestions) {
+          loadMatchingTops(preSelectedItem);
+        }
+      }
+    }
+    
+    // Restore saved transforms if provided
+    if (savedTransforms) {
+      topScale.setValue(savedTransforms.topScale);
+      topTranslateX.setValue(savedTransforms.topTranslateX);
+      topTranslateY.setValue(savedTransforms.topTranslateY);
+      bottomScale.setValue(savedTransforms.bottomScale);
+      bottomTranslateX.setValue(savedTransforms.bottomTranslateX);
+      bottomTranslateY.setValue(savedTransforms.bottomTranslateY);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preSelectedItem, enableSuggestions, savedTransforms]);
+
+  // AI Matching Functions
+  const extractColors = (text) => {
+    const colorKeywords = ['black', 'white', 'red', 'blue', 'green', 'yellow', 'pink', 'purple', 'brown', 'gray', 'grey', 'navy', 'beige', 'cream', 'tan'];
+    return colorKeywords.filter(color => text?.toLowerCase().includes(color));
+  };
+
+  const extractStyles = (text) => {
+    const styleKeywords = ['casual', 'formal', 'sporty', 'sport', 'vintage', 'modern', 'classic', 'streetwear', 'elegant', 'chic'];
+    return styleKeywords.filter(style => text?.toLowerCase().includes(style));
+  };
+
+  const extractSeason = (text) => {
+    const textLower = text?.toLowerCase() || '';
+    if (textLower.includes('summer') || textLower.includes('short sleeve')) return 'summer';
+    if (textLower.includes('winter') || textLower.includes('jacket') || textLower.includes('coat')) return 'winter';
+    if (textLower.includes('spring')) return 'spring';
+    if (textLower.includes('fall') || textLower.includes('autumn')) return 'fall';
+    return 'all-season';
+  };
+
+  const calculateMatchScore = (item1, item2) => {
+    let score = 0;
+    
+    const text1 = (item1.title || '') + ' ' + (item1.description || '');
+    const text2 = (item2.title || '') + ' ' + (item2.description || '');
+    
+    // Color matching
+    const colors1 = extractColors(text1);
+    const colors2 = extractColors(text2);
+    if (colors1.some(c => colors2.includes(c))) score += 30;
+    
+    // Style matching
+    const styles1 = extractStyles(text1);
+    const styles2 = extractStyles(text2);
+    if (styles1.some(s => styles2.includes(s))) score += 40;
+    
+    // Season matching
+    const season1 = extractSeason(text1);
+    const season2 = extractSeason(text2);
+    if (season1 === season2) score += 20;
+    
+    // Random variation for diversity
+    score += Math.random() * 10;
+    
+    return score;
+  };
+
+  const loadMatchingTops = async (bottomItem) => {
+    setLoadingSuggestions(true);
+    try {
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      
+      const q = query(
+        collection(firestore, 'wardrobe-plug-fyp/user/images'),
+        where('postType', '==', 'forSwap'),
+        where('swapStatus', '==', 'available')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const allTops = [];
+      
+      for (const docSnap of querySnapshot.docs) {
+        const post = { id: docSnap.id, ...docSnap.data() };
+        
+        if (post.ownerUid === currentUser?.uid) continue;
+        
+        const isTop = post.clothingType === 'top' ||
+                      post.title?.toLowerCase().includes('shirt') ||
+                      post.title?.toLowerCase().includes('top') ||
+                      post.title?.toLowerCase().includes('jacket') ||
+                      post.title?.toLowerCase().includes('blouse');
+        
+        if (isTop) {
+          try {
+            const userDoc = await getDoc(doc(firestore, 'users', post.ownerUid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              allTops.push({
+                ...post,
+                userName: userData.username || 'User',
+                userPhotoURL: userData.photoURL || null
+              });
+            }
+          } catch (err) {
+            console.error('Error fetching user:', err);
+          }
+        }
+      }
+      
+      const matchedTops = allTops
+        .map(top => ({
+          ...top,
+          matchScore: calculateMatchScore(top, bottomItem)
+        }))
+        .sort((a, b) => b.matchScore - a.matchScore)
+        .slice(0, 10);
+      
+      setSuggestedItems(matchedTops);
+    } catch (error) {
+      console.error('Error loading matching tops:', error);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const loadMatchingBottoms = async (topItem) => {
+    setLoadingSuggestions(true);
+    try {
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      
+      const q = query(
+        collection(firestore, 'wardrobe-plug-fyp/user/images'),
+        where('postType', '==', 'forSwap'),
+        where('swapStatus', '==', 'available')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const allBottoms = [];
+      
+      for (const docSnap of querySnapshot.docs) {
+        const post = { id: docSnap.id, ...docSnap.data() };
+        
+        if (post.ownerUid === currentUser?.uid) continue;
+        
+        const isBottom = post.clothingType === 'bottom' ||
+                         post.title?.toLowerCase().includes('pants') ||
+                         post.title?.toLowerCase().includes('jeans') ||
+                         post.title?.toLowerCase().includes('shorts') ||
+                         post.title?.toLowerCase().includes('skirt');
+        
+        if (isBottom) {
+          try {
+            const userDoc = await getDoc(doc(firestore, 'users', post.ownerUid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              allBottoms.push({
+                ...post,
+                userName: userData.username || 'User',
+                userPhotoURL: userData.photoURL || null
+              });
+            }
+          } catch (err) {
+            console.error('Error fetching user:', err);
+          }
+        }
+      }
+      
+      const matchedBottoms = allBottoms
+        .map(bottom => ({
+          ...bottom,
+          matchScore: calculateMatchScore(bottom, topItem)
+        }))
+        .sort((a, b) => b.matchScore - a.matchScore)
+        .slice(0, 10);
+      
+      setSuggestedItems(matchedBottoms);
+    } catch (error) {
+      console.error('Error loading matching bottoms:', error);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  // Save outfit to favorites
+  const saveOutfitToFavorites = async () => {
+    try {
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        Alert.alert('Login Required', 'Please login to save outfits');
+        return;
+      }
+      
+      if (!selectedTop && !selectedBottom) {
+        Alert.alert('No Items', 'Please select at least one item to save');
+        return;
+      }
+      
+      const outfitData = {
+        userId: currentUser.uid,
+        topItem: selectedTop ? {
+          id: selectedTop.id,
+          url: selectedTop.url,
+          title: selectedTop.title || '',
+          description: selectedTop.description || '',
+          ownerUid: selectedTop.ownerUid,
+          userName: selectedTop.userName || 'User',
+          clothingType: 'top'
+        } : null,
+        bottomItem: selectedBottom ? {
+          id: selectedBottom.id,
+          url: selectedBottom.url,
+          title: selectedBottom.title || '',
+          description: selectedBottom.description || '',
+          ownerUid: selectedBottom.ownerUid,
+          userName: selectedBottom.userName || 'User',
+          clothingType: 'bottom'
+        } : null,
+        transforms: {
+          topScale: topScale._value,
+          topTranslateX: topTranslateX._value,
+          topTranslateY: topTranslateY._value,
+          bottomScale: bottomScale._value,
+          bottomTranslateX: bottomTranslateX._value,
+          bottomTranslateY: bottomTranslateY._value,
+        },
+        createdAt: new Date(),
+      };
+      
+      await addDoc(collection(firestore, 'favoriteOutfits'), outfitData);
+      
+      Alert.alert('Success', 'Outfit saved to favorites!', [
+        { text: 'OK' },
+        { 
+          text: 'View Favorites', 
+          onPress: () => navigation.navigate('Favourites')
+        }
+      ]);
+    } catch (error) {
+      console.error('Error saving outfit:', error);
+      Alert.alert('Error', 'Failed to save outfit. Please try again.');
+    }
+  };
+
   // Load backgrounds when items change
   useEffect(() => {
     if (selectedTop && !processedImages[selectedTop.id] && !loadingBg[selectedTop.id]) {
@@ -328,42 +599,6 @@ export default function TryOnScreen({ route, navigation }) {
   const discardPhoto = () => {
     setShowPreview(false);
     setCapturedPhoto(null);
-  };
-
-  const saveOutfitToFavorites = async () => {
-    const auth = getAuth();
-    const currentUser = auth.currentUser;
-    
-    if (!currentUser) {
-      Alert.alert('Error', 'You must be logged in to save outfits');
-      return;
-    }
-
-    const selectedTop = tops[currentTopIndex];
-    const selectedBottom = bottoms[currentBottomIndex];
-
-    if (!selectedTop || !selectedBottom) {
-      Alert.alert('Error', 'Please select both a top and bottom to save the outfit');
-      return;
-    }
-
-    try {
-      await addDoc(collection(firestore, 'favoriteOutfits'), {
-        userId: currentUser.uid,
-        topId: selectedTop.id,
-        topName: selectedTop.title || selectedTop.description || 'Top',
-        topImage: selectedTop.url,
-        bottomId: selectedBottom.id,
-        bottomName: selectedBottom.title || selectedBottom.description || 'Bottom',
-        bottomImage: selectedBottom.url,
-        createdAt: new Date(),
-      });
-      
-      Alert.alert('Success', 'Outfit saved to favorites!');
-    } catch (error) {
-      console.error('Error saving outfit:', error);
-      Alert.alert('Error', 'Failed to save outfit to favorites');
-    }
   };
 
   const handleSuggestionClick = async (item) => {

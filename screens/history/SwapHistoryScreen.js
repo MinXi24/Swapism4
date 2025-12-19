@@ -2,6 +2,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
     collection,
+    doc as firestoreDoc,
+    getDoc,
     getDocs,
     getFirestore,
     orderBy,
@@ -25,7 +27,7 @@ import { colors, fonts, spacing } from '../../lib/theme';
 
 export default function SwapHistoryScreen({ navigation }) {
   const [swapHistory, setSwapHistory] = useState([]);
-  const [allSwapHistory, setAllSwapHistory] = useState([]);
+  const [latestUsernames, setLatestUsernames] = useState({}); // { uid: username }
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('all'); // all, completed, accepted, pending, rejected
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,6 +48,22 @@ export default function SwapHistoryScreen({ navigation }) {
     setSearchQuery(query);
   };
 
+  // Helper to fetch latest username for a given uid
+  const fetchLatestUsername = async (uid) => {
+    if (!uid) return 'Unknown User';
+    if (latestUsernames[uid]) return latestUsernames[uid];
+    try {
+      const userDoc = await getDoc(firestoreDoc(db, 'users', uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const username = userData.username || userData.displayName || 'Unknown User';
+        setLatestUsernames(prev => ({ ...prev, [uid]: username }));
+        return username;
+      }
+    } catch (_e) { /* ignore */ }
+    return 'Unknown User';
+  };
+
   const loadSwapHistory = async () => {
     if (!currentUser) return;
 
@@ -59,14 +77,21 @@ export default function SwapHistoryScreen({ navigation }) {
       );
 
       const querySnapshot = await getDocs(swapsQuery);
-      const swapsData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date(),
+      const swapsData = await Promise.all(querySnapshot.docs.map(async (doc) => {
+        const data = doc.data();
+        const isInitiatedByMe = data.senderId === currentUser?.uid;
+        const otherUserId = isInitiatedByMe ? data.receiverId : data.senderId;
+        // Fetch latest username
+        const latestName = await fetchLatestUsername(otherUserId);
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          latestOtherUserName: latestName,
+        };
       }));
 
       // Store all swaps
-      setAllSwapHistory(swapsData);
 
       // Filter based on selected filter
       let filteredSwaps = swapsData;
@@ -77,20 +102,13 @@ export default function SwapHistoryScreen({ navigation }) {
       // Apply search filter if query exists
       if (searchQuery.trim() !== '') {
         filteredSwaps = filteredSwaps.filter(swap => {
-          const isInitiatedByMe = swap.senderId === currentUser?.uid;
-          const otherUserName = isInitiatedByMe ? swap.receiverName : swap.senderName;
-          const myItemTitle = isInitiatedByMe 
-            ? swap.swapDetails?.myItemTitle 
-            : swap.swapDetails?.theirItemTitle;
-          const otherUserItemTitle = isInitiatedByMe 
-            ? swap.swapDetails?.theirItemTitle 
-            : swap.swapDetails?.myItemTitle;
-          
+          const myItemTitle = swap.swapDetails?.myItemTitle || '';
+          const otherUserItemTitle = swap.swapDetails?.theirItemTitle || '';
           const searchLower = searchQuery.toLowerCase();
           return (
-            otherUserName?.toLowerCase().includes(searchLower) ||
-            myItemTitle?.toLowerCase().includes(searchLower) ||
-            otherUserItemTitle?.toLowerCase().includes(searchLower)
+            swap.latestOtherUserName?.toLowerCase().includes(searchLower) ||
+            myItemTitle.toLowerCase().includes(searchLower) ||
+            otherUserItemTitle.toLowerCase().includes(searchLower)
           );
         });
       }
@@ -178,9 +196,9 @@ export default function SwapHistoryScreen({ navigation }) {
       : item.swapDetails?.myItemTitle;
     
     // Get other user's name and photo
-    const otherUserName = isInitiatedByMe 
-      ? item.receiverName 
-      : item.senderName;
+
+    // Use latest username if available
+    const otherUserName = item.latestOtherUserName || (isInitiatedByMe ? item.receiverName : item.senderName);
     
     const otherUserPhoto = isInitiatedByMe 
       ? item.receiverPhoto 

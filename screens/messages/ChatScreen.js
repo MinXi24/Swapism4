@@ -965,7 +965,6 @@ export default function ChatScreen({ route, navigation }) {
             onChangeText={setNewMessage}
             multiline
           />
->>>>>>>>> Temporary merge branch 2
           <TouchableOpacity
             style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
             onPress={handleSendMessage}
@@ -1255,19 +1254,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     gap: spacing.sm,
   },
-  inputWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    minHeight: 44,
-    maxHeight: 120,
-  },
+  // inputWrapper: { ... } removed duplicate
   inputWrapper: {
     flex: 1,
     backgroundColor: '#F5F3E4',
@@ -1276,7 +1263,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginRight: spacing.sm,
     maxHeight: 100,
-    backgroundColor: 'transparent',
     fontFamily: fonts.body,
   },
   inputActions: {
@@ -1284,14 +1270,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingLeft: spacing.xs,
     gap: spacing.xs,
-  },
-  iconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   iconButton: {
     padding: spacing.xs,
