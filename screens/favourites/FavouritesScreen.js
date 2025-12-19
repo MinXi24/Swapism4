@@ -3,12 +3,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
   collection,
-<<<<<<<<< Temporary merge branch 1
-=========
   deleteDoc,
   doc,
   getDoc,
->>>>>>>>> Temporary merge branch 2
   getDocs,
   getFirestore,
   orderBy,
@@ -17,15 +14,15 @@ import {
 } from 'firebase/firestore';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';

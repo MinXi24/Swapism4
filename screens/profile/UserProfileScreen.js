@@ -910,7 +910,7 @@ export default function UserProfileScreen({ route, navigation }) {
               <Text style={styles.noReviewsText}>No reviews yet</Text>
             </View>
           ) : (
-            userInfo.reviews.map((review, index) => (
+            (reviewsWithUserData.length > 0 ? reviewsWithUserData : userInfo.reviews).map((review, index) => (
               <View key={index} style={styles.reviewItem}>
                 {review.userPhoto ? (
                   <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />

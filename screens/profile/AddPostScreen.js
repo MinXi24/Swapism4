@@ -3,17 +3,17 @@ import { getAuth } from 'firebase/auth';
 import { addDoc, collection, doc, getDoc, getFirestore, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
@@ -24,12 +24,10 @@ const CLOUDINARY_UPLOAD_PRESET = 'myPreset';
 export default function AddPostScreen({ navigation, route }) {
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [processedImage, setProcessedImage] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [taggedUsers, setTaggedUsers] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [removingBg, setRemovingBg] = useState(false);
   const [postType, setPostType] = useState('forFun');
   const [clothingType, setClothingType] = useState('other');
   const [showUserSearch, setShowUserSearch] = useState(false);
@@ -107,12 +105,6 @@ export default function AddPostScreen({ navigation, route }) {
           const newImages = [...selectedImages, result.assets[0]];
           setSelectedImages(newImages);
           setSelectedImage(result.assets[0]); // Keep for backward compatibility
-          setProcessedImage(null);
-          
-          // Auto remove background for swap items (only first image)
-          if ((postType === 'forSwap' || postType === 'both') && selectedImages.length === 0) {
-            await removeBackground(result.assets[0].uri);
-          }
         } else {
           Alert.alert('Limit Reached', 'You can only add up to 2 images per post');
         }
@@ -140,94 +132,11 @@ export default function AddPostScreen({ navigation, route }) {
           const images = result.assets.slice(0, 2);
           setSelectedImages(images);
           setSelectedImage(images[0]); // Keep for backward compatibility
-          setProcessedImage(null);
-          
-          // Auto remove background for swap items (only first image)
-          if (postType === 'forSwap' || postType === 'both') {
-            await removeBackground(images[0].uri);
-          }
         }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
       console.error(error);
-    }
-  };
-
-  const removeBackground = async (imageUri) => {
-    setRemovingBg(true);
-    try {
-      // Convert image to blob
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-
-      // Create form data
-      const formData = new FormData();
-      formData.append('image_file', blob, 'image.jpg');
-      formData.append('size', 'auto');
-
-      // Call remove.bg API
-      // Sign up at https://www.remove.bg/api for free API key (50 images/month)
-      const removeBgResponse = await fetch('https://api.remove.bg/v1.0/removebg', {
-        method: 'POST',
-        headers: {
-          'X-Api-Key': 'H5bBov2YzYJdfc9ytpRdeTRe', // Replace with your API key
-        },
-        body: formData,
-      });
-
-      if (!removeBgResponse.ok) {
-        console.log('remove.bg failed, trying alternative...');
-        // Fallback to Pixian.ai (also has free tier)
-        await removeBackgroundPixian(imageUri);
-        return;
-      }
-
-      const resultBlob = await removeBgResponse.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProcessedImage({ uri: reader.result });
-      };
-      reader.readAsDataURL(resultBlob);
-
-      Alert.alert('Success', 'Background removed successfully!');
-    } catch (error) {
-      console.error('Background removal error:', error);
-      Alert.alert('Info', 'Background removal unavailable, using original image');
-    } finally {
-      setRemovingBg(false);
-    }
-  };
-
-  // Alternative: Pixian.ai (free tier: 25 images/month)
-  const removeBackgroundPixian = async (imageUri) => {
-    try {
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-
-      const formData = new FormData();
-      formData.append('image', blob, 'image.jpg');
-
-      // Pixian.ai free API
-      const pixianResponse = await fetch('https://api.pixian.ai/api/v2/remove-background', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (pixianResponse.ok) {
-        const resultBlob = await pixianResponse.blob();
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setProcessedImage({ uri: reader.result });
-        };
-        reader.readAsDataURL(resultBlob);
-        Alert.alert('Success', 'Background removed successfully!');
-      } else {
-        throw new Error('Pixian API failed');
-      }
-    } catch (error) {
-      console.error('Pixian error:', error);
-      Alert.alert('Info', 'Background removal unavailable, using original image');
     }
   };
 
@@ -384,19 +293,6 @@ export default function AddPostScreen({ navigation, route }) {
     }
   };
 
-  const toggleBackgroundRemoval = async () => {
-    if (!selectedImage) {
-      Alert.alert('No Image', 'Please select an image first');
-      return;
-    }
-
-    if (processedImage) {
-      setProcessedImage(null);
-    } else {
-      await removeBackground(selectedImage.uri);
-    }
-  };
-
   const handlePost = async () => {
     if (!auth.currentUser) {
       Alert.alert(
@@ -431,9 +327,7 @@ export default function AddPostScreen({ navigation, route }) {
       
       for (let i = 0; i < imagesToUpload.length; i++) {
         const img = imagesToUpload[i];
-        // Use processed image (with bg removed) for first image if available
-        const imageToUpload = (i === 0 && processedImage?.uri) ? processedImage.uri : img.uri;
-        const imageUrl = await uploadToCloudinary(imageToUpload);
+        const imageUrl = await uploadToCloudinary(img.uri);
         imageUrls.push(imageUrl);
         console.log(`Image ${i + 1} uploaded, URL:`, imageUrl);
       }
@@ -484,7 +378,6 @@ export default function AddPostScreen({ navigation, route }) {
           postType: 'forSwap',
           swapStatus: 'available',
           clothingType: clothingType,
-          backgroundRemoved: !!processedImage,
           size: selectedSize || 'N/A',
           condition: selectedCondition || 'N/A',
           additionalDetails: additionalDetails.trim() || 'N/A',
@@ -505,7 +398,6 @@ export default function AddPostScreen({ navigation, route }) {
           postType: postType,
           swapStatus: postType === 'forSwap' ? 'available' : null,
           clothingType: clothingType,
-          backgroundRemoved: !!processedImage,
           uploadedAt: new Date(),
         };
 
@@ -533,7 +425,6 @@ export default function AddPostScreen({ navigation, route }) {
       
       setSelectedImages([]);
       setSelectedImage(null);
-      setProcessedImage(null);
       setTitle('');
       setDescription('');
       setTaggedUsers([]);
@@ -552,7 +443,7 @@ export default function AddPostScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Icon name="arrow-back" size={24} color={colors.dark} />
@@ -567,7 +458,7 @@ export default function AddPostScreen({ navigation, route }) {
               {selectedImages.map((img, index) => (
                 <View key={index} style={styles.imageContainer}>
                   <Image 
-                    source={{ uri: index === 0 && processedImage?.uri ? processedImage.uri : img.uri }} 
+                    source={{ uri: img.uri }} 
                     style={styles.multipleImage} 
                   />
                   <TouchableOpacity
@@ -579,7 +470,6 @@ export default function AddPostScreen({ navigation, route }) {
                         setSelectedImage(newImages[0]);
                       } else {
                         setSelectedImage(null);
-                        setProcessedImage(null);
                       }
                     }}
                   >
@@ -592,43 +482,14 @@ export default function AddPostScreen({ navigation, route }) {
                   )}
                 </View>
               ))}
-              {selectedImages.length < 2 && (
-                <TouchableOpacity style={styles.addMoreButton} onPress={showImagePickerOptions}>
-                  <Icon name="add-circle-outline" size={48} color={colors.accent} />
-                  <Text style={styles.addMoreText}>Add Photo</Text>
-                </TouchableOpacity>
-              )}
+
             </ScrollView>
           ) : (
             <TouchableOpacity style={styles.imagePicker} onPress={showImagePickerOptions}>
               <View style={styles.imagePickerPlaceholder}>
                 <Icon name="camera" size={48} color={colors.gray} />
-                <Text style={styles.imagePickerText}>Tap to add photos (up to 2)</Text>
+                <Text style={styles.imagePickerText}>Tap to add a photo</Text>
               </View>
-            </TouchableOpacity>
-          )}
-
-          {removingBg && (
-            <View style={styles.processingBadge}>
-              <ActivityIndicator size="small" color={colors.accent} />
-              <Text style={styles.processingText}>Removing background...</Text>
-            </View>
-          )}
-
-          {selectedImage && (postType === 'forSwap' || postType === 'both') && (
-            <TouchableOpacity 
-              style={styles.bgRemovalButton}
-              onPress={toggleBackgroundRemoval}
-              disabled={removingBg}
-            >
-              <Icon 
-                name={processedImage ? "images" : "cut-outline"} 
-                size={20} 
-                color={colors.accent} 
-              />
-              <Text style={styles.bgRemovalButtonText}>
-                {processedImage ? 'Use Original' : 'Remove Background'}
-              </Text>
             </TouchableOpacity>
           )}
 
@@ -666,7 +527,6 @@ export default function AddPostScreen({ navigation, route }) {
                 ]}
                 onPress={() => {
                   setPostType('forFun');
-                  setProcessedImage(null);
                 }}
               >
                 <Icon 
@@ -687,11 +547,8 @@ export default function AddPostScreen({ navigation, route }) {
                   styles.postTypeButton,
                   postType === 'forSwap' && styles.postTypeButtonActive
                 ]}
-                onPress={async () => {
+                onPress={() => {
                   setPostType('forSwap');
-                  if (selectedImage && !processedImage) {
-                    await removeBackground(selectedImage.uri);
-                  }
                 }}
               >
                 <Icon 
@@ -712,11 +569,8 @@ export default function AddPostScreen({ navigation, route }) {
                   styles.postTypeButton,
                   postType === 'both' && styles.postTypeButtonActive
                 ]}
-                onPress={async () => {
+                onPress={() => {
                   setPostType('both');
-                  if (selectedImage && !processedImage) {
-                    await removeBackground(selectedImage.uri);
-                  }
                 }}
               >
                 <Icon 
@@ -1107,24 +961,6 @@ const styles = StyleSheet.create({
   },
   processingText: {
     fontSize: 14,
-    color: colors.accent,
-  },
-  bgRemovalButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: '#E8F5E9',
-    padding: spacing.md,
-    borderRadius: 8,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    marginHorizontal: spacing.md,
-  },
-  bgRemovalButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
     color: colors.accent,
   },
   inputContainer: {
