@@ -193,6 +193,19 @@ export default function SettingsScreen({ navigation }) {
             </View>
             <Icon name="chevron-forward" size={20} color={colors.gray} />
           </TouchableOpacity>
+
+          {/* [NEW] Give Feedback Button */}
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('SendFeedback')}
+          >
+            <View style={styles.menuLeft}>
+              <Icon name="chatbox-ellipses-outline" size={24} color={colors.dark} />
+              <Text style={styles.menuText}>Give Feedback</Text>
+            </View>
+            <Icon name="chevron-forward" size={20} color={colors.gray} />
+          </TouchableOpacity>
+
         </View>
 
         {/* Spacer to push logout to bottom */}

@@ -227,7 +227,7 @@ export default function ChatScreen({ route, navigation }) {
       onPress: async () => {
         try {
           await Linking.openURL(option.url);
-        } catch (error) {
+        } catch (_error) {
           Alert.alert('App Not Available', `${option.name} is not installed or cannot be opened. Please install the app to use this option.`);
         }
       }
@@ -1291,7 +1291,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     gap: spacing.sm,
   },
-  // inputWrapper: { ... } removed duplicate
   inputWrapper: {
     flex: 1,
     flexDirection: 'row',

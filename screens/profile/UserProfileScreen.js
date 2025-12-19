@@ -22,7 +22,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -31,9 +30,8 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import useGuest from '../../hooks/useGuest';
 
@@ -41,42 +39,38 @@ import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
 import { colors, fonts, spacing } from '../../lib/theme';
 
+const ALERT_RED = '#FF6B6B';
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId, username, initialTab } = route.params;
+  
+  // Data State
   const [userPosts, setUserPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab || 'forFun');
-  const [stats, setStats] = useState({
-    posts: 0,
-    followers: 0,
-    following: 0,
-  });
+  const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
   const [userInfo, setUserInfo] = useState({
-    bio: '',
-    location: '',
-    area: '',
-    rating: 0,
-    reviewCount: 0,
-    reviews: [],
-    photoURL: null,
-    username: username || '',
+    bio: '', location: '', area: '', rating: 0, reviewCount: 0, reviews: [], photoURL: null, username: username || '',
   });
-  
-  // --- ENHANCED: Store reviews with live user data ---
-  const [reviewsWithUserData, setReviewsWithUserData] = useState([]);
-  
+
+  // UI State
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
+  const [reviewsWithUserData, setReviewsWithUserData] = useState([]);
+  const [androidMenuVisible, setAndroidMenuVisible] = useState(false);
+  
+  // Relation State
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followRequestStatus, setFollowRequestStatus] = useState(null); 
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
   const [mutualFollowers, setMutualFollowers] = useState([]);
   const [showAllMutuals, setShowAllMutuals] = useState(false);
-  const [androidMenuVisible, setAndroidMenuVisible] = useState(false);
+
+  // BLOCK & BAN STATE
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+  const [isUserBanned, setIsUserBanned] = useState(false); // [NEW] Added Ban State
 
   const db = getFirestore();
   const auth = getAuth();
@@ -184,31 +178,69 @@ export default function UserProfileScreen({ route, navigation }) {
   // --- MAIN DATA LOADING LOGIC ---
   const fetchScreenData = async () => {
     setLoading(true);
+    setIsUserBanned(false); // Reset on reload
+    setIsBlockedByMe(false);
+
     try {
         // 1. Check Block Status FIRST
-        let isBlocked = false;
         if (currentUser && currentUser.uid !== userId) {
             const blockRef = doc(db, 'users', currentUser.uid, 'blocked_users', userId);
             const blockSnap = await getDoc(blockRef);
-            isBlocked = blockSnap.exists();
+            if (blockSnap.exists()) {
+                setIsBlockedByMe(true);
+                setLoading(false);
+                return; // Stop here if blocked
+            }
         }
 
-        setIsBlockedByMe(isBlocked);
+        // 2. Load User Profile & CHECK BAN
+        const userDocRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists()) {
+            const userData = userDoc.data();
 
-        // 2. STOP if blocked
-        if (isBlocked) {
-            setLoading(false);
-            return; 
+            // [NEW] CRITICAL BAN CHECK
+            // Checks for EITHER 'active: false' OR 'isBanned: true'
+            if (userData.active === false || userData.isBanned === true) {
+                setIsUserBanned(true);
+                setLoading(false);
+                return; // Stop here if banned. Do NOT load posts.
+            }
+
+            // Map User Data
+            setUserInfo({
+                bio: userData.bio || '',
+                location: userData.location || '',
+                area: userData.area || '',
+                rating: userData.rating || 0,
+                reviewCount: userData.reviewCount || 0,
+                reviews: userData.reviews || [],
+                photoURL: userData.photoURL || null,
+                username: userData.username || username || 'User',
+            });
+            
+            setIsPrivateAccount(userData.isPrivate || false);
+            
+            const followers = userData.followers || [];
+            const following = userData.following || [];
+            setStats({
+                posts: 0, // Will update when posts load
+                followers: followers.length,
+                following: following.length,
+            });
+
+            // Relationships (Follow status, etc.)
+            if (currentUser) {
+                setIsFollowing(followers.includes(currentUser.uid));
+                await loadMutualsAndRequests(followers);
+            }
+
+            // 3. Load Posts (Only happens if NOT banned)
+            await loadUserPostsOnly();
         }
-
-        // 3. Load Profile & Posts only if NOT blocked
-        await Promise.all([
-            loadUserProfile(),
-            loadUserPostsOnly()
-        ]);
-
     } catch (error) {
-      console.error("Error loading screen:", error);
+        console.error("Error loading profile:", error);
     } finally {
         setLoading(false);
     }
@@ -222,106 +254,38 @@ export default function UserProfileScreen({ route, navigation }) {
     }, [userId])
   );
 
-  const loadUserProfile = async () => {
-    try {
-      const userDocRef = doc(db, 'users', userId);
-      const userDoc = await getDoc(userDocRef);
-      
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        setUserInfo({
-          bio: userData.bio || '',
-          location: userData.location || '',
-          area: userData.area || '',
-          rating: userData.rating || 0,
-          reviewCount: userData.reviewCount || 0,
-          reviews: userData.reviews || [],
-          photoURL: userData.photoURL || null,
-          username: userData.username || username || 'User',
-        });
-        
-        setIsPrivateAccount(userData.isPrivate || false);
-        
-        const followers = userData.followers || [];
-        const following = userData.following || [];
-        setStats(prev => ({
-          ...prev,
-          followers: followers.length,
-          following: following.length,
-        }));
-        
-        if (currentUser) {
-          setIsFollowing(followers.includes(currentUser.uid));
-          
-          // Mutual Followers
-          const currentUserDocRef = doc(db, 'users', currentUser.uid);
-          const currentUserDoc = await getDoc(currentUserDocRef);
-          if (currentUserDoc.exists()) {
-            const currentUserFollowing = currentUserDoc.data().following || [];
-            const mutuals = followers.filter(followerId => currentUserFollowing.includes(followerId));
-            
-            const mutualDetails = await Promise.all(
-              mutuals.map(async (mutualId) => {
-                const mutualDocRef = doc(db, 'users', mutualId);
-                const mutualDoc = await getDoc(mutualDocRef);
-                if (mutualDoc.exists()) {
-                  const mutualData = mutualDoc.data();
-                  return {
-                    uid: mutualId,
-                    username: mutualData.username || 'User',
-                    photoURL: mutualData.photoURL || null,
-                  };
-                }
-                return null;
-              })
-            );
-            setMutualFollowers(mutualDetails.filter(m => m !== null));
-          }
-          
-          // Follow Request Status
-          const requestQuery = query(
-            collection(db, 'followRequests'),
-            where('fromUserId', '==', currentUser.uid),
-            where('toUserId', '==', userId)
-          );
-          const requestSnapshot = await getDocs(requestQuery);
-          
-          if (!requestSnapshot.empty) {
-            const requestData = requestSnapshot.docs[0].data();
-            setFollowRequestStatus(requestData.status);
-          } else {
-            setFollowRequestStatus(null);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
-  };
-
+  // Split out helper to load posts (called only if active)
   const loadUserPostsOnly = async () => {
     try {
-      const q = query(
-        collection(db, 'wardrobe-plug-fyp/user/images'),
-        where('ownerUid', '==', userId)
-      );
+      const q = query(collection(db, 'wardrobe-plug-fyp/user/images'), where('ownerUid', '==', userId));
       const querySnapshot = await getDocs(q);
-      const posts = querySnapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        .sort((a, b) => {
-          const dateA = a.uploadedAt?.toDate?.() || new Date(0);
-          const dateB = b.uploadedAt?.toDate?.() || new Date(0);
-          return dateB - dateA;
-        });
+      const posts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (b.uploadedAt?.toDate?.() || new Date()) - (a.uploadedAt?.toDate?.() || new Date()));
       
       setUserPosts(posts);
       setStats(prev => ({ ...prev, posts: posts.length }));
-    } catch (error) {
-      console.error('Error loading user posts:', error);
-    }
+    } catch (error) { console.error(error); }
+  };
+
+  // Split out helper for mutuals/requests
+  const loadMutualsAndRequests = async (followers) => {
+      try {
+        const currentUserDocRef = doc(db, 'users', currentUser.uid);
+        const currentUserDoc = await getDoc(currentUserDocRef);
+        if (currentUserDoc.exists()) {
+            const currentUserFollowing = currentUserDoc.data().following || [];
+            const mutuals = followers.filter(followerId => currentUserFollowing.includes(followerId));
+            const mutualDetails = await Promise.all(mutuals.map(async (mid) => {
+                const mDoc = await getDoc(doc(db, 'users', mid));
+                return mDoc.exists() ? { uid: mid, username: mDoc.data().username, photoURL: mDoc.data().photoURL } : null;
+            }));
+            setMutualFollowers(mutualDetails.filter(m => m));
+        }
+        
+        const requestQuery = query(collection(db, 'followRequests'), where('fromUserId', '==', currentUser.uid), where('toUserId', '==', userId));
+        const requestSnapshot = await getDocs(requestQuery);
+        setFollowRequestStatus(!requestSnapshot.empty ? requestSnapshot.docs[0].data().status : null);
+      } catch (e) { console.error(e); }
   };
 
   const logProfileView = async () => {
@@ -331,69 +295,38 @@ export default function UserProfileScreen({ route, navigation }) {
       try {
         const viewerDocRef = doc(db, 'users', currentUser.uid);
         const viewerDoc = await getDoc(viewerDocRef);
-        if (viewerDoc.exists()) {
-          viewerName = viewerDoc.data().username || viewerName;
-        }
-      } catch (err) {
-        console.error('Error fetching viewer name:', err);
-      }
+        if (viewerDoc.exists()) viewerName = viewerDoc.data().username || viewerName;
+      } catch (err) { console.error(err); }
 
       await addDoc(collection(db, 'notifications'), {
         userId: userId,
         type: 'profile_view',
-        message: `${viewerName} viewed your profile`,
+        message: `${viewerName} requested to follow`,
         viewerId: currentUser.uid,
         viewerName: viewerName,
         read: false,
         createdAt: new Date(),
       });
-    } catch (error) {
-      console.error('Error logging profile view:', error);
-    }
+    } catch (error) { console.error(error); }
   };
 
   // --- ACTION HANDLERS ---
-
   const showMenu = () => {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Report User', 'Block User'],
-          destructiveButtonIndex: 2,
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) handleReport();
-          if (buttonIndex === 2) handleBlock();
-        }
+        { options: ['Cancel', 'Report User', 'Block User'], destructiveButtonIndex: 2, cancelButtonIndex: 0 },
+        (idx) => { if (idx === 1) handleReport(); if (idx === 2) handleBlock(); }
       );
-    } else {
-      setAndroidMenuVisible(true);
-    }
+    } else { setAndroidMenuVisible(true); }
   };
   
   const renderAndroidMenu = () => (
-    <Modal
-      visible={androidMenuVisible}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setAndroidMenuVisible(false)}
-    >
-      <TouchableOpacity
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}
-        activeOpacity={1}
-        onPress={() => setAndroidMenuVisible(false)}
-      >
+    <Modal visible={androidMenuVisible} transparent animationType="fade" onRequestClose={() => setAndroidMenuVisible(false)}>
+      <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setAndroidMenuVisible(false)}>
         <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 }}>
-          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleReport(); }} style={{ paddingVertical: 16 }}>
-            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Report User</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleBlock(); }} style={{ paddingVertical: 16 }}>
-            <Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Block User</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setAndroidMenuVisible(false)} style={{ paddingVertical: 16 }}>
-            <Text style={{ color: '#333', fontSize: 16, textAlign: 'center' }}>Cancel</Text>
-          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleReport(); }} style={{ paddingVertical: 16 }}><Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Report User</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => { setAndroidMenuVisible(false); handleBlock(); }} style={{ paddingVertical: 16 }}><Text style={{ color: '#d32f2f', fontSize: 16, textAlign: 'center' }}>Block User</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setAndroidMenuVisible(false)} style={{ paddingVertical: 16 }}><Text style={{ color: '#333', fontSize: 16, textAlign: 'center' }}>Cancel</Text></TouchableOpacity>
         </View>
       </TouchableOpacity>
     </Modal>
@@ -402,7 +335,6 @@ export default function UserProfileScreen({ route, navigation }) {
   const openMapWithLocation = async () => {
     const location = userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location;
     if (!location) return;
-
     const encodedLocation = encodeURIComponent(location);
     
     // Try different map apps in order of preference
@@ -428,61 +360,31 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleReport = async () => {
-    try {
-      if (!currentUser) {
-        Alert.alert('Error', 'You must be logged in to report users.');
-        return;
-      }
-      
-      await addDoc(collection(db, 'reported_users'), {
-        reporter_id: currentUser.uid,
-        reporter_username: currentUser.displayName || 'User',
-        reported_user_id: userId,
-        reported_user_name: userInfo.username,
-        reason: "Inappropriate behavior", 
-        status: 'pending',
-        created_at: serverTimestamp(),
-      });
-
-      Alert.alert('Report Sent', 'User has been reported. We will review this account.');
-    } catch (error) {
-      console.error("Error reporting:", error);
-      Alert.alert('Error', 'Could not report user. Please try again.');
-    }
+      if (!currentUser) return Alert.alert('Error', 'Login required.');
+      try {
+          await addDoc(collection(db, 'reported_users'), {
+            reporter_id: currentUser.uid, reporter_username: currentUser.displayName || 'User',
+            reported_user_id: userId, reported_user_name: userInfo.username,
+            reason: "Inappropriate behavior", status: 'pending', created_at: serverTimestamp(),
+          });
+          Alert.alert('Report Sent', 'User reported.');
+      } catch (_e) { Alert.alert('Error', 'Failed to report.'); }
   };
 
   const handleBlock = () => {
     if (!currentUser) return;
-
-    Alert.alert(
-      'Block User',
-      'Are you sure? You will no longer see their posts and they won\'t be able to find your account.',
-      [
+    Alert.alert('Block User', 'Block this user?', [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Block',
-          style: 'destructive',
-          onPress: async () => {
+        { text: 'Block', style: 'destructive', onPress: async () => {
             try {
-              // Add to 'blocked_users' subcollection
-              await setDoc(doc(db, 'users', currentUser.uid, 'blocked_users', userId), {
-                blocked_user_id: userId,
-                blocked_user_name: userInfo.username,
-                blocked_user_photo: userInfo.photoURL,
-                blocked_at: serverTimestamp()
-              });
-
-              // Update UI immediately
-              setIsBlockedByMe(true);
-              Alert.alert('Blocked', 'User has been blocked.');
-            } catch (error) {
-              console.error("Error blocking:", error);
-              Alert.alert('Error', 'Could not block user.');
-            }
-          }
-        }
-      ]
-    );
+                await setDoc(doc(db, 'users', currentUser.uid, 'blocked_users', userId), {
+                    blocked_user_id: userId, blocked_user_name: userInfo.username, blocked_at: serverTimestamp()
+                });
+                setIsBlockedByMe(true);
+                Alert.alert('Blocked', 'User blocked.');
+            } catch (_e) { Alert.alert('Error', 'Failed to block.'); }
+        }}
+    ]);
   };
 
   const handleUnblock = async () => {
@@ -514,122 +416,33 @@ export default function UserProfileScreen({ route, navigation }) {
     }
 
     if (isFollowing) {
-      Alert.alert(
-        'Unfollow',
-        'Do you wish to unfollow?',
-        [
-          { text: 'No', style: 'cancel' },
-          {
-            text: 'Yes',
-            onPress: async () => {
-              try {
-                setFollowLoading(true);
-                const userDocRef = doc(db, 'users', userId);
-                const currentUserDocRef = doc(db, 'users', currentUser.uid);
+        Alert.alert('Unfollow', 'Unfollow user?', [{ text: 'No', style: 'cancel' }, { text: 'Yes', onPress: async () => {
+            try { setFollowLoading(true);
+                const userDocRef = doc(db, 'users', userId); const currentUserDocRef = doc(db, 'users', currentUser.uid);
+                await updateDoc(userDocRef, { followers: arrayRemove(currentUser.uid) }); await updateDoc(currentUserDocRef, { following: arrayRemove(userId) });
                 
-                await updateDoc(userDocRef, { followers: arrayRemove(currentUser.uid) });
-                await updateDoc(currentUserDocRef, { following: arrayRemove(userId) });
+                const q = query(collection(db, 'followRequests'), where('fromUserId', '==', currentUser.uid), where('toUserId', '==', userId));
+                const snap = await getDocs(q); snap.forEach(async (d) => await deleteDoc(doc(db, 'followRequests', d.id)));
                 
-                const requestQuery = query(
-                  collection(db, 'followRequests'),
-                  where('fromUserId', '==', currentUser.uid),
-                  where('toUserId', '==', userId)
-                );
-                const requestSnapshot = await getDocs(requestQuery);
-                requestSnapshot.docs.forEach(async (docSnapshot) => {
-                  await deleteDoc(doc(db, 'followRequests', docSnapshot.id));
-                });
-                
-                setIsFollowing(false);
-                setFollowRequestStatus(null);
-                setStats(prev => ({ ...prev, followers: prev.followers - 1 }));
-              } catch (error) {
-                console.error('Error unfollowing:', error);
-                Alert.alert('Error', 'Failed to unfollow. Please try again.');
-              } finally {
-                setFollowLoading(false);
-              }
-            }
-          }
-        ]
-      );
-    } else if (followRequestStatus === 'pending') {
-      Alert.alert(
-        'Cancel Request',
-        'Do you want to cancel your follow request?',
-        [
-          { text: 'No', style: 'cancel' },
-          {
-            text: 'Yes',
-            onPress: async () => {
-              try {
-                setFollowLoading(true);
-                const requestQuery = query(
-                  collection(db, 'followRequests'),
-                  where('fromUserId', '==', currentUser.uid),
-                  where('toUserId', '==', userId)
-                );
-                const requestSnapshot = await getDocs(requestQuery);
-                requestSnapshot.docs.forEach(async (docSnapshot) => {
-                  await deleteDoc(doc(db, 'followRequests', docSnapshot.id));
-                });
-                setFollowRequestStatus(null);
-              } catch (error) {
-                console.error('Error canceling request:', error);
-                Alert.alert('Error', 'Failed to cancel request. Please try again.');
-              } finally {
-                setFollowLoading(false);
-              }
-            }
-          }
-        ]
-      );
+                setIsFollowing(false); setFollowRequestStatus(null); setStats(prev => ({ ...prev, followers: prev.followers - 1 }));
+            } catch (e) { console.error(e); } finally { setFollowLoading(false); }
+        }}]);
     } else {
-      try {
-        setFollowLoading(true);
-        if (isPrivateAccount) {
-          let requesterName = currentUser.displayName || 'User';
-          try {
-            const requesterDocRef = doc(db, 'users', currentUser.uid);
-            const requesterDoc = await getDoc(requesterDocRef);
-            if (requesterDoc.exists()) {
-              requesterName = requesterDoc.data().username || requesterName;
+        try { setFollowLoading(true);
+            if (isPrivateAccount) {
+                // Request logic
+                let reqName = currentUser.displayName || 'User';
+                const userD = await getDoc(doc(db,'users',currentUser.uid)); if(userD.exists()) reqName = userD.data().username || reqName;
+                await addDoc(collection(db,'followRequests'), { fromUserId: currentUser.uid, fromUserName: reqName, toUserId: userId, status: 'pending', createdAt: new Date() });
+                await addDoc(collection(db,'notifications'), { userId, type: 'follow_request', message: `${reqName} requested follow`, fromUserId: currentUser.uid, read: false, createdAt: new Date() });
+                setFollowRequestStatus('pending'); Alert.alert('Request Sent');
+            } else {
+                // Follow logic
+                await updateDoc(doc(db,'users',userId), { followers: arrayUnion(currentUser.uid) });
+                await updateDoc(doc(db,'users',currentUser.uid), { following: arrayUnion(userId) });
+                setIsFollowing(true); setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
             }
-          } catch (err) {
-            console.error('Error fetching requester name:', err);
-          }
-          await addDoc(collection(db, 'followRequests'), {
-            fromUserId: currentUser.uid,
-            fromUserName: requesterName,
-            toUserId: userId,
-            status: 'pending',
-            createdAt: new Date(),
-          });
-          await addDoc(collection(db, 'notifications'), {
-            userId: userId,
-            type: 'follow_request',
-            message: `${requesterName} requested to follow you`,
-            fromUserId: currentUser.uid,
-            fromUserName: requesterName,
-            read: false,
-            createdAt: new Date(),
-          });
-          setFollowRequestStatus('pending');
-          Alert.alert('Request Sent', 'Your follow request has been sent');
-        } else {
-          const userDocRef = doc(db, 'users', userId);
-          const currentUserDocRef = doc(db, 'users', currentUser.uid);
-          await updateDoc(userDocRef, { followers: arrayUnion(currentUser.uid) });
-          await updateDoc(currentUserDocRef, { following: arrayUnion(userId) });
-          setIsFollowing(true);
-          setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
-        }
-      } catch (error) {
-        console.error('Error following/requesting:', error);
-        Alert.alert('Error', 'Failed to follow/request. Please try again.');
-      } finally {
-        setFollowLoading(false);
-      }
+        } catch(e){ console.error(e); } finally { setFollowLoading(false); }
     }
   };
 
@@ -692,106 +505,49 @@ export default function UserProfileScreen({ route, navigation }) {
       const userDocRef = doc(db, 'users', userId);
       let reviewerName = currentUser?.displayName || 'Anonymous';
       let reviewerPhoto = null;
-      try {
-        const reviewerDocRef = doc(db, 'users', currentUser.uid);
-        const reviewerDoc = await getDoc(reviewerDocRef);
-        if (reviewerDoc.exists()) {
-          const reviewerData = reviewerDoc.data();
-          reviewerName = reviewerData.username || reviewerName;
-          reviewerPhoto = reviewerData.photoURL || null;
-        }
-      } catch (err) {
-        console.error('Error fetching reviewer name:', err);
+      const me = await getDoc(doc(db,'users',currentUser.uid));
+      if(me.exists()) {
+        reviewerName = me.data().username;
+        reviewerPhoto = me.data().photoURL;
       }
-
-
-      // Remove all previous reviews by this userId (even if username changed)
-      const userProfileDoc = await getDoc(userDocRef);
-      let existingReviews = userProfileDoc.exists() ? (userProfileDoc.data().reviews || []) : [];
-      // Remove all reviews with this userId
-      const filteredReviews = existingReviews.filter(r => r.userId !== currentUser.uid);
-
-      const newReview = {
+      const rev = {
         userId: currentUser.uid,
         userName: reviewerName,
         userPhoto: reviewerPhoto,
         rating: reviewRating,
         text: reviewText.trim(),
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       };
-
-      // Overwrite the reviews array with the filtered + new review
-      await updateDoc(userDocRef, {
-        reviews: [...filteredReviews, newReview]
-      });
-
-      const updatedUserDoc = await getDoc(userDocRef);
-      const updatedReviews = updatedUserDoc.data().reviews || [];
-      const avgRating = updatedReviews.reduce((sum, r) => sum + r.rating, 0) / updatedReviews.length;
-
-      await updateDoc(userDocRef, {
-        rating: avgRating,
-        reviewCount: updatedReviews.length
-      });
-
+      await updateDoc(userDocRef, { reviews: arrayUnion(rev) });
+      const updated = await getDoc(userDocRef);
+      const allRevs = updated.data().reviews || [];
+      const avg = allRevs.reduce((s,r)=>s+r.rating,0)/allRevs.length;
+      await updateDoc(userDocRef, { rating: avg, reviewCount: allRevs.length });
       setShowReviewModal(false);
       setReviewRating(0);
       setReviewText('');
-
-      loadUserProfile();
-
-      Alert.alert('Success', 'Your review has been submitted!');
-    } catch (error) {
-      console.error('Error submitting review:', error);
-      Alert.alert('Error', 'Failed to submit review. Please try again.');
+      fetchScreenData();
+      Alert.alert('Success','Review submitted');
+    } catch(_e) {
+      console.error(_e);
+      Alert.alert('Error', 'Failed to submit review');
     }
   };
 
   const handleDeleteReview = async (review) => {
-    if (review.userId !== currentUser?.uid) {
-      Alert.alert('Error', 'You can only delete your own reviews');
-      return;
-    }
-
-    Alert.alert(
-      'Delete Review',
-      'Are you sure you want to delete this review?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const userDocRef = doc(db, 'users', userId);
-              await updateDoc(userDocRef, {
-                reviews: arrayRemove(review)
-              });
-
-              const updatedUserDoc = await getDoc(userDocRef);
-              const updatedReviews = updatedUserDoc.data().reviews || [];
-              const avgRating = updatedReviews.length > 0 
-                ? updatedReviews.reduce((sum, r) => sum + r.rating, 0) / updatedReviews.length 
-                : 0;
-              
-              await updateDoc(userDocRef, {
-                rating: avgRating,
-                reviewCount: updatedReviews.length
-              });
-
-              loadUserProfile();
-              Alert.alert('Success', 'Review deleted successfully');
-            } catch (error) {
-              console.error('Error deleting review:', error);
-              Alert.alert('Error', 'Failed to delete review. Please try again.');
-            }
-          }
-        }
-      ]
-    );
+      if (review.userId !== currentUser?.uid) return;
+      Alert.alert('Delete', 'Delete review?', [{text:'Cancel'},{text:'Delete', style:'destructive', onPress: async()=>{
+          try {
+              const userRef = doc(db,'users',userId); await updateDoc(userRef, { reviews: arrayRemove(review) });
+              const updated = await getDoc(userRef); const allRevs = updated.data().reviews || [];
+              const avg = allRevs.length > 0 ? allRevs.reduce((s,r)=>s+r.rating,0)/allRevs.length : 0;
+              await updateDoc(userRef, { rating: avg, reviewCount: allRevs.length });
+              fetchScreenData(); Alert.alert('Success', 'Deleted');
+          } catch(_e){ console.error(_e); }
+      }}]);
   };
 
-  // Filter posts based on privacy and follow status
+  // Filter posts
   const forFunPosts = userPosts.filter(post => post.postType === 'forFun');
   const forSwapPosts = userPosts.filter(post => post.postType === 'forSwap');
   const canViewForFunPosts = !isPrivateAccount || isFollowing || userId === currentUser?.uid;
@@ -805,33 +561,20 @@ export default function UserProfileScreen({ route, navigation }) {
     );
   }
 
-  // --- BLOCKED STATE RENDER ---
+  // --- 1. BLOCKED VIEW ---
   if (isBlockedByMe) {
       return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
-                    <Icon name="arrow-back" size={24} color={colors.dark} />
-                </TouchableOpacity>
-                <View style={styles.headerCenter}>
-                    <Text style={styles.logo}>Blocked User</Text>
-                </View>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}><Icon name="arrow-back" size={24} color={colors.dark} /></TouchableOpacity>
+                <View style={styles.headerCenter}><Text style={styles.logo}>Blocked User</Text></View>
                 <View style={styles.headerRight} />
             </View>
-            
             <View style={[styles.centerContent, {flex: 1, padding: 20}]}>
                 <Icon name="ban" size={64} color={colors.gray} />
-                <Text style={{fontSize: 18, fontWeight: 'bold', marginTop: 20, color: colors.dark}}>
-                    You have blocked this user
-                </Text>
-                <Text style={{textAlign: 'center', color: colors.gray, marginTop: 10, marginBottom: 30}}>
-                    You cannot see their posts or profile information.
-                </Text>
-                
-                <TouchableOpacity 
-                    style={{backgroundColor: colors.dark, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8}}
-                    onPress={handleUnblock}
-                >
+                <Text style={{fontSize: 18, fontWeight: 'bold', marginTop: 20, color: colors.dark}}>Blocked</Text>
+                <Text style={{textAlign: 'center', color: colors.gray, marginTop: 10, marginBottom: 20}}>You have blocked this user.</Text>
+                <TouchableOpacity style={{backgroundColor: colors.dark, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8}} onPress={handleUnblock}>
                     <Text style={{color: '#fff', fontWeight: 'bold'}}>Unblock</Text>
                 </TouchableOpacity>
             </View>
@@ -839,21 +582,40 @@ export default function UserProfileScreen({ route, navigation }) {
       );
   }
 
-  // --- NORMAL RENDER ---
+  // --- 2. BANNED VIEW (NEW) ---
+  if (isUserBanned) {
+      return (
+        <SafeAreaView style={styles.container}>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
+                    <Icon name="arrow-back" size={24} color={colors.dark} />
+                </TouchableOpacity>
+                <View style={styles.headerCenter}>
+                    <Text style={styles.logo}>Suspended</Text>
+                </View>
+                <View style={styles.headerRight} />
+            </View>
+            <View style={[styles.centerContent, {flex: 1, padding: 20}]}>
+                <Icon name="alert-circle" size={64} color={ALERT_RED} />
+                <Text style={{fontSize: 20, fontWeight: 'bold', marginTop: 20, color: colors.dark}}>
+                    Account Suspended
+                </Text>
+                <Text style={{textAlign: 'center', color: colors.gray, marginTop: 10, fontSize: 14, lineHeight: 20}}>
+                    This user has been banned for violating our community guidelines. Their posts and profile are no longer available.
+                </Text>
+            </View>
+        </SafeAreaView>
+      );
+  }
+
+  // --- 3. NORMAL VIEW ---
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
-      
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
-          <Icon name="arrow-back" size={24} color={colors.dark} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter} pointerEvents="none">
-          <Text style={styles.logo} numberOfLines={1}>{userInfo.username}</Text>
-        </View>
-        <TouchableOpacity onPress={showMenu} style={styles.headerRight}>
-          <Icon name="ellipsis-vertical" size={24} color={colors.dark} />
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}><Icon name="arrow-back" size={24} color={colors.dark} /></TouchableOpacity>
+        <View style={styles.headerCenter} pointerEvents="none"><Text style={styles.logo} numberOfLines={1}>{userInfo.username}</Text></View>
+        <TouchableOpacity onPress={showMenu} style={styles.headerRight}><Icon name="ellipsis-vertical" size={24} color={colors.dark} /></TouchableOpacity>
       </View>
 
       {Platform.OS === 'android' && renderAndroidMenu()}
@@ -861,212 +623,84 @@ export default function UserProfileScreen({ route, navigation }) {
         <View style={styles.profileSection}>
           <View style={styles.profileTopRow}>
             <View style={styles.profileImageContainer}>
-              {userInfo.photoURL ? (
-                <Image source={{ uri: userInfo.photoURL }} style={styles.profileImage} />
-              ) : (
-                <View style={styles.profileImagePlaceholder}>
-                  <Icon name="person" size={40} color={colors.gray} />
-                </View>
-              )}
+              {userInfo.photoURL ? <Image source={{ uri: userInfo.photoURL }} style={styles.profileImage} /> : <View style={styles.profileImagePlaceholder}><Icon name="person" size={40} color={colors.gray} /></View>}
             </View>
-
             <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{stats.posts}</Text>
-                <Text style={styles.statLabel}>posts</Text>
-              </View>
-              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'followers' })}>
-                <Text style={styles.statNumber}>{stats.followers}</Text>
-                <Text style={styles.statLabel}>followers</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'following' })}>
-                <Text style={styles.statNumber}>{stats.following}</Text>
-                <Text style={styles.statLabel}>following</Text>
-              </TouchableOpacity>
+              <View style={styles.statItem}><Text style={styles.statNumber}>{stats.posts}</Text><Text style={styles.statLabel}>posts</Text></View>
+              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'followers' })}><Text style={styles.statNumber}>{stats.followers}</Text><Text style={styles.statLabel}>followers</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('FollowList', { userId, type: 'following' })}><Text style={styles.statNumber}>{stats.following}</Text><Text style={styles.statLabel}>following</Text></TouchableOpacity>
             </View>
           </View>
-
           <Text style={styles.userName}>{userInfo.username}</Text>
           <Text style={styles.userBio}>{userInfo.bio}</Text>
-          
           {(userInfo.location || userInfo.area) && (
             <TouchableOpacity style={styles.locationContainer} onPress={openMapWithLocation}>
               <Icon name="location-outline" size={16} color={colors.dark} />
-              <Text style={styles.locationText}>
-                {userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location}
-              </Text>
+              <Text style={styles.locationText}>{userInfo.area ? `${userInfo.location}, ${userInfo.area}` : userInfo.location}</Text>
               <Icon name="open-outline" size={14} color={colors.gray} style={{ marginLeft: 4 }} />
             </TouchableOpacity>
           )}
-
           <View style={styles.actionButtons}>
-            <TouchableOpacity 
-              style={[styles.actionButton, isFollowing && styles.followingButton]}
-              onPress={handleFollowToggle}
-              disabled={followLoading}
-            >
-              {followLoading ? (
-                <ActivityIndicator size="small" color={colors.dark} />
-              ) : (
-                <Text style={styles.actionButtonText}>
-                  {isFollowing ? 'Following' : followRequestStatus === 'pending' ? 'Requested' : isPrivateAccount ? 'Request' : 'Follow'}
-                </Text>
-              )}
+            <TouchableOpacity style={[styles.actionButton, isFollowing && styles.followingButton]} onPress={handleFollowToggle} disabled={followLoading}>
+              {followLoading ? <ActivityIndicator size="small" color={colors.dark} /> : <Text style={styles.actionButtonText}>{isFollowing ? 'Following' : followRequestStatus === 'pending' ? 'Requested' : isPrivateAccount ? 'Request' : 'Follow'}</Text>}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton} onPress={handleMessage}>
-              <Text style={styles.actionButtonText}>Message</Text>
-            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={handleMessage}><Text style={styles.actionButtonText}>Message</Text></TouchableOpacity>
           </View>
-
           {mutualFollowers.length > 0 && (
             <View style={styles.mutualFollowersSection}>
-              <TouchableOpacity 
-                onPress={() => setShowAllMutuals(!showAllMutuals)}
-                style={styles.mutualFollowersHeader}
-              >
-                <View style={styles.mutualAvatarsRow}>
-                  {mutualFollowers.slice(0, showAllMutuals ? mutualFollowers.length : 1).map((mutual, index) => (
-                    <TouchableOpacity
-                      key={mutual.uid}
-                      onPress={() => navigation.navigate('UserProfile', { userId: mutual.uid, username: mutual.username })}
-                      style={[styles.mutualAvatar, index > 0 && { marginLeft: -8 }]}
-                    >
-                      {mutual.photoURL ? (
-                        <Image source={{ uri: mutual.photoURL }} style={styles.mutualAvatarImage} />
-                      ) : (
-                        <View style={styles.mutualAvatarPlaceholder}>
-                          <Icon name="person" size={16} color={colors.gray} />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={styles.mutualFollowersText}>
-                  Followed by <Text style={styles.mutualFollowersName}>{mutualFollowers[0].username}</Text>
-                  {mutualFollowers.length > 1 && <Text> and {mutualFollowers.length - 1} other{mutualFollowers.length > 2 ? 's' : ''} you follow</Text>}
-                </Text>
-                {mutualFollowers.length > 1 && <Icon name={showAllMutuals ? 'chevron-up' : 'chevron-down'} size={18} color={colors.gray} />}
-              </TouchableOpacity>
-
-              {showAllMutuals && mutualFollowers.length > 1 && (
-                <View style={styles.mutualFollowersList}>
-                  {mutualFollowers.slice(1).map((mutual) => (
-                    <TouchableOpacity
-                      key={mutual.uid}
-                      style={styles.mutualFollowerItem}
-                      onPress={() => navigation.navigate('UserProfile', { userId: mutual.uid, username: mutual.username })}
-                    >
-                      {mutual.photoURL ? (
-                        <Image source={{ uri: mutual.photoURL }} style={styles.mutualFollowerItemImage} />
-                      ) : (
-                        <View style={styles.mutualFollowerItemPlaceholder}>
-                          <Icon name="person" size={20} color={colors.gray} />
-                        </View>
-                      )}
-                      <Text style={styles.mutualFollowerItemName}>{mutual.username}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+               <TouchableOpacity onPress={() => setShowAllMutuals(!showAllMutuals)} style={styles.mutualFollowersHeader}>
+                 <View style={styles.mutualAvatarsRow}>
+                   {mutualFollowers.slice(0, showAllMutuals ? mutualFollowers.length : 1).map((mutual, index) => (
+                     <Image key={mutual.uid} source={mutual.photoURL ? { uri: mutual.photoURL } : null} style={[styles.mutualAvatar, index > 0 && { marginLeft: -8, backgroundColor:'#ccc' }]} />
+                   ))}
+                 </View>
+                 <Text style={styles.mutualFollowersText}>Followed by {mutualFollowers[0].username} {mutualFollowers.length > 1 && `and ${mutualFollowers.length - 1} others`}</Text>
+               </TouchableOpacity>
             </View>
           )}
         </View>
 
         <View style={styles.ratingSection}>
-          <View style={styles.ratingHeader}>
-            <View style={styles.ratingLeft}>
-              <Text style={styles.ratingScore}>{userInfo.rating.toFixed(1)}</Text>
-              <View style={styles.starsContainer}>
-                {[1, 2, 3, 4, 5].map(star => (
-                  <Icon 
-                    key={star}
-                    name={star <= Math.floor(userInfo.rating) ? 'star' : star === Math.ceil(userInfo.rating) ? 'star-half' : 'star-outline'}
-                    size={20}
-                    color={colors.highlight}
-                  />
-                ))}
-              </View>
-            </View>
-            <TouchableOpacity style={styles.rateButton} onPress={handleRateUser}>
-              <Text style={styles.rateButtonText}>Rate</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.reviewsTitle}>Reviews ({userInfo.reviewCount})</Text>
-          {userInfo.reviewCount === 0 ? (
-            <View style={styles.noReviewsContainer}>
-              <Text style={styles.noReviewsText}>No reviews yet</Text>
-            </View>
-          ) : (
-            reviewsWithUserData.map((review, index) => (
-              <View key={index} style={styles.reviewItem}>
-                {review.userPhoto ? (
-                  <Image source={{ uri: review.userPhoto }} style={styles.reviewUserImage} />
-                ) : (
-                  <Icon name="person-circle" size={40} color={colors.gray} />
-                )}
-                <View style={styles.reviewContent}>
-                  <View style={styles.reviewHeader}>
-                    <Text style={styles.reviewAuthor}>{review.userName}</Text>
-                    {review.userId === currentUser?.uid && (
-                      <TouchableOpacity onPress={() => handleDeleteReview(review)}>
-                        <Icon name="trash-outline" size={18} color={colors.gray} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  <Text style={styles.reviewText}>{review.text}</Text>
-                  <View style={styles.reviewStars}>
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <Icon key={star} name={star <= review.rating ? 'star' : 'star-outline'} size={14} color={colors.highlight} />
-                    ))}
-                  </View>
+            <View style={styles.ratingHeader}>
+                <View style={styles.ratingLeft}>
+                    <Text style={styles.ratingScore}>{userInfo.rating.toFixed(1)}</Text>
+                    <View style={styles.starsContainer}>
+                        {[1, 2, 3, 4, 5].map(star => <Icon key={star} name={star <= Math.floor(userInfo.rating) ? 'star' : 'star-outline'} size={20} color={colors.highlight} />)}
+                    </View>
                 </View>
-              </View>
-            ))
-          )}
-
-
+                <TouchableOpacity style={styles.rateButton} onPress={handleRateUser}><Text style={styles.rateButtonText}>Rate</Text></TouchableOpacity>
+            </View>
+            <Text style={styles.reviewsTitle}>Reviews ({userInfo.reviewCount})</Text>
+            {userInfo.reviews.map((r, i) => (
+                <View key={i} style={styles.reviewItem}>
+                    <Image source={r.userPhoto ? {uri: r.userPhoto} : null} style={styles.reviewUserImage} />
+                    <View style={styles.reviewContent}>
+                        <View style={styles.reviewHeader}>
+                            <Text style={styles.reviewAuthor}>{r.userName}</Text>
+                            {r.userId === currentUser?.uid && <TouchableOpacity onPress={()=>handleDeleteReview(r)}><Icon name="trash-outline" size={18} color={colors.gray}/></TouchableOpacity>}
+                        </View>
+                        <Text style={styles.reviewText}>{r.text}</Text>
+                        <View style={styles.reviewStars}>{[1,2,3,4,5].map(s=><Icon key={s} name={s<=r.rating?'star':'star-outline'} size={14} color={colors.highlight}/>)}</View>
+                    </View>
+                </View>
+            ))}
         </View>
 
         <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'forFun' && styles.activeTab]}
-            onPress={() => setActiveTab('forFun')}
-          >
-            <Icon name="happy-outline" size={20} color={colors.dark} />
-            <Text style={styles.tabText}>For Fun</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'forSwap' && styles.activeTab]}
-            onPress={() => setActiveTab('forSwap')}
-          >
-            <Icon name="swap-horizontal-outline" size={20} color={colors.dark} />
-            <Text style={styles.tabText}>For Swap</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tab, activeTab === 'forFun' && styles.activeTab]} onPress={() => setActiveTab('forFun')}><Text style={styles.tabText}>For Fun</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.tab, activeTab === 'forSwap' && styles.activeTab]} onPress={() => setActiveTab('forSwap')}><Text style={styles.tabText}>For Swap</Text></TouchableOpacity>
         </View>
 
         <View style={styles.postsContainer}>
           {displayPosts.length === 0 ? (
             <View style={styles.emptyState}>
-              <Icon name={activeTab === 'forFun' && !canViewForFunPosts ? 'lock-closed-outline' : 'images-outline'} size={64} color={colors.gray} />
-              <Text style={styles.emptyStateText}>
-                {activeTab === 'forFun' && !canViewForFunPosts 
-                  ? 'This Account is Private'
-                  : `No ${activeTab === 'forFun' ? 'Fun' : 'Swap'} Posts`}
-              </Text>
-              <Text style={styles.emptyStateSubtext}>
-                {activeTab === 'forFun' && !canViewForFunPosts 
-                  ? 'Follow this account to see their For Fun posts'
-                  : 'This user hasn\'t posted anything yet'}
-              </Text>
+                <Icon name={activeTab === 'forFun' && !canViewForFunPosts ? 'lock-closed-outline' : 'images-outline'} size={64} color={colors.gray} />
+                <Text style={styles.emptyStateText}>{activeTab === 'forFun' && !canViewForFunPosts ? 'This Account is Private' : `No ${activeTab === 'forFun' ? 'Fun' : 'Swap'} Posts`}</Text>
             </View>
           ) : (
             <View style={styles.postsGrid}>
               {displayPosts.map(post => (
-                <TouchableOpacity
-                  key={post.id}
-                  style={styles.postItem}
-                  onPress={() => handlePostPress(post)}
-                >
+                <TouchableOpacity key={post.id} style={styles.postItem} onPress={() => handlePostPress(post)}>
                   <Image source={{ uri: post.url }} style={styles.postImage} />
                   {activeTab === 'forSwap' && (
                     <View style={[
@@ -1089,67 +723,6 @@ export default function UserProfileScreen({ route, navigation }) {
           )}
         </View>
       </ScrollView>
-
-      {/* Review Modal */}
-      <Modal
-        visible={showReviewModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowReviewModal(false)}
-      >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <TouchableOpacity 
-            style={styles.modalOverlay} 
-            activeOpacity={1} 
-            onPress={() => setShowReviewModal(false)}
-          >
-            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-              <ScrollView 
-                contentContainerStyle={styles.modalScrollContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                <View style={styles.modalContent}>
-                  <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Rate</Text>
-                    <TouchableOpacity onPress={() => setShowReviewModal(false)}>
-                      <Icon name="close" size={24} color={colors.dark} />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.modalLabel}>Your Rating</Text>
-                  <View style={styles.modalStarsContainer}>
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <TouchableOpacity key={star} onPress={() => setReviewRating(star)}>
-                        <Icon 
-                          name={star <= reviewRating ? 'star' : 'star-outline'}
-                          size={36}
-                          color={colors.highlight}
-                        />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <Text style={styles.modalLabel}>Your Review</Text>
-                  <TextInput
-                    style={styles.reviewInput}
-                    placeholder="Write your review here..."
-                    value={reviewText}
-                    onChangeText={setReviewText}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                  />
-                  <TouchableOpacity style={styles.submitButton} onPress={handleSubmitReview}>
-                    <Text style={styles.submitButtonText}>Submit Review</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </Modal>
-
       <BottomNavBar navigation={navigation} activeRoute="Home" />
     </SafeAreaView>
   );
