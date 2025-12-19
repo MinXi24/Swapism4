@@ -18,27 +18,27 @@ import {
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActionSheetIOS,
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Linking,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import useGuest from '../../hooks/useGuest';
 
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
-import useGuest from '../../hooks/useGuest';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 
@@ -81,9 +81,10 @@ export default function UserProfileScreen({ route, navigation }) {
   const db = getFirestore();
   const auth = getAuth();
   const currentUser = auth.currentUser;
+  const { isGuest } = useGuest();
 
   // --- ENHANCED: Fetch latest username and photo for each review ---
-  const fetchReviewsWithUserData = async (reviews) => {
+  const fetchReviewsWithUserData = useCallback(async (reviews) => {
     if (!reviews || reviews.length === 0) return [];
     
     const updatedReviews = [];
@@ -151,7 +152,7 @@ export default function UserProfileScreen({ route, navigation }) {
       const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
       return dateB - dateA;
     });
-  };
+  }, [db]);
   
   // --- ENHANCED: Update reviews whenever userInfo.reviews changes ---
   useEffect(() => {
@@ -178,7 +179,7 @@ export default function UserProfileScreen({ route, navigation }) {
       }
     };
     loadReviews();
-  }, [userInfo.reviews]);
+  }, [userInfo, fetchReviewsWithUserData]);
 
   // --- MAIN DATA LOADING LOGIC ---
   const fetchScreenData = async () => {
@@ -418,7 +419,7 @@ export default function UserProfileScreen({ route, navigation }) {
           await Linking.openURL(url);
           return;
         }
-      } catch (error) {
+      } catch (_error) {
         console.log(`Cannot open ${url}`);
       }
     }
@@ -490,7 +491,7 @@ export default function UserProfileScreen({ route, navigation }) {
         setIsBlockedByMe(false);
         fetchScreenData(); // Reload data
         Alert.alert("Unblocked", "You can now see this user's profile.");
-    } catch (error) {
+    } catch (_error) {
         Alert.alert("Error", "Could not unblock user.");
     }
   };
