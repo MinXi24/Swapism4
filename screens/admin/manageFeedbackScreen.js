@@ -189,10 +189,6 @@ export default function AdminFeedbackScreen({ navigation }) {
                       <Icon name="arrow-undo" size={18} color={THEME_GREEN} />
                       <Text style={styles.actionTextPrimary}>Reply</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => handleMarkResolved(item)}>
-                      <Icon name="checkmark-done-circle-outline" size={18} color={THEME_GREEN} />
-                      <Text style={styles.actionTextPrimary}>Resolve</Text>
-                  </TouchableOpacity>
                 </>
             )}
             <TouchableOpacity style={styles.actionBtnDestructive} onPress={() => handleDelete(item)}>
