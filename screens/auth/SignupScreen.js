@@ -15,7 +15,7 @@ import Input from '../../components/Input';
 import { colors, fonts, spacing } from '../../lib/theme';
 
 //firebase imports
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { ref, set } from 'firebase/database';
 import { doc, getFirestore, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
@@ -33,7 +33,7 @@ export default function SignUpScreen({ navigation }) {
   // logic for signing up user
   const handleSignUp = async () => {
     // basic validation
-    if (!username || !email || !password) {
+    if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -50,23 +50,17 @@ export default function SignUpScreen({ navigation }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Update auth profile with username
-      await updateProfile(user, {
-        displayName: username
-      });
-
       //save user info in realtime database
       // Using the user.uid ensures the DB entry matches the Auth ID
       await set(ref(db, 'users/' + user.uid), {
-        username: username,
         email: email,
         createdAt: new Date().toISOString()
       });
 
       // Also save to Firestore for easy access
+      // Username will be set during ProfileSetup
       const firestore = getFirestore();
       await setDoc(doc(firestore, 'users', user.uid), {
-        username: username,
         email: email,
         createdAt: new Date(),
         bio: '',
