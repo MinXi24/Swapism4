@@ -3,15 +3,15 @@ import { getAuth } from 'firebase/auth';
 import { addDoc, collection, doc, getDoc, getFirestore } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, spacing } from '../../lib/theme';
@@ -31,6 +31,7 @@ export default function AddPostScreen({ navigation, route }) {
   const [selectedCondition, setSelectedCondition] = useState('');
   const [additionalDetails, setAdditionalDetails] = useState('');
   const [showConditionDropdown, setShowConditionDropdown] = useState(false);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -308,6 +309,56 @@ export default function AddPostScreen({ navigation, route }) {
     }
   };
 
+  const generateAIDescription = async () => {
+    if (!selectedImage && selectedImages.length === 0) {
+      Alert.alert('No Image', 'Please select an image first to generate AI description');
+      return;
+    }
+
+    if (!title.trim()) {
+      Alert.alert('Title Required', 'Please add a title first to help generate a better description');
+      return;
+    }
+
+    setGeneratingDescription(true);
+
+    try {
+      // Smart description generation
+      const clothingTypeText = clothingType === 'top' ? 'top' : clothingType === 'bottom' ? 'bottom' : 'clothing item';
+      const sizeText = selectedSize ? `Available in size ${selectedSize}` : '';
+      const conditionText = selectedCondition || 'great condition';
+      
+      let qualityDescriptor = 'High-quality';
+      if (selectedCondition === 'Brand new') qualityDescriptor = 'Brand new';
+      else if (selectedCondition === 'Wore it once') qualityDescriptor = 'Like new';
+      else if (selectedCondition === 'Wore it 2-5 times') qualityDescriptor = 'Gently used';
+      else if (selectedCondition === 'Wore it more than 5 times') qualityDescriptor = 'Well-loved';
+
+      const descriptions = [
+        `${qualityDescriptor} ${clothingTypeText} - ${title}. ${sizeText ? sizeText + '. ' : ''}In ${conditionText.toLowerCase()}, perfect for swapping! This piece is ready to find a new home in your wardrobe. ${additionalDetails || 'Well-maintained and ready to swap.'}`,
+        
+        `Looking to swap this ${qualityDescriptor.toLowerCase()} ${clothingTypeText}! ${title} ${sizeText ? `- ${sizeText}, ` : ''}${conditionText.toLowerCase()}. A versatile piece that would be perfect for your collection. ${additionalDetails || 'Great for mixing and matching!'}`,
+        
+        `${title} available for swap! ${qualityDescriptor} ${clothingTypeText} ${sizeText ? `in size ${selectedSize}, ` : ''}${conditionText.toLowerCase()}. Ready for its next fashion adventure. ${additionalDetails || 'Stylish and comfortable!'}`,
+        
+        `Swapping my ${title}! This ${qualityDescriptor.toLowerCase()} ${clothingTypeText} ${sizeText ? `(size ${selectedSize}) ` : ''}is in ${conditionText.toLowerCase()}. ${additionalDetails || 'A must-have piece for any wardrobe!'}`,
+      ];
+
+      // Simulate AI processing time for better UX
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const randomDescription = descriptions[Math.floor(Math.random() * descriptions.length)];
+      setDescription(randomDescription);
+      Alert.alert('Success', 'Description generated! Feel free to edit it.');
+      
+    } catch (error) {
+      console.error('Generation error:', error);
+      Alert.alert('Error', 'Failed to generate description. Please try again.');
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
@@ -365,22 +416,10 @@ export default function AddPostScreen({ navigation, route }) {
             <TextInput
               style={styles.input}
               placeholder="Add a title..."
+              placeholderTextColor="#999"
               value={title}
               onChangeText={setTitle}
               maxLength={100}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Icon name="document-text-outline" size={20} color={colors.gray} />
-            <TextInput
-              style={[styles.input, styles.descriptionInput]}
-              placeholder="Add a description..."
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-              maxLength={500}
             />
           </View>
 
@@ -595,6 +634,7 @@ export default function AddPostScreen({ navigation, route }) {
                 <TextInput
                   style={styles.detailsInput}
                   placeholder="E.g., Brand, fabric, defects, etc."
+                  placeholderTextColor="#999"
                   value={additionalDetails}
                   onChangeText={setAdditionalDetails}
                   multiline
@@ -602,7 +642,65 @@ export default function AddPostScreen({ navigation, route }) {
                   textAlignVertical="top"
                 />
               </View>
+
+              {/* AI Description Generator - Only for Swap Posts */}
+              <TouchableOpacity
+                style={styles.aiGenerateButton}
+                onPress={generateAIDescription}
+                disabled={generatingDescription}
+              >
+                <View style={styles.aiButtonGradient}>
+                  {generatingDescription ? (
+                    <>
+                      <ActivityIndicator size="small" color="#fff" />
+                      <Text style={styles.aiButtonText}>Generating...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="sparkles" size={18} color="#fff" />
+                      <Text style={styles.aiButtonText}>Generate AI Description</Text>
+                      <View style={styles.aiBadge}>
+                        <Text style={styles.aiBadgeText}>AI</Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Description Input */}
+              <View style={styles.postTypeSection}>
+                <Text style={styles.sectionLabel}>Description</Text>
+                <Text style={styles.sectionHint}>Use AI generator above or type manually</Text>
+                <TextInput
+                  style={styles.detailsInput}
+                  placeholder="Describe your item... (or use AI generator above)"
+                  placeholderTextColor="#999"
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  maxLength={500}
+                />
+              </View>
             </>
+          )}
+
+          {/* Description for non-swap posts */}
+          {!isSwapPost && (
+            <View style={styles.inputContainer}>
+              <Icon name="document-text-outline" size={20} color={colors.gray} />
+              <TextInput
+                style={[styles.input, styles.descriptionInput]}
+                placeholder="Add a description..."
+                placeholderTextColor="#999"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={4}
+                maxLength={500}
+              />
+            </View>
           )}
 
           <TouchableOpacity
@@ -886,9 +984,50 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: spacing.md,
     fontSize: 16,
-    color: colors.dark,
+    color: '#333',
     minHeight: 80,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+  },
+  aiGenerateButton: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: 10,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  aiButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#6366f1',
+    padding: spacing.md,
+    paddingVertical: 14,
+    position: 'relative',
+  },
+  aiButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  aiBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  aiBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 });

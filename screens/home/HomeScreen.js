@@ -177,6 +177,18 @@ export default function HomeScreen({ navigation }) {
             doc => doc.data().userId === currentUser?.uid
           );
           
+          // Check if user has favorited this post
+          let userFavorited = false;
+          if (currentUser) {
+            const favoritesQuery = query(
+              collection(db, 'favorites'),
+              where('userId', '==', currentUser.uid),
+              where('postId', '==', docSnapshot.id)
+            );
+            const favoritesSnapshot = await getDocs(favoritesQuery);
+            userFavorited = !favoritesSnapshot.empty;
+          }
+          
           return {
             id: docSnapshot.id,
             ...postData,
@@ -184,6 +196,7 @@ export default function HomeScreen({ navigation }) {
             likeCount,
             commentCount,
             userLiked,
+            userFavorited,
             userPhotoURL,
             isPrivate,
             isFollowing,

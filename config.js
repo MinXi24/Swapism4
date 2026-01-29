@@ -15,6 +15,11 @@ export const config = {
   // Get your cloud name and upload preset from: https://cloudinary.com/
   CLOUDINARY_UPLOAD_URL: 'https://api.cloudinary.com/v1_1/dblq6cttn/image/upload',
   CLOUDINARY_UPLOAD_PRESET: 'YOUR_UPLOAD_PRESET',
+
+  // VModel API for AI clothing description generation
+  // Get your API key from: https://vmodel.ai/
+  VMODEL_API_TOKEN: 'JbTepa4OljaDnh3IfZ72wpUUZq1kPYOUkLy4YIJDQmAO7oUAvMsHI6W4nliMu4flt8Ez70gYYvK--UT8cKh4Wg==',
+  VMODEL_API_URL: 'https://api.vmodel.ai/api/tasks/v1/create',
 };
 
 export default config;

@@ -1,9 +1,10 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, getFirestore, query, where } from 'firebase/firestore';
+import { arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   SafeAreaView,
@@ -11,7 +12,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import { colors, fonts, spacing } from '../../lib/theme';
@@ -49,6 +50,38 @@ export default function PostActivityScreen({ navigation }) {
 
       const postIds = postsSnapshot.docs.map(doc => doc.id);
       const allActivities = [];
+
+      // Get follow requests for this user
+      const followRequestsQuery = query(
+        collection(db, 'followRequests'),
+        where('toUserId', '==', uid),
+        where('status', '==', 'pending')
+      );
+      const followRequestsSnapshot = await getDocs(followRequestsQuery);
+      
+      for (const requestDoc of followRequestsSnapshot.docs) {
+        const requestData = requestDoc.data();
+        
+        try {
+          // Get user info
+          const userDoc = await getDoc(doc(db, 'users', requestData.fromUserId));
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            
+            allActivities.push({
+              id: requestDoc.id,
+              type: 'follow_request',
+              userId: requestData.fromUserId,
+              username: userData.username || requestData.fromUserName || 'Unknown',
+              userPhoto: userData.photoURL,
+              createdAt: requestData.createdAt,
+            });
+          }
+        } catch (err) {
+          console.error('Error fetching follow request data:', err);
+        }
+      }
 
       // Get likes on user's posts
       for (const postId of postIds) {
@@ -171,57 +204,134 @@ export default function PostActivityScreen({ navigation }) {
   };
 
   const handleActivityPress = (activity) => {
-    navigation.navigate('PostDetails', { 
-      post: { 
-        id: activity.postId,
-        url: activity.postImage,
-        title: activity.postTitle
-      } 
-    });
+    if (activity.type === 'follow_request') {
+      // Navigate to user profile for follow requests
+      navigation.navigate('UserProfile', { userId: activity.userId, username: activity.username });
+    } else {
+      navigation.navigate('PostDetails', { 
+        post: { 
+          id: activity.postId,
+          url: activity.postImage,
+          title: activity.postTitle
+        } 
+      });
+    }
   };
 
   const handleUserPress = (userId, username) => {
     navigation.navigate('UserProfile', { userId, username });
   };
 
+  const handleAcceptFollowRequest = async (requestId, fromUserId) => {
+    try {
+      // Update followRequests status to accepted
+      await updateDoc(doc(db, 'followRequests', requestId), {
+        status: 'accepted'
+      });
+
+      // Add follower relationship
+      await updateDoc(doc(db, 'users', user.uid), {
+        followers: arrayUnion(fromUserId)
+      });
+
+      await updateDoc(doc(db, 'users', fromUserId), {
+        following: arrayUnion(user.uid)
+      });
+
+      // Remove from activities list
+      setActivities(prev => prev.filter(activity => activity.id !== requestId));
+
+      Alert.alert('Success', 'Follow request accepted!');
+    } catch (error) {
+      console.error('Error accepting follow request:', error);
+      Alert.alert('Error', 'Failed to accept request. Please try again.');
+    }
+  };
+
+  const handleRejectFollowRequest = async (requestId) => {
+    try {
+      // Delete the follow request
+      await deleteDoc(doc(db, 'followRequests', requestId));
+
+      // Remove from activities list
+      setActivities(prev => prev.filter(activity => activity.id !== requestId));
+
+      Alert.alert('Success', 'Follow request rejected');
+    } catch (error) {
+      console.error('Error rejecting follow request:', error);
+      Alert.alert('Error', 'Failed to reject request. Please try again.');
+    }
+  };
+
   const renderActivityItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.activityItem}
-      onPress={() => handleActivityPress(item)}
-    >
-      <TouchableOpacity onPress={() => handleUserPress(item.userId, item.username)}>
-        {item.userPhoto ? (
-          <Image source={{ uri: item.userPhoto }} style={styles.userPhoto} />
-        ) : (
-          <View style={styles.userPhotoPlaceholder}>
-            <Icon name="person" size={24} color="#999" />
+    <View style={styles.activityItem}>
+      <TouchableOpacity 
+        style={styles.activityMain}
+        onPress={() => item.type !== 'follow_request' && handleActivityPress(item)}
+      >
+        <TouchableOpacity onPress={() => handleUserPress(item.userId, item.username)}>
+          {item.userPhoto ? (
+            <Image source={{ uri: item.userPhoto }} style={styles.userPhoto} />
+          ) : (
+            <View style={styles.userPhotoPlaceholder}>
+              <Icon name="person" size={24} color="#999" />
+            </View>
+          )}
+        </TouchableOpacity>
+        
+        <View style={styles.activityContent}>
+          <Text style={styles.activityText}>
+            <Text style={styles.username}>{item.username}</Text>
+            {item.type === 'like' 
+              ? ' liked your post' 
+              : item.type === 'comment'
+              ? ' commented on your post'
+              : ' requested to follow you'}
+          </Text>
+          {item.type !== 'follow_request' && (
+            <Text style={styles.postTitle}>{item.postTitle}</Text>
+          )}
+          {item.type === 'comment' && item.commentText && (
+            <Text style={styles.commentText}>{item.commentText}</Text>
+          )}
+          <View style={styles.timeContainer}>
+            <Icon 
+              name={item.type === 'like' ? 'heart' : item.type === 'comment' ? 'chatbubble' : 'person-add'} 
+              size={12} 
+              color={item.type === 'like' ? '#ff4444' : item.type === 'follow_request' ? '#F4C430' : '#999'} 
+            />
+            <Text style={styles.timeText}>{getTimeAgo(item.createdAt)}</Text>
           </View>
+        </View>
+
+        {item.type !== 'follow_request' && (
+          <>
+            <Image source={{ uri: item.postImage }} style={styles.postThumbnail} />
+            <Icon name="chevron-forward" size={20} color="#999" />
+          </>
         )}
       </TouchableOpacity>
-      
-      <View style={styles.activityContent}>
-        <Text style={styles.activityText}>
-          <Text style={styles.username}>{item.username}</Text>
-          {item.type === 'like' ? ' liked your post' : ' commented on your post'}
-        </Text>
-        <Text style={styles.postTitle}>{item.postTitle}</Text>
-        {item.type === 'comment' && item.commentText && (
-          <Text style={styles.commentText}>{item.commentText}</Text>
-        )}
-        <View style={styles.timeContainer}>
-          <Icon 
-            name={item.type === 'like' ? 'heart' : 'chatbubble'} 
-            size={12} 
-            color={item.type === 'like' ? '#ff4444' : '#999'} 
-          />
-          <Text style={styles.timeText}>{getTimeAgo(item.createdAt)}</Text>
-        </View>
-      </View>
 
-      <Image source={{ uri: item.postImage }} style={styles.postThumbnail} />
-      
-      <Icon name="chevron-forward" size={20} color="#999" />
-    </TouchableOpacity>
+      {/* Accept/Reject buttons for follow requests */}
+      {item.type === 'follow_request' && (
+        <View style={styles.followRequestActions}>
+          <TouchableOpacity 
+            style={styles.acceptButton}
+            onPress={() => handleAcceptFollowRequest(item.id, item.userId)}
+          >
+            <Icon name="checkmark" size={20} color="#fff" />
+            <Text style={styles.actionButtonText}>Accept</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.rejectButton}
+            onPress={() => handleRejectFollowRequest(item.id)}
+          >
+            <Icon name="close" size={20} color="#fff" />
+            <Text style={styles.actionButtonText}>Reject</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 
   return (
@@ -333,13 +443,15 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   activityItem: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  activityMain: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   userPhoto: {
     width: 48,
@@ -398,5 +510,40 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 4,
     marginRight: spacing.sm,
+  },
+  followRequestActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  acceptButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#34C759',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    gap: 6,
+  },
+  rejectButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ff4444',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    gap: 4,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
 });
