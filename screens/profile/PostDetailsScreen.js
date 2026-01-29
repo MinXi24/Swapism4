@@ -46,6 +46,8 @@ export default function PostDetailsScreen({ route, navigation }) {
   const [ownerUserName, setOwnerUserName] = useState(initialPost.userName || 'User');
   const [editingComment, setEditingComment] = useState(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [ownerRating, setOwnerRating] = useState(0);
+  const [ownerReviewCount, setOwnerReviewCount] = useState(0);
 
   const db = getFirestore();
   const auth = getAuth();
@@ -77,13 +79,19 @@ export default function PostDetailsScreen({ route, navigation }) {
         if (userDoc.exists()) {
           const userData = userDoc.data();
           setOwnerUserName(userData.username || userData.displayName || 'User');
+          setOwnerRating(userData.rating || 0);
+          setOwnerReviewCount(userData.reviewCount || 0);
         } else {
           setOwnerUserName('User');
+          setOwnerRating(0);
+          setOwnerReviewCount(0);
         }
       }
     } catch (error) {
       console.error('Error loading owner username:', error);
       setOwnerUserName('User');
+      setOwnerRating(0);
+      setOwnerReviewCount(0);
     }
   };
 
@@ -653,6 +661,14 @@ export default function PostDetailsScreen({ route, navigation }) {
               }}>
                 <Text style={styles.userName}>{ownerUserName}</Text>
               </TouchableOpacity>
+              <View style={styles.userRatingRow}>
+                <Icon name="star" size={14} color="#FFD700" />
+                <Text style={styles.userRatingText}>
+                  {ownerRating > 0 
+                    ? `${ownerRating.toFixed(1)} (${ownerReviewCount} reviews)`
+                    : 'New user'}
+                </Text>
+              </View>
               <Text style={styles.postDate}>
                 {activePost.uploadedAt?.toDate?.().toLocaleDateString() || 'Recently'}
               </Text>
@@ -664,6 +680,26 @@ export default function PostDetailsScreen({ route, navigation }) {
           {activePost.description ? (
             <Text style={styles.postDescription}>{activePost.description}</Text>
           ) : null}
+
+          {/* Item Details Section */}
+          {activePost.postType === 'forSwap' && (activePost.size || activePost.condition) && (
+            <View style={styles.itemDetailsContainer}>
+              {activePost.size && activePost.size !== 'N/A' && (
+                <View style={styles.detailBadge}>
+                  <Icon name="resize" size={16} color={colors.accent} />
+                  <Text style={styles.detailBadgeLabel}>Size:</Text>
+                  <Text style={styles.detailBadgeValue}>{activePost.size}</Text>
+                </View>
+              )}
+              {activePost.condition && activePost.condition !== 'N/A' && (
+                <View style={styles.detailBadge}>
+                  <Icon name="checkmark-circle" size={16} color={colors.accent} />
+                  <Text style={styles.detailBadgeLabel}>Condition:</Text>
+                  <Text style={styles.detailBadgeValue}>{activePost.condition}</Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Swap Info Badge */}
           {activePost.postType === 'forSwap' && (
@@ -987,6 +1023,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.dark,
   },
+  userRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  userRatingText: {
+    fontSize: 12,
+    color: colors.dark,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
   postDate: {
     fontSize: 12,
     color: colors.gray,
@@ -1003,6 +1051,37 @@ const styles = StyleSheet.create({
     color: colors.dark,
     lineHeight: 20,
     marginBottom: spacing.md,
+  },
+  itemDetailsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: spacing.md,
+    backgroundColor: '#F5F5F5',
+    padding: 12,
+    borderRadius: 8,
+  },
+  detailBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  detailBadgeLabel: {
+    fontSize: 12,
+    color: colors.gray,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  detailBadgeValue: {
+    fontSize: 12,
+    color: colors.dark,
+    marginLeft: 4,
+    fontWeight: '700',
   },
   swapInfoBadge: {
     flexDirection: 'row',

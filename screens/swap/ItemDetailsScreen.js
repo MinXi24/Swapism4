@@ -1,14 +1,14 @@
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import Button from '../../components/Button';
@@ -112,6 +112,21 @@ export default function ItemDetailsScreen({ route, navigation }) {
           {/* Item Title */}
           <Text style={styles.itemTitle}>{item.title}</Text>
 
+          {/* Quick Info Row */}
+          <View style={styles.quickInfoRow}>
+            <View style={styles.quickInfoItem}>
+              <Icon name="resize" size={20} color={colors.accent} />
+              <Text style={styles.quickInfoLabel}>Size</Text>
+              <Text style={styles.quickInfoValue}>{item.size || 'Not specified'}</Text>
+            </View>
+            <View style={styles.quickInfoDivider} />
+            <View style={styles.quickInfoItem}>
+              <Icon name="checkmark-circle" size={20} color={colors.accent} />
+              <Text style={styles.quickInfoLabel}>Condition</Text>
+              <Text style={styles.quickInfoValue}>{item.condition || 'Good'}</Text>
+            </View>
+          </View>
+
           {/* Description */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Description</Text>
@@ -145,7 +160,11 @@ export default function ItemDetailsScreen({ route, navigation }) {
                 <View style={styles.userRating}>
                   <Icon name="star" size={16} color={colors.highlight} />
                   <Text style={styles.userRatingText}>
-                    {loading ? 'Loading...' : `${userData?.rating?.toFixed(1) || '0'} (${userData?.reviewCount || 0} reviews)`}
+                    {loading ? 'Loading...' : (
+                      userData?.rating && userData.rating > 0 
+                        ? `${userData.rating.toFixed(1)} (${userData.reviewCount || 0} reviews)`
+                        : 'New user'
+                    )}
                   </Text>
                 </View>
               </View>
@@ -335,5 +354,37 @@ const styles = StyleSheet.create({
   },
   swapButton: {
     backgroundColor: colors.accent,
+  },
+  quickInfoRow: {
+    flexDirection: 'row',
+    backgroundColor: colors.secondary,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  quickInfoItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  quickInfoDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#e0e0e0',
+    marginHorizontal: spacing.sm,
+  },
+  quickInfoLabel: {
+    fontFamily: fonts.sub,
+    fontSize: 12,
+    color: colors.gray,
+    marginTop: 4,
+  },
+  quickInfoValue: {
+    fontFamily: fonts.header,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.dark,
+    marginTop: 2,
   },
 });

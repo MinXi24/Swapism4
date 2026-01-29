@@ -6,7 +6,6 @@ import {
     getDoc,
     getDocs,
     getFirestore,
-    orderBy,
     query,
     where
 } from 'firebase/firestore';
@@ -73,80 +72,93 @@ export default function MessagesScreen({ navigation, route }) {
 
     try {
       setLoading(true);
+      // Load ALL messages for the current user (no orderBy to avoid limitations)
       const messagesQuery = query(
         collection(db, 'messages'),
-        where('participants', 'array-contains', currentUser.uid),
-        orderBy('createdAt', 'desc')
+        where('participants', 'array-contains', currentUser.uid)
       );
 
       const querySnapshot = await getDocs(messagesQuery);
       const conversationsMap = new Map();
+      const allMessages = querySnapshot.docs.map(doc => doc.data());
 
-      for (const docSnapshot of querySnapshot.docs) {
-        const messageData = docSnapshot.data();
+      // Group messages by conversation partner
+      for (const messageData of allMessages) {
         const otherUserId = messageData.senderId === currentUser.uid 
           ? messageData.receiverId 
           : messageData.senderId;
 
         if (!conversationsMap.has(otherUserId)) {
-          try {
-            const userDoc = await getDoc(doc(db, 'users', otherUserId));
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              const lastMessageText = messageData.type === 'swap_request' 
-                ? '🔄 Swap Request'
-                : messageData.text;
-              conversationsMap.set(otherUserId, {
-                userId: otherUserId,
-                userName: userData.username || userData.displayName || 'User',
-                userPhotoURL: userData.photoURL || null,
-                lastMessage: lastMessageText,
-                lastMessageTime: messageData.createdAt?.toDate?.() || new Date(),
-                unread: !messageData.read && messageData.receiverId === currentUser.uid,
-                hasSwapOngoing: false, // Will be updated below
-              });
-            }
-          } catch (error) {
-            console.error('Error loading user data:', error);
-          }
+          conversationsMap.set(otherUserId, {
+            userId: otherUserId,
+            messages: [],
+            lastMessageTime: null,
+            unread: false,
+            hasSwapOngoing: false,
+          });
+        }
+
+        const conversation = conversationsMap.get(otherUserId);
+        conversation.messages.push(messageData);
+        
+        // Track the most recent message
+        const messageTime = messageData.createdAt?.toDate?.() || new Date();
+        if (!conversation.lastMessageTime || messageTime > conversation.lastMessageTime) {
+          conversation.lastMessageTime = messageTime;
+          conversation.lastMessageData = messageData;
+        }
+
+        // Check for unread messages
+        if (!messageData.read && messageData.receiverId === currentUser.uid) {
+          conversation.unread = true;
+        }
+
+        // Check for ongoing swaps
+        if (messageData.type === 'swap_request' && 
+            messageData.swapDetails && 
+            messageData.swapDetails.status === 'accepted') {
+          conversation.hasSwapOngoing = true;
         }
       }
 
-      // Check for ongoing swaps and load all messages for search in each conversation
+      // Load user data and prepare final conversation objects
+      const conversationsArray = [];
       for (const [otherUserId, conversation] of conversationsMap.entries()) {
         try {
-          const userMessagesQuery = query(
-            collection(db, 'messages'),
-            where('participants', 'array-contains', currentUser.uid)
-          );
-          const userMessagesSnapshot = await getDocs(userMessagesQuery);
-          
-          const userMessages = userMessagesSnapshot.docs
-            .map(doc => doc.data())
-            .filter(msg => 
-              (msg.senderId === currentUser.uid && msg.receiverId === otherUserId) ||
-              (msg.senderId === otherUserId && msg.receiverId === currentUser.uid)
-            );
-
-          // Check if there's an accepted swap request that's not completed
-          const hasAcceptedSwap = userMessages.some(
-            msg => msg.type === 'swap_request' && 
-            msg.swapDetails && 
-            msg.swapDetails.status === 'accepted'
-          );
-
-          if (hasAcceptedSwap) {
-            conversation.hasSwapOngoing = true;
+          const userDoc = await getDoc(doc(db, 'users', otherUserId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const lastMessageText = conversation.lastMessageData.type === 'swap_request' 
+              ? '🔄 Swap Request'
+              : conversation.lastMessageData.text;
+            
+            // Store ALL message texts for comprehensive search
+            const allMessageTexts = conversation.messages
+              .map(msg => msg.text || '')
+              .filter(Boolean);
+            
+            console.log(`User ${userData.username || userData.displayName}: ${allMessageTexts.length} searchable messages`);
+            
+            conversationsArray.push({
+              userId: otherUserId,
+              userName: userData.username || userData.displayName || 'User',
+              userPhotoURL: userData.photoURL || null,
+              lastMessage: lastMessageText,
+              lastMessageTime: conversation.lastMessageTime,
+              unread: conversation.unread,
+              hasSwapOngoing: conversation.hasSwapOngoing,
+              allMessages: allMessageTexts,
+            });
           }
-
-          // Store all messages for search functionality
-          conversation.allMessages = userMessages.map(msg => msg.text || '').filter(Boolean);
         } catch (error) {
-          console.error('Error checking swap status:', error);
+          console.error('Error loading user data:', error);
         }
       }
 
-      setConversations(Array.from(conversationsMap.values()));
+      // Sort conversations by most recent message
+      conversationsArray.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+
+      setConversations(conversationsArray);
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
@@ -254,26 +266,52 @@ export default function MessagesScreen({ navigation, route }) {
       ) : (
         <View style={styles.messagesContainer}>
           <FlatList
-            data={conversations.filter(item => {
-              if (!searchQuery) return true;
-              
-              const query = searchQuery.toLowerCase();
-              const matchesUsername = item.userName.toLowerCase().includes(query);
-              
-              // Find the first message that matches the search query
-              const matchedMessage = item.allMessages?.find(msg => 
-                msg.toLowerCase().includes(query)
-              );
-              
-              // If a message matches, replace the displayed message temporarily
-              if (matchedMessage) {
-                item.displayMessage = matchedMessage;
-              } else {
-                item.displayMessage = item.lastMessage;
-              }
-              
-              return matchesUsername || !!matchedMessage;
-            })}
+            data={conversations
+              .map(item => {
+                if (!searchQuery) {
+                  return { ...item, displayMessage: item.lastMessage, isMatch: true };
+                }
+                
+                const query = searchQuery.toLowerCase().trim();
+                const matchesUsername = item.userName.toLowerCase().includes(query);
+                
+                // Log the search attempt for this conversation
+                console.log(`\n--- Searching in ${item.userName}'s conversation ---`);
+                console.log(`Search query: "${query}"`);
+                console.log(`Total messages to search: ${item.allMessages?.length || 0}`);
+                
+                // Search through all messages in the conversation
+                // Use word boundary matching for accurate search results
+                const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const wordBoundaryRegex = new RegExp(`\\b${escapedQuery}\\b`, 'i');
+                
+                const matchedMessage = item.allMessages?.find(msg => {
+                  if (!msg) return false;
+                  
+                  // Only match complete words
+                  const matches = wordBoundaryRegex.test(msg);
+                  
+                  if (matches) {
+                    console.log(`✓ FOUND match: "${msg}"`);
+                  }
+                  return matches;
+                });
+                
+                // Determine if this conversation should be shown
+                const isMatch = matchesUsername || !!matchedMessage;
+                
+                console.log(`Username match: ${matchesUsername}, Message match: ${!!matchedMessage}, Show: ${isMatch}`);
+                
+                // Set the display message
+                const displayMessage = matchedMessage || item.lastMessage;
+                
+                return {
+                  ...item,
+                  displayMessage,
+                  isMatch
+                };
+              })
+              .filter(item => item.isMatch)}
             renderItem={renderMessageItem}
             keyExtractor={(item) => item.userId}
             showsVerticalScrollIndicator={false}
