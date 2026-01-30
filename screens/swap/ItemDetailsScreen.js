@@ -1,14 +1,16 @@
+import { getAuth } from 'firebase/auth';
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import Button from '../../components/Button';
@@ -21,6 +23,7 @@ export default function ItemDetailsScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   
   const db = getFirestore();
+  const auth = getAuth();
 
   useEffect(() => {
     loadUserData();
@@ -66,9 +69,62 @@ export default function ItemDetailsScreen({ route, navigation }) {
     setIsFavorited(!isFavorited);
   };
 
-  const handleSwapNow = () => {
-    console.log('Swap now:', item.title);
-    // Add swap logic here
+  const handleSwapNow = async () => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        'Login Required',
+        'You must be logged in to swap items!',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
+    // Check if trying to swap with yourself
+    if (item.ownerUid === auth.currentUser.uid) {
+      Alert.alert('Error', 'You cannot swap with yourself!');
+      return;
+    }
+
+    try {
+      console.log('Starting swap with item:', item.title);
+      console.log('Item owner:', item.ownerUid);
+      
+      // Get the item owner's profile data
+      const userDoc = await getDoc(doc(db, 'users', item.ownerUid));
+      
+      if (!userDoc.exists()) {
+        Alert.alert('Error', 'Could not find user profile.');
+        return;
+      }
+      
+      const ownerData = userDoc.data();
+      console.log('Owner data:', ownerData);
+
+      const swapRequestData = {
+        theirItemId: item.id,
+        theirItemImage: item.image?.uri || item.url,
+        theirItemTitle: item.title || item.description?.substring(0, 50) || 'Item'
+      };
+      
+      console.log('Navigating to Chat with swapRequest:', swapRequestData);
+
+      // Navigate to chat with swap data
+      navigation.navigate('Chat', {
+        user: {
+          id: item.ownerUid,
+          uid: item.ownerUid,
+          name: ownerData.username || ownerData.displayName || item.userName || 'User',
+          photoURL: ownerData.photoURL
+        },
+        swapRequest: swapRequestData
+      });
+    } catch (error) {
+      console.error('Error initiating swap:', error);
+      Alert.alert('Error', 'Could not start swap request. Please try again.');
+    }
   };
 
   const handleBack = () => {

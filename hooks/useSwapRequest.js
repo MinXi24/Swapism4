@@ -83,9 +83,9 @@ export const useSwapRequest = ({
     loadUserItems();
   }, [currentUser, db]);
 
-  // Show modal when swap context detected
+  // Show modal when swap context detected - always show even if no items (user can select "Nothing")
   useEffect(() => {
-    if (swapRequest && userItems.length > 0) {
+    if (swapRequest) {
       setShowItemPicker(true);
     }
   }, [swapRequest, userItems]);

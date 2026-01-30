@@ -549,24 +549,6 @@ export default function PostDetailsScreen({ route, navigation }) {
     }
 
     try {
-      // Check if current user has any available items to swap
-      const myItemsQuery = query(
-        collection(db, 'wardrobe-plug-fyp/user/images'),
-        where('ownerUid', '==', auth.currentUser.uid),
-        where('postType', '==', 'forSwap'),
-        where('swapStatus', '==', 'available')
-      );
-      const myItemsSnapshot = await getDocs(myItemsQuery);
-      
-      if (myItemsSnapshot.empty) {
-        Alert.alert(
-          'No Items Available',
-          'You don\'t have any items available for swapping. Please add items marked "For Swap" with status "Available" to your wardrobe.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
       // Get the item owner's profile data
       const userDoc = await getDoc(doc(db, 'users', activePost.ownerUid));
       const userData = userDoc.data();
