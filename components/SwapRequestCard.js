@@ -22,7 +22,7 @@ export const SwapRequestCard = ({
   formatTime 
 }) => {
   const { swapDetails } = message;
-  const { status, myItemImage, myItemTitle, theirItemImage, theirItemTitle } = swapDetails;
+  const { status, myItemImage, myItemTitle, theirItemImage, theirItemTitle, isNothingSwap } = swapDetails;
   const isReceiver = message.receiverId === currentUserId;
   const isPending = status === 'pending';
 
@@ -39,6 +39,32 @@ export const SwapRequestCard = ({
     if (status === 'accepted') return 'checkmark-circle';
     if (status === 'rejected') return 'close-circle';
     return 'time-outline';
+  };
+
+  const renderItemDisplay = (imageUri, title) => {
+    if (!imageUri || title === 'Nothing') {
+      return (
+        <View style={styles.nothingContainer}>
+          <View style={styles.nothingIcon}>
+            <Icon name="close-circle" size={40} color={colors.gray} />
+          </View>
+          <Text style={styles.swapItemTitle} numberOfLines={1}>
+            Nothing
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <>
+        <Image 
+          source={{ uri: imageUri }} 
+          style={styles.swapItemImage} 
+        />
+        <Text style={styles.swapItemTitle} numberOfLines={1}>
+          {title}
+        </Text>
+      </>
+    );
   };
 
   return (
@@ -83,19 +109,16 @@ export const SwapRequestCard = ({
         <View style={styles.swapItems}>
           {/* Left Item */}
           <View style={styles.itemWrapper}>
-            <Image 
-              source={{ uri: isMyMessage ? myItemImage : theirItemImage }} 
-              style={styles.swapItemImage} 
-            />
-            <Text style={styles.swapItemTitle} numberOfLines={1}>
-              {isMyMessage ? myItemTitle : theirItemTitle}
-            </Text>
+            {renderItemDisplay(
+              isMyMessage ? myItemImage : theirItemImage,
+              isMyMessage ? myItemTitle : theirItemTitle
+            )}
           </View>
           
           {/* Swap Icon */}
           <View style={styles.iconWrapper}>
             <Icon 
-              name="swap-horizontal" 
+              name={isNothingSwap ? "arrow-forward" : "swap-horizontal"} 
               size={28} 
               color={colors.dark} 
             />
@@ -103,13 +126,10 @@ export const SwapRequestCard = ({
           
           {/* Right Item */}
           <View style={styles.itemWrapper}>
-            <Image 
-              source={{ uri: isMyMessage ? theirItemImage : myItemImage }} 
-              style={styles.swapItemImage} 
-            />
-            <Text style={styles.swapItemTitle} numberOfLines={1}>
-              {isMyMessage ? theirItemTitle : myItemTitle}
-            </Text>
+            {renderItemDisplay(
+              isMyMessage ? theirItemImage : myItemImage,
+              isMyMessage ? theirItemTitle : myItemTitle
+            )}
           </View>
         </View>
 
@@ -225,6 +245,20 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 12,
     backgroundColor: '#fff',
+  },
+  nothingContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: colors.gray,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  nothingIcon: {
+    opacity: 0.5,
   },
   swapItemTitle: {
     fontSize: 12,

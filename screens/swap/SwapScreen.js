@@ -2,15 +2,15 @@ import { getAuth } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, getFirestore, query, serverTimestamp, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    Modal,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  FlatList,
+  Modal,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -297,24 +297,6 @@ export default function SwapScreen({ navigation }) {
     try {
       console.log('Starting swap with item:', item.title);
       console.log('Item owner:', item.ownerUid);
-      
-      // Check if current user has any available items to swap
-      const myItemsQuery = query(
-        collection(db, 'wardrobe-plug-fyp/user/images'),
-        where('ownerUid', '==', auth.currentUser.uid),
-        where('postType', '==', 'forSwap'),
-        where('swapStatus', '==', 'available')
-      );
-      const myItemsSnapshot = await getDocs(myItemsQuery);
-      
-      if (myItemsSnapshot.empty) {
-        Alert.alert(
-          'No Items Available',
-          'You don\'t have any items available for swapping. Please add items marked "For Swap" with status "Available" to your wardrobe.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
       
       // Get the item owner's profile data
       const userDoc = await getDoc(doc(db, 'users', item.ownerUid));

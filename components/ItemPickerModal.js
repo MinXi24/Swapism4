@@ -16,6 +16,18 @@ export const ItemPickerModal = ({
   items, 
   onSelectItem 
 }) => {
+  // Create a special "nothing" item
+  const nothingItem = {
+    id: 'nothing',
+    url: null,
+    title: 'Nothing',
+    description: 'Request this item without offering anything in return',
+    isNothing: true
+  };
+
+  // Combine nothing option with actual items
+  const allItems = [nothingItem, ...items];
+
   return (
     <Modal
       visible={visible}
@@ -33,30 +45,28 @@ export const ItemPickerModal = ({
           </View>
           
           <FlatList
-            data={items}
+            data={allItems}
             renderItem={({ item }) => (
               <TouchableOpacity 
                 style={styles.itemCard}
                 onPress={() => onSelectItem(item)}
               >
-                <Image source={{ uri: item.url }} style={styles.itemImage} />
+                {item.isNothing ? (
+                  <View style={styles.nothingImageContainer}>
+                    <Icon name="close-circle" size={48} color={colors.gray} />
+                    <Text style={styles.nothingLabel}>Nothing</Text>
+                  </View>
+                ) : (
+                  <Image source={{ uri: item.url }} style={styles.itemImage} />
+                )}
                 <Text style={styles.itemTitle} numberOfLines={2}>
-                  {item.title || item.description?.substring(0, 50) || 'Item'}
+                  {item.isNothing ? 'Swap for Nothing' : (item.title || item.description?.substring(0, 50) || 'Item')}
                 </Text>
               </TouchableOpacity>
             )}
             keyExtractor={(item) => item.id}
             numColumns={2}
             contentContainerStyle={styles.itemGrid}
-            ListEmptyComponent={
-              <View style={styles.emptyItemsContainer}>
-                <Icon name="shirt-outline" size={64} color={colors.gray} />
-                <Text style={styles.emptyItemsText}>No available items</Text>
-                <Text style={styles.emptyItemsSubtext}>
-                  Mark some items as available for swap first
-                </Text>
-              </View>
-            }
           />
         </View>
       </View>
@@ -114,6 +124,23 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     color: colors.dark,
     textAlign: 'center',
+  },
+  nothingImageContainer: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 8,
+    backgroundColor: colors.secondary,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: colors.gray,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  nothingLabel: {
+    fontSize: 14,
+    fontFamily: fonts.medium,
+    color: colors.gray,
+    marginTop: spacing.xs,
   },
   emptyItemsContainer: {
     alignItems: 'center',

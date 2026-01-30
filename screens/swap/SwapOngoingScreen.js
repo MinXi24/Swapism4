@@ -155,7 +155,7 @@ export default function SwapOngoingScreen({ route, navigation }) {
               if (swapMessage) {
                 const msgRef = doc(db, 'messages', swapMessage.id);
                 const swapData = swapMessage.data();
-                const { myItemId, theirItemId } = swapData.swapDetails;
+                const { myItemId, theirItemId, isNothingSwap } = swapData.swapDetails;
                 
                 // Update status to withdrawn
                 await updateDoc(msgRef, {
@@ -164,13 +164,23 @@ export default function SwapOngoingScreen({ route, navigation }) {
                   updatedAt: serverTimestamp(),
                 });
                 
-                // Revert BOTH items back to available
-                await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', myItemId), {
-                  swapStatus: 'available'
-                });
-                await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
-                  swapStatus: 'available'
-                });
+                // Revert items back to available
+                // For nothing swaps, only update the item that exists
+                if (isNothingSwap) {
+                  if (theirItemId) {
+                    await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
+                      swapStatus: 'available'
+                    });
+                  }
+                } else {
+                  // Normal swap: revert BOTH items
+                  await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', myItemId), {
+                    swapStatus: 'available'
+                  });
+                  await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
+                    swapStatus: 'available'
+                  });
+                }
                 
                 // Send notification to other user
                 await addDoc(collection(db, 'messages'), {
@@ -331,7 +341,7 @@ export default function SwapOngoingScreen({ route, navigation }) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>You Will Receive</Text>
             <View style={styles.detailCard}>
-            {itemIWillReceive.image ? (
+            {itemIWillReceive.image && itemIWillReceive.title !== 'Nothing' ? (
               <Image 
                 source={{ uri: itemIWillReceive.image }} 
                 style={styles.largeItemImage}
@@ -340,7 +350,9 @@ export default function SwapOngoingScreen({ route, navigation }) {
             ) : (
               <View style={styles.placeholderContainer}>
                 <Icon name="hand-right" size={80} color={colors.accent} />
-                <Text style={styles.placeholderText}>No swap details available</Text>
+                <Text style={styles.placeholderText}>
+                  {itemIWillReceive.title === 'Nothing' ? 'Nothing' : 'No swap details available'}
+                </Text>
               </View>
             )}
             </View>
@@ -352,21 +364,33 @@ export default function SwapOngoingScreen({ route, navigation }) {
             <View style={styles.detailCard}>
             <View style={styles.itemsRow}>
                 <View style={styles.itemContainer}>
-                  <Image 
-                    source={{ uri: itemIAmGiving.image }} 
-                    style={styles.itemImage}
-                  />
+                  {itemIAmGiving.image && itemIAmGiving.title !== 'Nothing' ? (
+                    <Image 
+                      source={{ uri: itemIAmGiving.image }} 
+                      style={styles.itemImage}
+                    />
+                  ) : (
+                    <View style={[styles.itemImage, styles.nothingItemContainer]}>
+                      <Icon name="close-circle" size={40} color={colors.gray} />
+                    </View>
+                  )}
                   <Text style={styles.itemTitle} numberOfLines={1}>
                     {itemIAmGiving.title || 'Item'}
                   </Text>
                   <Text style={styles.itemLabel}>You give</Text>
                 </View>
-                <Icon name="swap-horizontal" size={32} color={colors.dark} />
+                <Icon name={swapDetails?.isNothingSwap ? "arrow-forward" : "swap-horizontal"} size={32} color={colors.dark} />
                 <View style={styles.itemContainer}>
-                  <Image 
-                    source={{ uri: itemIWillReceive.image }} 
-                    style={styles.itemImage}
-                  />
+                  {itemIWillReceive.image && itemIWillReceive.title !== 'Nothing' ? (
+                    <Image 
+                      source={{ uri: itemIWillReceive.image }} 
+                      style={styles.itemImage}
+                    />
+                  ) : (
+                    <View style={[styles.itemImage, styles.nothingItemContainer]}>
+                      <Icon name="close-circle" size={40} color={colors.gray} />
+                    </View>
+                  )}
                   <Text style={styles.itemTitle} numberOfLines={1}>
                     {itemIWillReceive.title || 'Item'}
                   </Text>
@@ -626,6 +650,14 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 8,
     marginBottom: spacing.sm,
+  },
+  nothingItemContainer: {
+    backgroundColor: colors.secondary,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: colors.gray,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   itemTitle: {
     fontSize: 14,

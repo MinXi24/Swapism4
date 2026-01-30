@@ -94,8 +94,11 @@ export const useSwapRequest = ({
     setShowItemPicker(false);
     
     try {
-      // Check if the item's swap status is still available
-      if (myItem.swapStatus !== 'available') {
+      // Check if user selected "nothing"
+      const isNothingSwap = myItem.isNothing || myItem.id === 'nothing';
+      
+      // If not nothing swap, check if the item's swap status is still available
+      if (!isNothingSwap && myItem.swapStatus !== 'available') {
         Alert.alert(
           'Item Unavailable',
           'This item is no longer available for swapping.',
@@ -112,15 +115,16 @@ export const useSwapRequest = ({
         receiverId: otherUserId,
         receiverName: otherUserName,
         receiverPhoto: otherUserPhoto || null,
-        message: 'Swap Request',
+        message: isNothingSwap ? 'Swap Request (Nothing Offered)' : 'Swap Request',
         swapDetails: {
-          myItemId: myItem.id,
-          myItemImage: myItem.url,
-          myItemTitle: myItem.title,
+          myItemId: isNothingSwap ? null : myItem.id,
+          myItemImage: isNothingSwap ? null : myItem.url,
+          myItemTitle: isNothingSwap ? 'Nothing' : myItem.title,
           theirItemId: swapRequest.theirItemId,
           theirItemImage: swapRequest.theirItemImage,
           theirItemTitle: swapRequest.theirItemTitle,
-          status: 'pending'
+          status: 'pending',
+          isNothingSwap: isNothingSwap
         },
         createdAt: serverTimestamp(),
         participants: [currentUser.uid, otherUserId]
@@ -133,7 +137,7 @@ export const useSwapRequest = ({
       const conversationId = [currentUser.uid, otherUserId].sort().join('_');
       await setDoc(doc(db, 'conversations', conversationId), {
         participants: [currentUser.uid, otherUserId],
-        lastMessage: 'Swap Request',
+        lastMessage: isNothingSwap ? 'Swap Request (Nothing Offered)' : 'Swap Request',
         lastMessageTime: new Date()
       }, { merge: true });
 
@@ -155,9 +159,14 @@ export const useSwapRequest = ({
   };
 
   const handleAcceptSwap = async (messageId) => {
+    const message = messages.find(m => m.id === messageId);
+    const isNothingSwap = message?.swapDetails?.isNothingSwap;
+    
     Alert.alert(
       'Accept Swap',
-      'Are you sure you want to accept this swap? Both items will be marked as Reserved.',
+      isNothingSwap 
+        ? 'Are you sure you want to accept this request? Your item will be marked as Reserved.'
+        : 'Are you sure you want to accept this swap? Both items will be marked as Reserved.',
       [
         {
           text: 'Cancel',
@@ -168,10 +177,9 @@ export const useSwapRequest = ({
           onPress: async () => {
             try {
               // Find the message to get item IDs
-              const message = messages.find(m => m.id === messageId);
               if (!message?.swapDetails) return;
               
-              const { myItemId, theirItemId } = message.swapDetails;
+              const { myItemId, theirItemId, isNothingSwap } = message.swapDetails;
 
               // Update local state immediately for instant UI feedback
               if (setMessages) {
@@ -189,13 +197,24 @@ export const useSwapRequest = ({
                 'swapDetails.status': 'accepted'
               });
 
-              // Mark BOTH items as reserved
-              await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', myItemId), {
-                swapStatus: 'reserved'
-              });
-              await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
-                swapStatus: 'reserved'
-              });
+              // Mark items as reserved
+              // For nothing swaps, only mark the item that exists (theirItemId)
+              if (isNothingSwap) {
+                // Only update the item being requested (theirItemId)
+                if (theirItemId) {
+                  await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
+                    swapStatus: 'reserved'
+                  });
+                }
+              } else {
+                // Normal swap: mark BOTH items as reserved
+                await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', myItemId), {
+                  swapStatus: 'reserved'
+                });
+                await updateDoc(doc(db, 'wardrobe-plug-fyp/user/images', theirItemId), {
+                  swapStatus: 'reserved'
+                });
+              }
 
               // Create status message in chat
               const otherUserId = message.senderId === currentUser.uid ? message.receiverId : message.senderId;
