@@ -1,35 +1,35 @@
 ﻿import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  getFirestore,
-  query,
-  serverTimestamp,
-  setDoc,
-  where
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    getFirestore,
+    query,
+    serverTimestamp,
+    setDoc,
+    where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  FlatList,
-  Image,
-  PanResponder,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    FlatList,
+    Image,
+    PanResponder,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View
 } from 'react-native';
 import Icon from '../../assets/icons/icons';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -316,6 +316,11 @@ export default function HomeScreen({ navigation }) {
     if (!currentUser) return;
 
     try {
+      // Check user's notification settings
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      const notifSettings = userDoc.exists() ? userDoc.data().notificationSettings : {};
+
       const q = query(
         collection(db, 'notifications'),
         where('userId', '==', currentUser.uid),
@@ -328,7 +333,26 @@ export default function HomeScreen({ navigation }) {
       
       if (!querySnapshot.empty) {
         const notifData = querySnapshot.docs[0].data();
-        showNotification(notifData);
+        const notifType = notifData.type;
+        
+        // Check if user wants to see pop-up for this notification type
+        const shouldShowPopup = (
+          notifSettings.pushNotifications !== false &&
+          (
+            (notifType === 'like' && notifSettings.likes !== false) ||
+            (notifType === 'comment' && notifSettings.comments !== false) ||
+            ((notifType === 'follow_request' || notifType === 'profile_view') && notifSettings.follows !== false) ||
+            (notifType === 'swap' && notifSettings.swaps !== false) ||
+            (notifType === 'message' && notifSettings.messages !== false)
+          )
+        );
+        
+        // Only show pop-up if settings allow it
+        if (shouldShowPopup) {
+          showNotification(notifData);
+        }
+        
+        // Still mark as read (delete) regardless of settings
         await deleteDoc(querySnapshot.docs[0].ref);
       }
     } catch (error) {
