@@ -319,7 +319,7 @@ export default function HomeScreen({ navigation }) {
       // Check user's notification settings
       const userDocRef = doc(db, 'users', currentUser.uid);
       const userDoc = await getDoc(userDocRef);
-      const notifSettings = userDoc.exists() ? userDoc.data().notificationSettings : {};
+      const notifSettings = userDoc.exists() ? (userDoc.data().notificationSettings || {}) : {};
 
       const q = query(
         collection(db, 'notifications'),
